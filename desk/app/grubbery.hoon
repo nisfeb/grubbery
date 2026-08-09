@@ -53,6 +53,7 @@
 |%
 +$  versioned-state
   $%  state-0:migrations
+      state-1:migrations
   ==
 +$  card  card:agent:gall
 ::  kel: the idea of kelvin-versioning the grubbery runtime itself.
@@ -115,6 +116,16 @@
   ?-    -.old
       %0
     =.  state  old
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
+      %1
+    ::  a pier that ran perf/combined. Drop the two caches and the
+    ::  agent-side server-state; the eyre bindings stay in their grub,
+    ::  which is where %0 reads them from. cold-start rebuilds the rest.
+    ::
+    =.  state  (state-1-to-0:migrations old)
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]
