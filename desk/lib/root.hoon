@@ -7,30 +7,6 @@
 ::  earn each road through weir.json + shell approval. Built-ins,
 ::  including the shell (the capability broker that sands everyone
 ::  else), just run open here.
-::  git-repo-config: config for a /git/repo instance — clones + checks
-::  out a github repo. poll drives the periodic re-fetch.
-=/  git-repo-config
-  |=  [repo=@t ref=@t]
-  ^-  json
-  %-  pairs:enjs:format
-  :~  ['repo' s+repo]
-      ['ref' s+ref]
-      ['token' s+'']
-      ['poll' n+'15']
-  ==
-::  desk-source-config: config for a /desk instance — subscribes to a
-::  code dir already in the namespace (here, a git_repo's checked-out
-::  tree) and deploys it. source is that dir's absolute path.
-=/  desk-source-config
-  |=  source=@t
-  ^-  json
-  %-  pairs:enjs:format
-  :~  ['source' s+source]
-      ['share' a+~]
-      ::  full version-file name — lets the desk watch its road before
-      ::  the source (a git_repo) has checked out. See desk.hoon.
-      ['version' s+'version.json']
-  ==
 ^-  nexus:nexus
 |%
 ++  on-load
@@ -69,48 +45,29 @@
         [%fall %& [/sys/scry %'main.scry-state'] [[/ %scry-state] *scry-state:nexus]]
         ::  child nexuses
         ::
-        [%fall %| /apps/'tiles.tiles' [`[`[/ %tiles] ~ %.n ~] ~]]
-        [%fall %| /apps/'shell.shell' [`[`[/ %shell] ~ %.n ~] ~]]
-        [%fall %| /apps/'counter.counter' [`[`[/ %counter] ~ %.n ~] ~]]
-        [%fall %| /apps/'explorer.explorer' [`[`[/ %explorer] ~ %.n ~] ~]]
+        ::  This is the lattice distribution. Grubbery's default app tier is
+        ::  deliberately absent: a ship built from this branch boots with
+        ::  lattice and nothing else, because lattice IS the product here
+        ::  rather than one tile among many. The nexus sources for the
+        ::  removed apps are gone from the desk too, so a cold build does
+        ::  not pay for code no instance will ever use.
+        ::
+        ::  Everything lattice needs is core rather than app tier. Its
+        ::  permissions live in /sys/ames/usergroups, its routes bind
+        ::  through eyre directly, and its only reference to another app
+        ::  was a tile.json for the launcher, which is cosmetic.
+        ::
+        [%fall %| /apps/'lattice.lattice_app' [`[`[/lattice %app] ~ %.n ~] ~]]
+        ::
+        ::  mcp is the ONE survivor of the app tier, and it is not an
+        ::  exception made lightly. Lattice ships its tool surface as
+        ::  lib/mcp/lattice-*.hoon and serves no /mcp route of its own, so
+        ::  the mcp nexus is what hosts lattice-list, lattice-read,
+        ::  lattice-save and the rest. Removing it would leave the memory
+        ::  store reachable only over HTTP, which is the feature most of
+        ::  this distribution's users are here for.
+        ::
         [%fall %| /apps/'mcp.mcp' [`[`[/ %mcp] ~ %.n ~] ~]]
-        [%fall %| /apps/'peers.peers' [`[`[/ %peers] ~ %.n ~] ~]]
-        [%fall %| /apps/'calendar.calendar' [`[`[/ %calendar] ~ %.n ~] ~]]
-        [%fall %| /apps/'notifications.notifications' [`[`[/ %notifications] ~ %.n ~] ~]]
-        [%fall %| /apps/'feeds.feeds' [`[`[/ %feeds] ~ %.n ~] ~]]
-        [%fall %| /apps/'weather.weather' [`[`[/ %weather] ~ %.n ~] ~]]
-        ::
-        ::  forge: the UI over git repo instances, housing them at
-        ::  /repos inside itself.
-        [%fall %| /apps/'forge.git_forge' [`[`[/git %forge] ~ %.n ~] ~]]
-        ::
-        ::  contacts + wallet seeds DISABLED: not created by default.
-        ::  Existing instances persist; a deleted one stays deleted.
-        ::  Uncomment to seed on a fresh boot.
-        ::  contacts: git_desk is obviated. A /git/repo (housed in forge's
-        ::  /repos, so it shows in the UI) checks out the github repo; a
-        ::  /desk subscribes to its checked-out code dir and deploys it.
-        ::  Seeded AFTER forge exists — you can't nest into a nexus that
-        ::  hasn't been made yet. Root wires both directly, so no
-        ::  /tools/proc sandbox dance — that's only for forge installs.
-        ::[%fall %| /apps/'forge.git_forge'/repos/'contacts.git_repo' [`[`[/git %repo] ~ %.n ~] ~]]
-        ::[%fall %& [/apps/'forge.git_forge'/repos/'contacts.git_repo' %'config.json'] [[/ %json] (git-repo-config 'niblyx-malnus/contacts-nexus' 'main')]]
-        ::[%fall %| /apps/'contacts.desk' [`[`[/ %desk] ~ %.n ~] ~]]
-        ::[%fall %& [/apps/'contacts.desk' %'config.json'] [[/ %json] (desk-source-config '/apps/forge.git_forge/repos/contacts.git_repo/data/tree/code')]]
-        ::
-        ::  wallet: same git_repo + /desk pattern as contacts (was git_desk).
-        ::[%fall %| /apps/'forge.git_forge'/repos/'wallet.git_repo' [`[`[/git %repo] ~ %.n ~] ~]]
-        ::[%fall %& [/apps/'forge.git_forge'/repos/'wallet.git_repo' %'config.json'] [[/ %json] (git-repo-config 'niblyx-malnus/wallet-nexus' 'main')]]
-        ::[%fall %| /apps/'wallet.desk' [`[`[/ %desk] ~ %.n ~] ~]]
-        ::[%fall %& [/apps/'wallet.desk' %'config.json'] [[/ %json] (desk-source-config '/apps/forge.git_forge/repos/wallet.git_repo/data/tree/code')]]
-        ::
-        [%fall %| /apps/'test.web-test' [`[`[/ %web-test] ~ %.n ~] ~]]
-        [%fall %| /apps/'test.guestbook' [`[`[/ %guestbook] ~ %.n ~] ~]]
-        [%fall %| /apps/'pad.pad' [`[`[/ %pad] ~ %.n ~] ~]]
-        [%fall %| /apps/'routes.routes' [`[`[/ %routes] ~ %.n ~] ~]]
-        [%fall %| /apps/'github.github' [`[`[/ %github] ~ %.n ~] ~]]
-        [%fall %| /apps/'anthropic.anthropic' [`[`[/ %anthropic] ~ %.n ~] ~]]
-        [%fall %| /apps/'openrouter.openrouter' [`[`[/ %openrouter] ~ %.n ~] ~]]
     ==
 ::
 ++  on-file
