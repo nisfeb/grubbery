@@ -5,7 +5,7 @@
   image+'https://raw.githubusercontent.com/nisfeb/lattice/main/desktop/icons/icon.png'
   base+'lattice'
   site+/apps/lattice
-  version+[0 8 0]
+  version+[1 0 0]
   website+'https://github.com/nisfeb/lattice'
   license+'MIT'
 ==
