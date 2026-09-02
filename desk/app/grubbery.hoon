@@ -52,7 +52,9 @@
 /=  t-  /tests/loader
 |%
 +$  versioned-state
-  $%  state-1:migrations
+  $%  state-3:migrations
+      state-2:migrations
+      state-1:migrations
       state-0:migrations
   ==
 +$  card  card:agent:gall
@@ -123,6 +125,26 @@
   ::
       %1
     =.  state  old
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
+      %2
+    ::  a pier that ran the perf lineage (~ricsul-bilwyt). Drop the
+    ::  transient conns and continue as %1. cold-start rebuilds the rest.
+    ::
+    ~>  %slog.[0 leaf+"grubbery: migrating state %2 -> %1"]
+    =.  state  (state-2-to-1:migrations old)
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
+      %3
+    ::  a pier that ran the perf lineage (~ricsul-bilwyt). Drop the
+    ::  transient conns and continue as %1. cold-start rebuilds the rest.
+    ::
+    ~>  %slog.[0 leaf+"grubbery: migrating state %3 -> %1"]
+    =.  state  (state-3-to-1:migrations old)
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]

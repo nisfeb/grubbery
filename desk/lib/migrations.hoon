@@ -117,8 +117,78 @@
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
+::  state-2 and state-3 are the perf lineage (perf/conns-in-agent-state)
+::  that ~ricsul-bilwyt ran. %2 carried the open eyre conns in agent state,
+::  %3 was a one-time born sweep with no shape change. Neither exists on
+::  develop. They are here only so such a pier can come back down to %1:
+::  conns are transient, everything else is state-1 field for field.
+::
++$  state-2
+  $:  %2
+      =born:nexus   ::  truth: version history for every directory and file
+      =silo:nexus   ::  truth: content-addressed object store with refcounts
+      =subs:nexus   ::  live: subscription indexes, by target and by watcher
+      =pool:nexus   ::  live: the running process for each grub
+      =code:nexus   ::  derived: the build index for each code namespace
+      =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
+      =vale:nexus   ::  derived: cached validation results
+      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      =upki:nexus   ::  live: the rail that backs jael pki subscriptions
+      =last:nexus   ::  live: monotonic time and entropy for the bowl
+      ::  live: which eyre binding is serving each open eyre-id
+      conns=(map @ta binding:eyre)
+  ==
++$  state-3
+  $:  %3
+      =born:nexus   ::  truth: version history for every directory and file
+      =silo:nexus   ::  truth: content-addressed object store with refcounts
+      =subs:nexus   ::  live: subscription indexes, by target and by watcher
+      =pool:nexus   ::  live: the running process for each grub
+      =code:nexus   ::  derived: the build index for each code namespace
+      =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
+      =vale:nexus   ::  derived: cached validation results
+      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      =upki:nexus   ::  live: the rail that backs jael pki subscriptions
+      =last:nexus   ::  live: monotonic time and entropy for the bowl
+      ::  live: which eyre binding is serving each open eyre-id
+      conns=(map @ta binding:eyre)
+  ==
 ::
 +|  %migrations
+::
+::  the way down from the perf lineage: drop conns, keep the rest
+::
+++  state-3-to-1
+  |=  old=state-3
+  ^-  state-1
+  :*  %1
+      born.old
+      silo.old
+      subs.old
+      pool.old
+      code.old
+      bins.old
+      vale.old
+      remo.old
+      upki.old
+      last.old
+  ==
+::
+++  state-2-to-1
+  |=  old=state-2
+  ^-  state-1
+  :*  %1
+      born.old
+      silo.old
+      subs.old
+      pool.old
+      code.old
+      bins.old
+      vale.old
+      remo.old
+      upki.old
+      last.old
+  ==
 ::
 ++  state-0-to-1
   |=  old=state-0
