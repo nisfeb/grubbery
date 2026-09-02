@@ -1,11 +1,11 @@
 :~
-  title+'Grubbery'
-  info+'Content-addressed tarball system.'
-  color+0x8b.4513
-  image+'https://raw.githubusercontent.com/gwbtc/grubbery/39a144c/grub.png'
-  base+'grubbery'
-  site+/apps/grubbery
-  version+[0 1 0]
-  website+'https://github.com/gwbtc/grubbery'
+  title+'Lattice'
+  info+'Pages, a private knowledge store, and MCP memory for AI agents. Runs on grubbery.'
+  color+0x1f.6f4a
+  image+'https://raw.githubusercontent.com/nisfeb/lattice/main/desktop/icons/icon.png'
+  base+'lattice'
+  site+/apps/lattice
+  version+[0 8 0]
+  website+'https://github.com/nisfeb/lattice'
   license+'MIT'
 ==
