@@ -7,6 +7,10 @@
 # installer paid to compile them (about 1,300 results, ~6 minutes and over
 # 2 GB of loom on a small machine, which is where one install died).
 #
+# SCOPE: the ball (gub/) only. That is what every install compiles; desk-level
+# lib/ and tests/ are clay's, built only when something asks (a -test run),
+# and the lattice test suites there are wanted on any ship that carries this.
+#
 # WHAT STAYS, always: both agents, lib/root.hoon, the lattice, mcp and port
 # nexuses, EVERY mark under gub/mar and mar (a ship that ran upstream may
 # hold grubs of those marks in its ball; a mark that no longer compiles
@@ -121,57 +125,5 @@ gub/nex/s3.hoon
 gub/nex/s3/bridge.hoon
 gub/nex/telegram-bot.hoon
 gub/nex/telegram.hoon
-lib/iso-8601.hoon
-lib/lattice-bookmark.hoon
-lib/lattice-clip.hoon
-lib/lattice-comment.hoon
-lib/lattice-eval.hoon
-lib/lattice-fuzz.hoon
-lib/lattice-gmi.hoon
-lib/lattice-history.hoon
-lib/lattice-index.hoon
-lib/lattice-know-view.hoon
-lib/lattice-know.hoon
-lib/lattice-mcp.hoon
-lib/lattice-md.hoon
-lib/lattice-mirror.hoon
-lib/lattice-pg.hoon
-lib/lattice-pub.hoon
-lib/lattice-quiz.hoon
-lib/lattice-share.hoon
-lib/lattice-templates.hoon
-lib/lattice-urls.hoon
-lib/mcp/lattice-delete.hoon
-lib/mcp/lattice-explore.hoon
-lib/mcp/lattice-list.hoon
-lib/mcp/lattice-move.hoon
-lib/mcp/lattice-read.hoon
-lib/mcp/lattice-restore.hoon
-lib/mcp/lattice-save.hoon
-lib/mcp/lattice-search.hoon
-lib/mcp/lattice-tag.hoon
-lib/mcp/lattice-tags.hoon
-lib/mcp/lattice-untag.hoon
-lib/time-pprint.hoon
-lib/time.hoon
-lib/verb.hoon
-lib/xray.hoon
-tests/aes-gcm.hoon
-tests/hkdf.hoon
-tests/jwt.hoon
-tests/lib/catalog-analyzer-prop.hoon
-tests/lib/catalog-analyzer.hoon
-tests/lib/lattice-clip-prop.hoon
-tests/lib/lattice-clip.hoon
-tests/lib/lattice-gmi.hoon
-tests/lib/lattice-know.hoon
-tests/lib/lattice-md.hoon
-tests/lib/lattice-pg.hoon
-tests/lib/lattice-pub.hoon
-tests/lib/lattice-share.hoon
-tests/lib/lattice-urls-prop.hoon
-tests/lib/lattice-urls.hoon
-tests/lib/quiz.hoon
-tests/web-push.hoon
 LIST
 echo "trim-lattice-only: removed $removed files"
