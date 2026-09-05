@@ -12,8 +12,11 @@
 # hold grubs of those marks in its ball; a mark that no longer compiles
 # strands that data), every sur, every MCP tool, and everything any of
 # those import. The list below is exactly the files unreachable from that
-# root set (computed by following /- /+ /= /* and the ball's /< /& /* imports
-# and [/dir %name] marc references).
+# root set (tools/desk-reach.py: follows /- /+ /= /* and the ball's /< /& /*
+# imports and [/dir %name] marc references, with ford's rule that a /+ name
+# may spell a nested path with '-' for '/', e.g. wasm-lia = lib/wasm/lia).
+# Clay is the backstop: a commit that deletes a file a kept file imports is
+# refused with 'no files match' or %file-not-found, and nothing changes.
 #
 # SAFE PATH BACK TO UPSTREAM: this is a pure deletion of files nothing on the
 # lattice-only desk references. The agent name, desk name, marks and agent
@@ -149,18 +152,11 @@ lib/mcp/lattice-search.hoon
 lib/mcp/lattice-tag.hoon
 lib/mcp/lattice-tags.hoon
 lib/mcp/lattice-untag.hoon
-lib/test.hoon
 lib/time-pprint.hoon
 lib/time.hoon
 lib/verb.hoon
-lib/wasm/lia.hoon
-lib/wasm/parser.hoon
-lib/wasm/runner/engine.hoon
-lib/wasm/runner/op-def.hoon
-lib/wasm/validator.hoon
 lib/xray.hoon
 tests/aes-gcm.hoon
-tests/build.hoon
 tests/hkdf.hoon
 tests/jwt.hoon
 tests/lib/catalog-analyzer-prop.hoon
@@ -176,9 +172,6 @@ tests/lib/lattice-share.hoon
 tests/lib/lattice-urls-prop.hoon
 tests/lib/lattice-urls.hoon
 tests/lib/quiz.hoon
-tests/loader.hoon
-tests/nexus.hoon
-tests/tarball.hoon
 tests/web-push.hoon
 LIST
 echo "trim-lattice-only: removed $removed files"
