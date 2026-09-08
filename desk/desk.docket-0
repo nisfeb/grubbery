@@ -1,7 +1,7 @@
 :~
   title+'Lattice'
   info+'Pages, a private knowledge store, and MCP memory for AI agents. Runs on grubbery.'
-  color+0x1f.6f4a
+  color+0x10.1541
   image+'https://raw.githubusercontent.com/nisfeb/lattice/main/desktop/icons/icon.png'
   base+'lattice'
   site+/apps/lattice
