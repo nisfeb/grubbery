@@ -87,10 +87,24 @@ def deps(p):
                 q = pm.lstrip('/') + '.hoon'
                 if ex(q): out.add(q)
     in_gub = p.startswith('gub/')
+    #  gub/lib/tool-bundle/ is HERMETIC. It is never compiled in the desk's
+    #  namespace: mcp.hoon takes it as a directory import and seeds it into
+    #  its tools.tools child as that instance's own /code/lib, and a code
+    #  namespace never falls back to a parent (+find-code-ns: "Lower
+    #  namespaces must include marks/libs they need"). So a tool's
+    #  `/lib/tools.hoon` means tool-bundle/tools.hoon, not gub/lib/tools.hoon.
+    #  Resolving it against gub/lib was silent and total: the walker pruned
+    #  the bundle's own copies of its deps, every lattice tool then failed to
+    #  compile, +scan-own skips a tool that will not compile without a word,
+    #  and the mcp app listed zero tools.
+    bundle = 'gub/lib/tool-bundle/'
     for a, b in ball_re.findall(src):
         pm = a or b
         if pm.startswith('/'):
-            q = ('gub' + pm) if in_gub else pm.lstrip('/')
+            if p.startswith(bundle) and pm.startswith('/lib/'):
+                q = bundle + pm[len('/lib/'):]
+            else:
+                q = ('gub' + pm) if in_gub else pm.lstrip('/')
         else:
             q = norm(os.path.dirname(p) + '/' + pm)
         #  A DIRECTORY import (/& on a trailing slash) pulls in everything
@@ -148,6 +162,18 @@ def is_root(p):
     if p.startswith('gub/lib/tool-bundle/tools/lattice-') and not no_tools:
         base = p.split('/')[-1]
         return not any(base.startswith(d) for d in drop)
+    #  The three META-tools. tools/list over the MCP protocol does not
+    #  advertise the registry: mcp-rpc +handle-request skims it down to
+    #  list_tools, call_tool and echo, and a client reaches everything else
+    #  through call_tool. Trim those three away and an MCP client sees a
+    #  server with no tools at all, however full the registry is - which is
+    #  exactly what happened. Each imports only /lib/tools.hoon.
+    if p in ('gub/lib/tool-bundle/tools/echo.hoon',
+             'gub/lib/tool-bundle/tools/list-tools.hoon',
+             'gub/lib/tool-bundle/tools/call-tool.hoon'): return True
+    #  tool-bundle's own copy of the tool interface: hermetic, so the bundle
+    #  needs it even though the desk has gub/lib/tools.hoon.
+    if p == 'gub/lib/tool-bundle/tools.hoon': return True
     return False
 roots = {p for p in files if is_root(p)}
 seen = set(roots); stack = list(roots)
