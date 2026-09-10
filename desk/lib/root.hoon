@@ -81,6 +81,15 @@
         ::  this distribution's users are here for.
         ::
         [%fall %| /apps/'mcp.mcp' [`[`[/ %mcp] ~ %.n ~] ~]]
+        ::
+        ::  explorer: the namespace browser and file viewer. Kept as a
+        ::  DEFAULT app, not as something a user installs later - it is how
+        ::  you look at a grubbery ship at all, and a distribution whose
+        ::  only windows onto the namespace are two apps of our own is a
+        ::  worse ship than the one upstream ships. Its row is upstream's,
+        ::  unchanged.
+        ::
+        [%fall %| /apps/'explorer.explorer' [`[`[/ %explorer] ~ %.n ~] ~]]
     ==
 ::
 ++  on-file

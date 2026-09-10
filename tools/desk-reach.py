@@ -152,6 +152,12 @@ def is_root(p):
     #  tools.tools CHILD INSTANCE needs the nexus to exist, and reachability
     #  by import cannot see that. Same shape as the /apps rows in root.hoon.
     if p.startswith('gub/nex/shell/') or p.startswith('gub/nex/desk/') or p in ('gub/nex/shell.hoon', 'gub/nex/desk.hoon', 'gub/nex/tools.hoon'): return True
+    #  explorer is a DEFAULT app, not an app-tier extra: it is the only way
+    #  to look at the namespace on a ship that has just booted, so it has a
+    #  root.hoon row and therefore a root here. It costs feather.hoon and
+    #  ~83 KB of its own assets; the codemirror and lib/ui bundles it uses
+    #  were already carried.
+    if p.startswith('gub/nex/explorer/') or p == 'gub/nex/explorer.hoon': return True
     if p.startswith('gub/mar/') or p.startswith('mar/') or p.startswith('sur/'): return True
     #  Only LATTICE's tools are roots. Upstream's tool-bundle carries 92
     #  more - bitcoin, s3, calendar, the assistants - and a lattice ship
