@@ -103,6 +103,11 @@
         ::  most ships never play; revisit if the ball budget gets tight.
         ::
         [%fall %| /apps/'forge.git_forge' [`[`[/git %forge] ~ %.n ~] ~]]
+        ::  github: how a git_repo actually FETCHES. Nothing imports it -
+        ::  repo.hoon reaches it by poking /apps/github.github/main.sig - so
+        ::  the forge looked complete and then failed at run time with "no
+        ::  process at /apps/github.github/main.sig". Upstream's row.
+        [%fall %| /apps/'github.github' [`[`[/ %github] ~ %.n ~] ~]]
     ==
 ::
 ++  on-file

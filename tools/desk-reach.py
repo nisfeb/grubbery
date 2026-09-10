@@ -162,6 +162,7 @@ def is_root(p):
     #  reached by no import - forge houses it as a CHILD INSTANCE - so it is
     #  a root for the same reason gub/nex/tools.hoon is.
     if p.startswith('gub/nex/git/'): return True
+    if p.startswith('gub/nex/github/') or p == 'gub/nex/github.hoon': return True
     #  create_desk: the tool that installs a code dir as a stock desk. Nothing
     #  imports a tool; the bundle is a directory import, and the trim scopes
     #  that directory to what we name here.
