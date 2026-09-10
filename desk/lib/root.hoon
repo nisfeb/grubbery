@@ -90,6 +90,19 @@
         ::  unchanged.
         ::
         [%fall %| /apps/'explorer.explorer' [`[`[/ %explorer] ~ %.n ~] ~]]
+        ::
+        ::  forge: the UI over git repo instances, housing them at
+        ::  /apps/forge.git_forge/repos/<name>.git_repo. Upstream's row,
+        ::  unchanged.
+        ::
+        ::  This is a PUBLISHER's tool, not a user's: an installer gets apps
+        ::  from a peer's storefront and never needs it. It is here because
+        ::  we publish, and a desk mirrors from a path in the namespace - so
+        ::  something has to put the source there, and checking out the repo
+        ::  is how. ~200 KB, the largest single thing we carry for a role
+        ::  most ships never play; revisit if the ball budget gets tight.
+        ::
+        [%fall %| /apps/'forge.git_forge' [`[`[/git %forge] ~ %.n ~] ~]]
     ==
 ::
 ++  on-file

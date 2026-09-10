@@ -158,6 +158,14 @@ def is_root(p):
     #  ~83 KB of its own assets; the codemirror and lib/ui bundles it uses
     #  were already carried.
     if p.startswith('gub/nex/explorer/') or p == 'gub/nex/explorer.hoon': return True
+    #  the git forge, and the git_repo nexus its instances run. data.hoon is
+    #  reached by no import - forge houses it as a CHILD INSTANCE - so it is
+    #  a root for the same reason gub/nex/tools.hoon is.
+    if p.startswith('gub/nex/git/'): return True
+    #  create_desk: the tool that installs a code dir as a stock desk. Nothing
+    #  imports a tool; the bundle is a directory import, and the trim scopes
+    #  that directory to what we name here.
+    if p == 'gub/lib/tool-bundle/tools/create-desk.hoon': return True
     if p.startswith('gub/mar/') or p.startswith('mar/') or p.startswith('sur/'): return True
     #  Only LATTICE's tools are roots. Upstream's tool-bundle carries 92
     #  more - bitcoin, s3, calendar, the assistants - and a lattice ship
