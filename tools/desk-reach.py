@@ -93,7 +93,18 @@ def deps(p):
             q = ('gub' + pm) if in_gub else pm.lstrip('/')
         else:
             q = norm(os.path.dirname(p) + '/' + pm)
-        if not q.endswith('.hoon'): q += '.hoon'
+        #  A DIRECTORY import (/& on a trailing slash) pulls in everything
+        #  under it - the shell's docs-agent takes /lib/docs-tools/ that way.
+        if q.endswith('/'):
+            for f in files:
+                if f.startswith(q): out.add(f)
+            continue
+        #  Try the path AS WRITTEN before assuming .hoon. Appending it
+        #  unconditionally is what made this walker call shell/home.html,
+        #  marked.min.js and hoon-grammar.json unreachable: it looked for
+        #  home.html.hoon. The trim then deleted all three, the shell would
+        #  not compile, and its HTTP binding went with it.
+        if not ex(q) and not q.endswith('.hoon'): q += '.hoon'
         if ex(q): out.add(q)
         elif in_gub and ex(q[4:]): out.add(q[4:])
     for dirp, name in marc_re.findall(src):
@@ -123,7 +134,10 @@ def is_root(p):
     #    gub/nex/peers.hoon         the usergroup/ship-management UI, not the
     #                               peering mechanism (that is the shell's
     #                               peers.json poke and /peers mirrors).
-    if p.startswith('gub/nex/shell/') or p.startswith('gub/nex/desk/') or p in ('gub/nex/shell.hoon', 'gub/nex/desk.hoon'): return True
+    #  gub/nex/tools.hoon is a root because nothing IMPORTS it: mcp's
+    #  tools.tools CHILD INSTANCE needs the nexus to exist, and reachability
+    #  by import cannot see that. Same shape as the /apps rows in root.hoon.
+    if p.startswith('gub/nex/shell/') or p.startswith('gub/nex/desk/') or p in ('gub/nex/shell.hoon', 'gub/nex/desk.hoon', 'gub/nex/tools.hoon'): return True
     if p.startswith('gub/mar/') or p.startswith('mar/') or p.startswith('sur/'): return True
     #  Only LATTICE's tools are roots. Upstream's tool-bundle carries 92
     #  more - bitcoin, s3, calendar, the assistants - and a lattice ship
