@@ -104,6 +104,26 @@ def deps(p):
 def is_root(p):
     if p.startswith('app/') or p == 'lib/root.hoon' or p.startswith('ted/') or p.startswith('gen/'): return True
     if p.startswith('gub/nex/lattice/') or p.startswith('gub/nex/mcp/') or p in ('gub/nex/mcp.hoon', 'gub/nex/port.hoon'): return True
+    #  The shell and the desk nexus are what this distribution now runs ON,
+    #  not apps it happens to carry: the shell manages permissions and owns
+    #  cross-ship discovery, and the desk nexus mirrors a published code
+    #  directory. The 2026-09-05 trim deleted both, because at the time
+    #  nothing reached them.
+    #
+    #  What is NOT a root, deliberately, on the assumption that every other
+    #  app arrives by adding a peer and installing it:
+    #    gub/nex/tiles.hoon         the shell welds read-local-tiles with
+    #                               read-app-tiles, and an absent store peeks
+    #                               to a non-%ball view and returns ~. App
+    #                               tiles come from each app's own tile.json,
+    #                               so the launcher grid works without it.
+    #    gub/nex/notifications.hoon +register-notify is poke-soft and says so:
+    #                               "a failed registration is logged, not
+    #                               fatal - re-run on every rise".
+    #    gub/nex/peers.hoon         the usergroup/ship-management UI, not the
+    #                               peering mechanism (that is the shell's
+    #                               peers.json poke and /peers mirrors).
+    if p.startswith('gub/nex/shell/') or p.startswith('gub/nex/desk/') or p in ('gub/nex/shell.hoon', 'gub/nex/desk.hoon'): return True
     if p.startswith('gub/mar/') or p.startswith('mar/') or p.startswith('sur/'): return True
     if p.startswith('gub/lib/mcp/') and not no_tools:
         base = p.split('/')[-1]
