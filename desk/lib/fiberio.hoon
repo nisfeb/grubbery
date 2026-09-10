@@ -346,6 +346,19 @@
   ;<  =wire  bind:m  (nonce /make)
   ;<  ~  bind:m  (send-dart %node wire road %make %.n %.n make)
   (take-made wire)
+::  +over-fold: overwrite a directory subtree from a bole in ONE event —
+::  the %over analog for directories. It force-makes, so it REPLACES an
+::  existing dir (applying the bole via the kernel's load-ball-changes)
+::  instead of failing "already exists" like +make. One build, not one
+::  per file. Set the bole root's neck if you want the dir's neck kept.
+::
+++  over-fold
+  |=  [=road:tarball bole=bole:tarball]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ;<  =wire  bind:m  (nonce /make)
+  ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n &+bole)
+  (take-made wire)
 ::  +make-gained: make born with gain set — retention on from the
 ::  first event. No make-then-gain window for a fast process's
 ::  self-clean to slip through.
@@ -488,6 +501,25 @@
   ;<  =wire  bind:m  (nonce /peek)
   ;<  ~  bind:m  (send-dart %node wire road %peek blot ~ %.y)
   (take-peek wire)
+::
+::  Veto-tolerant peek: a peek whose destination may be outside our weir.
+::  On veto it yields ~ instead of crashing — for scans that reach for
+::  something they might legitimately not be permitted to see.
+::
+++  peek-soft
+  |=  [=road:tarball blot=(unit blot:tarball)]
+  =/  m  (fiber ,(unit view:nexus))
+  ^-  form:m
+  ;<  =wire  bind:m  (nonce /peek)
+  ;<  ~  bind:m  (send-dart %node wire road %peek blot ~ %.y)
+  |=  input
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %veto *]  [%done ~]
+      [~ %peek * *]
+    ?.(=(wire wire.u.in) [%skip ~] [%done `view.u.in])
+  ==
 ::
 ::  Peek a file and extract its value as a typed noun.
 ::  Crashes if file not found or wrong type.
@@ -731,6 +763,27 @@
   ;<  =wire  bind:m  (nonce /make)
   ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n |+[bask `blot])
   (take-made wire)
+::  +over-as-soft: over-as that hands the failure back — a bad tube or
+::  vale at the destination comes back as `tang for the caller to
+::  present, instead of crashing the fiber. An editor's save path.
+::
+++  over-as-soft
+  |=  [=road:tarball =bask:tarball =blot:tarball]
+  =/  m  (fiber ,(unit tang))
+  ^-  form:m
+  ;<  =wire  bind:m  (nonce /make)
+  ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n |+[bask `blot])
+  |=  input
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %veto *]
+    [%fail (veto-error dart.u.in)]
+      [~ %made * *]
+    ?.  =(wire wire.u.in)
+      [%skip ~]
+    [%done err.u.in]
+  ==
 ::
 ::  +put: overwrite if exists, create if not
 ::
@@ -954,13 +1007,15 @@
   ^-  form:m
   (poke &+&+[/sys/clay %'main.clay-state'] [[/ %new-desk] dek])
 ::  Write/delete files in a Clay desk via /sys/clay/ runtime service.
-::  No vases — the runtime clams through marks on the destination desk.
+::  Every file goes in as a mime, exactly like a Unix |commit: the
+::  kernel wraps it as a %mime cage and Clay tube-converts to the mark
+::  named by the path's last segment. ~ deletes the path.
 ::
 ++  clay-info
-  |=  [dek=desk changes=(list [path ?([%ins @tas *] [%del ~])])]
+  |=  [dek=desk files=(list [path (unit mime)])]
   =/  m  (fiber ,~)
   ^-  form:m
-  (poke &+&+[/sys/clay %'main.clay-state'] [[/ %clay-info] [dek changes]])
+  (poke &+&+[/sys/clay %'main.clay-state'] [[/ %clay-info] [dek files]])
 ::  Send a belt to a dill session via /sys/dill/ runtime service
 ::
 ++  send-belt

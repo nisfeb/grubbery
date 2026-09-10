@@ -15,12 +15,14 @@
   %+  spin:loader  ball
     :~  (manifest:loader 0)
         [%load %| / / same-fold:loader]
-        [%fall %| /apps [`[~ ~ %.n ~] ~]]
+        ::  /apps is the trusted tier and MUST stay unweired: a weir here
+        ::  locks the whole system including every tool that could remove
+        ::  it (learned the hard way). Each load forcibly resets /apps'
+        ::  own fil to the open default — an invariant, not healing.
+        ::  Children untouched (%load extracts the old subtree and
+        ::  transforms only the top fil).
+        [%load %| /apps /apps |=(b=bole:tarball b(fil `[~ ~ %.n ~]))]
         [%fall %| /docs [`[~ ~ %.n ~] ~]]
-        ::  /port: authenticated typed-message ingress. Each /port/<name>
-        ::  is a [/port %cargo] grub that handles its own pokes — poke it a
-        ::  mime and it stamps the sender and stores it. Open weir: any ship.
-        [%fall %| /port [`[`[/ %port] ~ %.n ~] ~]]
         ::  /sys/eyre: HTTP server state + request fibers
         ::
         [%fall %| /sys/eyre [`[~ ~ %.n ~] ~]]
@@ -38,6 +40,9 @@
         ::
         [%fall %& [/sys/clay %'main.clay-state'] [[/ %clay-state] *clay-state:nexus]]
         [%fall %| /sys/clay/desks [`[~ ~ %.n ~] ~]]
+        ::  /sys/link: discovery registry (dest.lanes per @name)
+        ::
+        [%fall %| /sys/link [`[~ ~ %.n ~] ~]]
         ::  /sys/scry: scry service
         ::
         [%fall %| /sys/scry [`[~ ~ %.n ~] ~]]
@@ -57,6 +62,14 @@
         ::  through eyre directly, and its only reference to another app
         ::  was a tile.json for the launcher, which is cosmetic.
         ::
+        ::  the shell: the home surface and the userspace permission
+        ::  MANAGER. It reads each app's alias.json and weir.json, records
+        ::  what the user consents to, writes the weirs the kernel then
+        ::  enforces, and owns cross-ship discovery - public.json, the
+        ::  /peers mirrors, and the /sys/link registry above. Restored from
+        ::  upstream in the develop merge: the 2026-09-05 trim had deleted
+        ::  it because at the time nothing reached it.
+        [%fall %| /apps/'shell.shell' [`[`[/ %shell] ~ %.n ~] ~]]
         [%fall %| /apps/'lattice.lattice_app' [`[`[/lattice %app] ~ %.n ~] ~]]
         ::
         ::  mcp is the ONE survivor of the app tier, and it is not an

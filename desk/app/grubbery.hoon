@@ -1,4 +1,7 @@
 /-  spider, push, grub
+::  TODO: root is compiled into the kernel at build time. When lib/root.hoon
+::  changes on disk, we should reload the root nexus at / so the new on-load
+::  takes effect without a full kernel upgrade.
 /+  nexus, tarball, build, marks,
     loader, fiberio, migrations, root,
     default-agent, dbug,
@@ -276,6 +279,47 @@
       =^  cards  state
         abet:repair-silo:hc
       [cards this]
+      ::  Emergency hatch: clear the /apps weir directly at agent level.
+      ::  A weir on /apps locks every tool that could remove it (including
+      ::  the sand dart path if anything re-establishes it at boot) — this
+      ::  bypasses darts, gates, and state replay entirely.
+      ::
+        %open-apps
+      ~&  >  %grubbery-open-apps
+      =^  cards  state
+        abet:(set-weir:hc /apps ~)
+      [cards this]
+      ::  Read the /apps weir from BOTH sources of truth. get-weir-for
+      ::  reads the materialized ball; peek-weir reads the born/silo tree
+      ::  entry (what +allowed actually gates on). If they disagree,
+      ::  set-weir's are-we-already-there short-circuit no-ops against
+      ::  the wrong one and sands silently do nothing.
+      ::
+        %show-apps-weir
+      ~&  >  [%apps-weir-ball (get-weir-for:hc /apps)]
+      ~&  >  [%apps-weir-born (peek-weir:hc /apps)]
+      [~ this]
+      ::
+        %show-code-map
+      ~&  >  [%code-namespaces ~(tap in ~(key by code))]
+      [~ this]
+      ::
+        %show-code-refs
+      =/  ns-list=(list path)  ~(tap in ~(key by code))
+      |-
+      ?~  ns-list  [~ this]
+      =/  =lode:nexus  (~(got by code) i.ns-list)
+      ~&  >  [%code-ns i.ns-list refs=(turn ~(tap of refs.lode) |=([p=path n=(map @ta @uv)] [p ~(tap in ~(key by n))]))]
+      $(ns-list t.ns-list)
+      ::
+        %show-bins
+      ~&  >  [%bins-count ~(wyt by bins)]
+      =/  entries=(list [@uv @ud ?(%vase %tang %mime)])
+        %+  turn  ~(tap by bins)
+        |=  [k=@uv refs=@ud =built:nexus]
+        [k refs -.built]
+      ~&  >  [%bins-summary (scag 50 entries)]
+      [~ this]
     ==
   ==
 ::
@@ -2032,7 +2076,11 @@
   =/  =blot:tarball  blot.mark.leaf.jt
   =/  ckey=@uv  ckey.mark.leaf.jt
   =/  hit  (vale-hit lobe.leaf.jt ckey)
-  =/  entry  (~(get by bins) ckey)
+  =/  entry=(unit [refs=@ud =built:nexus])  (~(get by bins) ckey)
+  =?  entry  ?=(~ entry)
+    =/  res  (resolve-built ns.mark.leaf.jt (weld /mar path.blot) name.blot)
+    ?~  res  ~
+    (~(get by bins) ckey.u.res)
   ?~  entry
     `[blot %| [~[leaf+"peek-grub: mark not in bins {<blot>} ckey={<ckey>}"] u.raw]]
   ?.  ?=(%vase -.built.u.entry)
@@ -2674,15 +2722,19 @@
 ::  - Internal (%&): enqueue %pack intake to source path
 ::  - External (%|): emit gall card
 ::
-::  For internal pokes, sanitizes error if source can't peek target.
+::  For internal pokes, sanitizes a nack's tang if the source can't peek
+::  the target. That check is a probe, not a gate — it decides the
+::  message, blocks nothing — so it runs quiet and only when there is
+::  an error to sanitize.
 ::
 ++  give-poke-ack
   |=  [here=rail:tarball =from:nexus =wire err=(unit tang)]
   ^+  this
   =/  err=(unit tang)
-    ?.  ?=([~ %|] (allowed %peek from `[%& here]))
+    ?~  err  ~
+    ?.  ?=([~ %|] (allowed-quiet %peek from `[%& here]))
       err
-    ?~(err ~ `~[leaf+"poke failed"])
+    `~[leaf+"poke failed"]
   (enqu-take from ~ ~ %pack wire err)
 ::
 ++  give-poke-sign
@@ -2802,6 +2854,8 @@
   =/  sub-ball  (peek-ball-now dest)
   ?~  fil.sub-ball  ~|("no nexus at destination" !!)
   ?~  neck.u.fil.sub-ball  ~|("no nexus at destination" !!)
+  ?:  =([/ %code] u.neck.u.fil.sub-ball)
+    (build-code dest ~)
   =/  nex=(each nexus:nexus tang)
     (build-nexus dest u.neck.u.fil.sub-ball)
   ?:  ?=(%| -.nex)
@@ -2812,6 +2866,7 @@
   ::  or create new ones (register) — reconcile both ways.
   =.  this  purge-stale-code
   =.  this  (build-new-code-namespaces dest (peek-bole-now dest))
+  =.  this  (rebuild-descendant-code dest sub-ball)
   (spawn-all-files dest (peek-bole-now dest))
 ::  Run on-load for a nexus at dest and apply results
 ::
@@ -2862,18 +2917,19 @@
   =/  kid-path=fold:tarball  (snoc dest kid-name)
   =.  this
     ::  Directory with a neck — reload it (recurses into its children)
-    ::  Skip /code — it has a neck but is the code compiler, not a nexus
-    ?:  ?&  ?=(^ fil.kid-ball)
+    ?.  ?&  ?=(^ fil.kid-ball)
             ?=(^ neck.u.fil.kid-ball)
-            !=([/ %code] u.neck.u.fil.kid-ball)
         ==
-      =/  kid-nex=(each nexus:nexus tang)
-        (build-nexus kid-path u.neck.u.fil.kid-ball)
-      ?:  ?=(%| -.kid-nex)
-        (bang-nexus kid-path p.kid-nex)
-      (reload-nexus-at kid-path p.kid-nex)
-    ::  Non-nexus directory — recurse deeper
-    $(kids ~(tap by dir.kid-ball), dest kid-path)
+      ::  Non-nexus directory — recurse deeper
+      $(kids ~(tap by dir.kid-ball), dest kid-path)
+    ::  /code necks are code namespaces, not nexuses — skip entirely
+    ?:  =([/ %code] u.neck.u.fil.kid-ball)
+      this
+    =/  kid-nex=(each nexus:nexus tang)
+      (build-nexus kid-path u.neck.u.fil.kid-ball)
+    ?:  ?=(%| -.kid-nex)
+      (bang-nexus kid-path p.kid-nex)
+    (reload-nexus-at kid-path p.kid-nex)
   $(kids t.kids)
 ::  +spawn-all-files: spawn a process for every file in a bole
 ::
@@ -3385,10 +3441,17 @@
       ::  Set weir at dest (must be a directory)
       ?>  ?=(%| -.u.dest-lane)
       =/  dest=fold:tarball  p.u.dest-lane
+      ~&  >>  [%sand-applying dest=dest weir=weir.load.dart from=path.here]
       =/  res=(each _this tang)  (mule |.((set-weir dest weir.load.dart)))
       ?-  -.res
-        %&  (enqu-take:p.res here ~ ~ %sand wire.dart ~)
-        %|  (enqu-take here ~ ~ %sand wire.dart `p.res)
+        %&  ~&  >  [%sand-applied dest=dest]
+            (enqu-take:p.res here ~ ~ %sand wire.dart ~)
+          %|
+        ::  a sand that dies in the mule mails its tang to a take nobody
+        ::  may be listening to — say it out loud too
+        ~&  >>>  [%sand-crashed dest=dest]
+        %-  (slog p.res)
+        (enqu-take here ~ ~ %sand wire.dart `p.res)
       ==
       ::
         %load
@@ -4354,11 +4417,16 @@
       ?:  ?=(%| -.src)  ~|("make: source validation failed" (mean p.src))
       =/  =tube:clay  (get-tube path.dest-rail [p.bask.p.make u.blot.p.make])
       [u.blot.p.make q:(tube p.src)]
-    ::  Validate the bask before storing
+    ::  Validate the bask before storing — but a validation failure (a bad
+    ::  noun, or no marc for this blot) must NEVER drop the write. +record
+    ::  stores the raw noun regardless and a read surfaces the boom lazily,
+    ::  so store it as-is and skip the spawn (a grub that didn't validate has
+    ::  nothing runnable). The stored boom is the loud, inspectable bug report.
     =^  validated=(each vase tang)  this
       (validate-cached path.dest-rail p.bask q.bask)
     ?:  ?=(%| -.validated)
-      ~|("make failed: validation error" (mean p.validated))
+      %-  (slog leaf+"make: stored unvalidated {(spud (snoc path.dest-rail name.dest-rail))}" p.validated)
+      (save-file dest-rail [p.bask q.bask])
     =.  this
       (save-file dest-rail [p.bask q.p.validated])
     ::  born gained: same event as the save — no window for a fast
@@ -4526,6 +4594,20 @@
 ++  allowed
   |=  [=jump:nexus here=rail:tarball dest=(unit lane:tarball)]
   ^-  filt:nexus
+  (allowed-loud & jump here dest)
+::  +allowed-quiet: the same check with no veto printf. For probes that
+::  only ask the question (e.g. +give-poke-ack deciding whether to
+::  sanitize a nack) — a veto there blocks nothing, so it must not log
+::  as one.
+::
+++  allowed-quiet
+  |=  [=jump:nexus here=rail:tarball dest=(unit lane:tarball)]
+  ^-  filt:nexus
+  (allowed-loud | jump here dest)
+::
+++  allowed-loud
+  |=  [loud=? =jump:nexus here=rail:tarball dest=(unit lane:tarball)]
+  ^-  filt:nexus
   ::  No destination (%kept): crosses no boundary, no weir has jurisdiction
   ?~  dest  ~
   =/  gov=(unit fold:tarball)  (nearest-governor here dest)
@@ -4540,6 +4622,9 @@
   =/  next=filt:nexus
     (next-filt:nexus filt (filter:nexus jump path.here dest-lane weir-here))
   ?:  ?=([~ %|] next)
+    ::  name the boundary that said no — a veto without a WHERE is torture
+    ~?  >>>  loud
+      [%weir-veto-at boundary=path.here weir=weir-here jump=jump dest=dest-lane]
     [~ |]
   ::  Reached root - stop
   ?~  path.here
@@ -4648,7 +4733,8 @@
   =/  marc-res=(each marc:tarball tang)
     (mule |.(!<(marc:tarball vase.built.u.entry)))
   ?:  ?=(%| -.marc-res)
-    ~|([%record-marc-broken p.bask path.here name.here] !!)
+    ~&  >>  "record: marc stale for {(spud path.p.bask)}/{(trip name.p.bask)}"
+    this
   =/  res=(each vase tang)
     (mule |.((vale:p.marc-res raw)))
   (vale-put nobe marc-ckey ?:(?=(%& -.res) ~ `p.res))
@@ -5097,6 +5183,36 @@
   ~&  >  "rebuild-stale-code: subject changed, rebuilding {(spud cod.i.cods)}"
   =.  this  (build-code cod.i.cods ~)
   $(cods t.cods)
+::  +rebuild-descendant-code: incrementally rebuild descendant code
+::  namespaces whose source changed. Diffs old-ball against the current
+::  ball under root, groups changed rails by enclosing code namespace,
+::  and calls build-code with only the affected rails.
+::
+++  rebuild-descendant-code
+  |=  [root=path old-ball=ball:tarball]
+  ^+  this
+  =/  new-ball=ball:tarball  (peek-ball-now root)
+  =/  diff=(set rail:tarball)
+    %-  ~(run in (ball-diff old-ball new-ball))
+    |=(r=rail:tarball `rail:tarball`[(weld root path.r) name.r])
+  ?:  =(~ diff)  this
+  =/  affected=(map path (set rail:tarball))
+    %+  roll  ~(tap in diff)
+    |=  [r=rail:tarball acc=(map path (set rail:tarball))]
+    =/  cod=(unit path)
+      =+  pax=path.r
+      |-  ?:  (~(has by code) pax)  `pax
+      ?~  pax  ~
+      $(pax (snip `path`pax))
+    ?~  cod  acc
+    ?:  =(u.cod root)  acc
+    (~(put by acc) u.cod (~(put in (fall (~(get by acc) u.cod) ~)) r))
+  =/  todo=(list [cod=path rails=(set rail:tarball)])  ~(tap by affected)
+  |-
+  ?~  todo  this
+  ~&  >  "rebuild-descendant-code: {(spud cod.i.todo)} ({<~(wyt in rails.i.todo)>} changed)"
+  =.  this  (build-code cod.i.todo `rails.i.todo)
+  $(todo t.todo)
 ::
 ++  build-code
   |=  [cod=path changed=(unit (set rail:tarball))]
@@ -5168,7 +5284,6 @@
   =.  sat  (record:sat dest [[/ %hoon] q.src] %.n ~)
   ::  inject into src-ball
   [(~(put ba:tarball acc) [/mar (cat 3 nam '.hoon')] sang) sat]
-::
 ++  index-results
   |=  [res=build-out:build =lode:nexus src-ball=ball:tarball]
   ^-  [keys:nexus refs:nexus (map @uv built:nexus)]
@@ -5176,7 +5291,8 @@
     ~(tap ba:tarball src-ball)
   ::  Seed with mime files
   =/  mime-files=(list [=rail:tarball =sang:tarball])
-    (skim all-files |=([* =sang:tarball] =([/ %mime] p.sang)))
+    %+  skim  all-files
+    |=([* =sang:tarball] &(=([/ %mime] p.sang) ?=(%& -.q.sang)))
   =/  [refs=refs:nexus builds=(map @uv built:nexus)]
     %+  roll  mime-files
     |=  [[=rail:tarball =sang:tarball] [acc=refs:nexus bld=(map @uv built:nexus)]]
@@ -5537,10 +5653,14 @@
     =.  this  (bang-nexus dest p.nex-res)
     $(dir-remaining t.dir-remaining)
   ~&  >  "reload-changed-nexuses: reloading {(spud (weld path.neck ~[name.neck]))} at {(spud dest)}"
+  =/  old-ball  (peek-ball-now dest)
   ~&  >  "reload-changed-nexuses: reload-nexus-at start"
   =.  this  (reload-nexus-at dest p.nex-res)
   ~&  >  "reload-changed-nexuses: reload-nexus-at done"
+  =.  this  purge-stale-code
   =/  reload-bole  (peek-bole-now dest)
+  =.  this  (build-new-code-namespaces dest reload-bole)
+  =.  this  (rebuild-descendant-code dest old-ball)
   ~&  >  "reload-changed-nexuses: spawn-all-files start"
   =.  this  (spawn-all-files dest reload-bole)
   ~&  >  "reload-changed-nexuses: spawn-all-files done"
@@ -5574,6 +5694,14 @@
 ::    at the root, and any other file is converted to mime through a
 ::    clay tube. Files that fail validation are reported and skipped.
 ::
+::    Exception: anything under a tool-bundle/ directory is DATA to the
+::    nexus that imports it, not code of this namespace. A host nexus
+::    /&-imports the bundle and seeds it into a tools nexus's own /code,
+::    where it compiles against that nexus's subject. Compiling it here
+::    would run it against the wrong subject and, under /nex, validate it
+::    as a nexus — a failure that bangs the host nexus for a file it
+::    never executes. So bundle sources are stored as mime, untouched.
+::
 ++  gub-ball
   |=  pax=path
   ^-  ball:tarball
@@ -5586,6 +5714,7 @@
   =/  stem=@ta   (rear sans)
   =/  rel-dir=path  (slag 1 (snip `(list @ta)`sans))
   =/  name=@ta   (cat 3 stem (cat 3 '.' mar))
+  =/  bundled=?  (lien rel-dir |=(seg=@ta =(%'tool-bundle' seg)))
   ::  sys.kelvin: store as kelvin mark at root
   ?:  =(%'sys.kelvin' name)
     =/  =vase  .^(vase %cr (weld pax fyl))
@@ -5594,7 +5723,7 @@
       ~&  >>>  "sync-gub: kelvin validation failed"
       acc
     (~(put ba:tarball acc) [/ %'sys.kelvin'] [[/ %kelvin] %& p.val])
-  ?:  =(mar %hoon)
+  ?:  &(=(mar %hoon) !bundled)
     =/  =vase  .^(vase %cr (weld pax fyl))
     =/  val=(each ^vase tang)  (validate-noun /code [/ mar] q.vase)
     ?.  ?=(%& -.val)
@@ -6784,9 +6913,9 @@
       =.  this  (handle-clay-new-desk dek)
       `(enqu-take here ~ ~ %pack wir ~)
     ?:  =([/ %clay-info] p.sage)
-      =/  [dek=desk changes=(list [path ?([%ins @tas *] [%del ~])])]
-        !<([desk (list [path ?([%ins @tas *] [%del ~])])] q.sage)
-      =.  this  (handle-clay-info dek changes)
+      =/  [dek=desk files=(list [path (unit mime)])]
+        !<([desk (list [path (unit mime)])] q.sage)
+      =.  this  (handle-clay-info dek files)
       `(enqu-take here ~ ~ %pack wir ~)
     ~  :: unknown clay poke, fall through
   ::
@@ -6936,7 +7065,7 @@
   |=  [segs=wire error=(unit tang)]
   ^+  this
   ?^  error
-    ~&  >>>  ["%behn: timer error" u.error]
+    %-  (slog leaf+"%behn: timer error" u.error)
     this
   ::  Decode wire: {da}/{path-len}/{path...}/{name}/{wire...}
   ?>  ?=(^ segs)
@@ -7027,18 +7156,22 @@
   (emit-card [%pass /desk-bill %arvo %c %info dek %& [/desk/bill %ins bill+!>(~[dek])]~])
 ::  /sys/clay/ file write service
 ::
+::  Every file arrives as a mime and goes to Clay as a %mime cage, the
+::  same way a Unix |commit does. Clay tube-converts to the mark named
+::  by the path's last segment. The mime is wrapped with !> here, in
+::  agent context, so the cage carries a real vase; grubs never build
+::  cages, and a malformed payload is rejected at the poke boundary by
+::  the clay-info mark instead of crashing inside Clay.
+::
 ++  handle-clay-info
-  |=  [dek=desk changes=(list [path ?([%ins @tas *] [%del ~])])]
+  |=  [dek=desk files=(list [path (unit mime)])]
   ^+  this
   =/  mis=(list [path miso:clay])
-    %+  turn  changes
-    |=  [pax=path change=?([%ins @tas *] [%del ~])]
+    %+  turn  files
+    |=  [pax=path fil=(unit mime)]
     ^-  [path miso:clay]
-    ?-  -.change
-        %del  [pax %del ~]
-        %ins
-      [pax %ins +<.change !>(+>.change)]
-    ==
+    ?~  fil  [pax %del ~]
+    [pax %ins %mime !>(u.fil)]
   (emit-card [%pass /clay-info %arvo %c %info dek %& mis])
 ::  /sys/eyre/ HTTP server service
 ::

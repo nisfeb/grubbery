@@ -22,7 +22,7 @@
 //               closes the menu unless the item has [data-keep-open])
 //   css vars (theme in), house-light defaults:
 //     --dm-bg, --dm-border, --dm-radius, --dm-shadow, --dm-min-width, --dm-gap
-//   events (state out):
+//   events (state out), all bubbling + composed (library policy):
 //     dm-open, dm-close
 //   methods:
 //     .open(), .close(), .toggle()
@@ -48,8 +48,11 @@ TPL.innerHTML = `
       padding: var(--dm-gap, 4px);
       display: none;
       flex-direction: column;
+      overflow: hidden;
     }
     :host([open]) #panel { display: flex; }
+    /* flip: opens upward when the panel would run off the viewport bottom */
+    :host([flip]) #panel { top: auto; bottom: calc(100% + 4px); }
     :host(:not([align="end"])) #panel { left: 0; }
     :host([align="end"]) #panel { right: 0; }
     /* style slotted menu items into a consistent list */
@@ -70,6 +73,10 @@ TPL.innerHTML = `
     ::slotted(:not([slot="trigger"]):focus-visible) {
       background: var(--dm-item-hover, #f2f4f7);
       outline: none;
+    }
+    ::slotted(.danger:hover) {
+      background: #ffebe9;
+      color: #cf222e;
     }
   </style>
   <slot name="trigger"></slot>
@@ -100,7 +107,7 @@ class DropMenu extends HTMLElement {
     });
     this.addEventListener('keydown', this.#onKey);
     // click / focus outside closes — bound once, active only while open
-    this.#onDocPointer = (e) => { if (!this.contains(e.target)) this.close(); };
+    this.#onDocPointer = (e) => { if (!e.composedPath().includes(this)) this.close(); };
   }
 
   #onDocPointer;
@@ -109,10 +116,10 @@ class DropMenu extends HTMLElement {
     if (name !== 'open') return;
     if (this.hasAttribute('open')) {
       document.addEventListener('pointerdown', this.#onDocPointer, true);
-      this.dispatchEvent(new CustomEvent('dm-open', { bubbles: true }));
+      this.dispatchEvent(new CustomEvent('dm-open', { bubbles: true, composed: true }));
     } else {
       document.removeEventListener('pointerdown', this.#onDocPointer, true);
-      this.dispatchEvent(new CustomEvent('dm-close', { bubbles: true }));
+      this.dispatchEvent(new CustomEvent('dm-close', { bubbles: true, composed: true }));
     }
   }
 
@@ -138,7 +145,18 @@ class DropMenu extends HTMLElement {
     items[next < 0 ? 0 : next].focus();
   };
 
-  open() { this.setAttribute('open', ''); }
+  open() {
+    this.setAttribute('open', '');
+    // flip upward when the panel would run off the bottom and there's
+    // more room above. Measured synchronously post-open (layout is
+    // forced, nothing has painted) so there's no flash at the wrong spot.
+    this.removeAttribute('flip');
+    const panel = this.shadowRoot.getElementById('panel');
+    const p = panel.getBoundingClientRect();
+    const t = this.getBoundingClientRect();
+    const below = innerHeight - t.bottom;
+    if (p.bottom > innerHeight - 8 && t.top > below) this.setAttribute('flip', '');
+  }
   close() { this.removeAttribute('open'); }
   toggle() { this.hasAttribute('open') ? this.close() : this.open(); }
 }

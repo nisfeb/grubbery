@@ -103,7 +103,7 @@ def deps(p):
 
 def is_root(p):
     if p.startswith('app/') or p == 'lib/root.hoon' or p.startswith('ted/') or p.startswith('gen/'): return True
-    if p.startswith('gub/nex/lattice/') or p.startswith('gub/nex/mcp/') or p in ('gub/nex/mcp.hoon', 'gub/nex/port.hoon'): return True
+    if p.startswith('gub/nex/lattice/') or p.startswith('gub/nex/mcp/') or p == 'gub/nex/mcp.hoon': return True
     #  The shell and the desk nexus are what this distribution now runs ON,
     #  not apps it happens to carry: the shell manages permissions and owns
     #  cross-ship discovery, and the desk nexus mirrors a published code

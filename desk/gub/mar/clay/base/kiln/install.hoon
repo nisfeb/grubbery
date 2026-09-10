@@ -1,15 +1,12 @@
-::  mar/clay/base/kiln/install: typed marc so grubbery fibers can poke
-::  %hood with %kiln-install (the settings page's install button).
-::  Shape from gen/hood/clay/install: [local-desk her remote-desk].
+::  kiln-install: [local=term ship desk], mirrors /mar/kiln/install on %base
 ::
-|_  a=[loc=@tas her=@p rem=@tas]
-++  grad  %noun
-++  grow
-  |%
-  ++  noun  a
-  --
+|_  val=[term ship desk]
 ++  grab
   |%
-  ++  noun  ,[loc=@tas her=@p rem=@tas]
+  ++  noun  ,[term ship desk]
+  --
+++  grow
+  |%
+  ++  noun  val
   --
 --

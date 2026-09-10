@@ -21,6 +21,7 @@
 //   attributes (config in):
 //     open              boolean; reflects/controls visibility
 //     no-backdrop-close boolean; clicking the backdrop won't close it
+//     no-x              boolean; hide the standard corner close button
 //   slots (content in):
 //     default   the modal body. Any element with a [data-close] attribute
 //               closes the dialog on click (wire your own cancel/close button).
@@ -32,7 +33,7 @@
 //     --md-pad       card padding (default 22px)
 //     --md-shadow    card box-shadow (default 0 16px 48px rgba(0,0,0,.28))
 //     --md-backdrop  backdrop color (default rgba(0,0,0,.35))
-//   events (state out):
+//   events (state out), all bubbling + composed (library policy):
 //     md-open, md-close   ({ detail: { returnValue } } on close)
 //   methods:
 //     .show(), .close(returnValue)
@@ -57,12 +58,21 @@ TPL.innerHTML = `
     }
     dialog::backdrop { background: var(--md-backdrop, rgba(0,0,0,0.35)); }
     .wrap { padding: var(--md-pad, 22px); }
+    #x {
+      all: unset; cursor: pointer;
+      position: absolute; top: 10px; right: 10px;
+      width: 24px; height: 24px;
+      display: grid; place-items: center;
+      border-radius: 7px; color: #8b949e; font-size: 15px; line-height: 1;
+    }
+    #x:hover { background: #eaeef2; color: #24292f; }
+    :host([no-x]) #x { display: none; }
     /* fade/scale in */
     dialog[open] { animation: md-in .14s ease-out; }
     @keyframes md-in { from { opacity: 0; transform: translateY(4px) scale(.98); } }
     @media (prefers-reduced-motion: reduce) { dialog[open] { animation: none; } }
   </style>
-  <dialog part="dialog"><div class="wrap"><slot></slot></div></dialog>
+  <dialog part="dialog"><button id="x" title="close">\u00d7</button><div class="wrap"><slot></slot></div></dialog>
 `;
 
 class ModalDialog extends HTMLElement {
@@ -88,6 +98,7 @@ class ModalDialog extends HTMLElement {
     this.#dialog.addEventListener('click', (e) => {
       if (e.target === this.#dialog && !this.hasAttribute('no-backdrop-close')) this.close();
     });
+    this.shadowRoot.getElementById('x').addEventListener('click', () => this.close());
     // any [data-close] element in the light DOM closes it
     this.addEventListener('click', (e) => {
       if (e.target.closest('[data-close]')) this.close();
@@ -100,7 +111,7 @@ class ModalDialog extends HTMLElement {
     if (!this.hasAttribute('open')) return;
     this.removeAttribute('open');
     this.dispatchEvent(new CustomEvent('md-close', {
-      detail: { returnValue }, bubbles: true,
+      detail: { returnValue }, bubbles: true, composed: true,
     }));
   }
 
@@ -115,7 +126,7 @@ class ModalDialog extends HTMLElement {
     if (this.#dialog.open) return;
     this.#dialog.showModal();
     this.setAttribute('open', '');
-    this.dispatchEvent(new CustomEvent('md-open', { bubbles: true }));
+    this.dispatchEvent(new CustomEvent('md-open', { bubbles: true, composed: true }));
   }
 
   close(returnValue = '') {
