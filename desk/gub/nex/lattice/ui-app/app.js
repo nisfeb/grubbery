@@ -785,7 +785,6 @@
   // and the pane's theme background shows through.
   const prevBlank = () => {
     prev.removeAttribute('src');
-    prev.style.minHeight = '';
     // the srcdoc paints its OWN theme background rather than relying on the
     // engine to composite a mismatched-scheme iframe as transparent. That
     // reliance is exactly the kind of behavior that differs between the
@@ -2746,14 +2745,8 @@
     //  ship has no LaTeX and is not getting one. The local conversion is the
     //  only true render, and it arrives first, so letting the ship's answer
     //  land here would overwrite a rendered document with its own source.
-    //  ...and through the same fit wrapper the local paint uses: the frame
-    //  is sized to its content by a reporter inside the document, and the
-    //  ship's render has none. Written verbatim it replaced the fitted local
-    //  paint a moment later, and the frame scrolled itself again with the
-    //  engine's native (light) bar. Every screenshot taken before this answer
-    //  landed looked fixed; the one the user looks at is after it.
     if (typeof d.html === 'string' && d.kind !== 'tex') {
-      prev.removeAttribute('src'); prev.srcdoc = withPreviewScrollbars(d.html);
+      prev.removeAttribute('src'); prev.srcdoc = d.html;
     }
     else if (!quiet) refreshPreview();
     // A quiet open is the COMMON one: the tree dump already carried the body,
@@ -3711,10 +3704,6 @@
   // ── preview pane: <lat-preview> ──────────────────────────────────────────
   // Content kinds render locally (srcdoc). Computed kinds (hoon,
   // js, css) show the page's live DATA via /f/<name>, refreshed after save/cmd.
-  // fit state for the document currently in the frame (see the message
-  // handler below). fitCur is the seq previewFit stamped into that document;
-  // null forces the next report to start a new document.
-  let fitCur = null, fitH = 0, fitOff = false;
   customElements.define('lat-preview', class extends HTMLElement {
     connectedCallback() {
       this.innerHTML =
@@ -3744,33 +3733,9 @@
         // the frame can drive the top page anywhere on its own; the click has
         // to be real. The base target below is what points those clicks
         // upward instead of at the frame.
-        // The frame sits in a scrolling DIV and is sized to its own content
-        // (see previewFit), so the frame's document never scrolls and never
-        // shows the engine's native scrollbar. That bar is the one WebKitGTK
-        // paints light no matter what: measured on 2.50, a sub-frame's bar
-        // ignores color-scheme, ::-webkit-scrollbar, scrollbar-color, the
-        // GTK dark variant and gtk-application-prefer-dark-theme alike.
-        // The div scrolls with the app's own styled bars instead.
-        '<div class="prevwrap"><iframe class="prev" id="prev" title="live preview" '
-          + 'sandbox="allow-scripts allow-top-navigation-by-user-activation"></iframe></div>';
+        '<iframe class="prev" id="prev" title="live preview" '
+          + 'sandbox="allow-scripts allow-top-navigation-by-user-activation"></iframe>';
       prev = $('prev');
-      // the frame reports its content height once its document has loaded;
-      // the wrap scrolls. The FIRST report per document wins, measured with
-      // the frame at pane height (previewFit clears min-height before every
-      // write). If the content then grows in response to the frame growing,
-      // the document is viewport-relative (a 100vh slide deck) and fitting
-      // can never settle: drop the fit and let it scroll inside the frame,
-      // whose own bars are hidden. A late image load trips the same rule and
-      // degrades the same way, which beats a frame that grows without bound.
-      window.addEventListener('message', (e) => {
-        if (e.source !== prev.contentWindow) return;
-        const m = e.data;
-        if (!m || typeof m.latPrev !== 'number' || !(m.latPrev > 0)) return;
-        if (m.seq !== fitCur) { fitCur = m.seq; fitH = 0; fitOff = false; }
-        if (fitOff) return;
-        if (!fitH) { fitH = m.latPrev; prev.style.minHeight = fitH + 'px'; return; }
-        if (m.latPrev > fitH + 2) { fitOff = true; prev.style.minHeight = ''; }
-      });
       // blank it NOW, not when the first page opens. An iframe with no srcdoc
       // is an opaque white canvas, and the first thing that used to call
       // prevBlank was boot's trailing newFile(). So the pane sat white for
@@ -3821,35 +3786,19 @@
   // below. A document that declares none is light, whatever the app is, so
   // its bars stayed white in a dark editor even with these rules present.
   // The rules that follow style them where the engine supports that.
-  // WebKitGTK paints a sub-frame's OWN scrollbar light whatever the theme or
-  // the document's colour scheme say, so the frame's bar is hidden outright
-  // and the pane scrolls instead. Two things measured in a bare WebKit view:
-  // html::-webkit-scrollbar{display:none} does hide it, and ANY standard
-  // scrollbar-width / scrollbar-color on the document switches every
-  // ::-webkit-scrollbar rule off, so neither may appear in a preview
-  // document. Scoped to html so an inner scroll box (a wide <pre>) keeps its
-  // own styled bar.
-  const PREVIEW_SCROLLBARS = '<style>:root{color-scheme:light dark}html::-webkit-scrollbar{display:none}</style>';
-  // the height reporter the wrap listens for: posts once the document has
-  // loaded, and again when its body resizes. Each call stamps a fresh seq so
-  // the parent can tell a new document from a resize of the old one. Mirrored
-  // (without the seq) in app.hoon (+preview-scrollbar-css) for the /f/
-  // computed-kind preview. Clearing min-height here is deliberate: every
-  // srcdoc write goes through this, and the first measurement must be taken
-  // with the frame at pane height, not at the previous document's.
-  let fitSeq = 0;
-  const previewFit = () => {
-    if (prev) prev.style.minHeight = '';
-    return PREVIEW_SCROLLBARS
-      + '<script>(function(){var S=' + (++fitSeq) + ';function s(){var d=document.documentElement,b=document.body;parent.postMessage({latPrev:Math.max(d.scrollHeight,b?b.scrollHeight:0),seq:S},"*")}addEventListener("load",function(){s();if(document.body)new ResizeObserver(s).observe(document.body)})})()</script>';
-  };
+  const PREVIEW_SCROLLBARS = '<style>'
+    + ':root{color-scheme:light dark}'
+    + 'html{scrollbar-width:thin;scrollbar-color:#8886 transparent}'
+    + '::-webkit-scrollbar{width:10px;height:10px}'
+    + '::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}'
+    + '::-webkit-scrollbar-thumb{background:#8886;border-radius:5px;border:2px solid transparent;background-clip:padding-box}'
+    + '</style>';
   const withPreviewScrollbars = (html) => {
     const head = /<head\b[^>]*>/i.exec(html);
-    const fit = previewFit();
-    if (head) return html.slice(0, head.index + head[0].length) + fit + html.slice(head.index + head[0].length);
+    if (head) return html.slice(0, head.index + head[0].length) + PREVIEW_SCROLLBARS + html.slice(head.index + head[0].length);
     const root = /<html\b[^>]*>/i.exec(html);
-    if (root) return html.slice(0, root.index + root[0].length) + fit + html.slice(root.index + root[0].length);
-    return fit + html;
+    if (root) return html.slice(0, root.index + root[0].length) + PREVIEW_SCROLLBARS + html.slice(root.index + root[0].length);
+    return PREVIEW_SCROLLBARS + html;
   };
   const paintLocal = () => {
     if (!CONTENT() || document.hidden) return;
@@ -3881,14 +3830,18 @@
         + '<style>:root{color-scheme:light dark}'
         + 'body{margin:0;padding:14px;font:15px/1.6 system-ui,sans-serif;background:#fafafa}'
         + '@media(prefers-color-scheme:dark){body{background:#1a1a1a}}'
-        // NO scrollbar-width / scrollbar-color here: either one switches the
-        // ::-webkit-scrollbar rules off, including the html-level hide that
-        // previewFit appends. Inner scroll boxes (a wide <pre>) keep flat bars.
-        + 'pre::-webkit-scrollbar{width:10px;height:10px}'
-        + 'pre::-webkit-scrollbar-thumb{background:#8886;border-radius:5px;border:2px solid transparent;background-clip:padding-box}'
+        // the same flat scrollbars index.html gives the main document. A frame
+        // without these draws the engine's NATIVE scrollbars, which follow the
+        // window theme rather than the page: in the desktop app on Linux that
+        // was a white scrollbar on a dark preview. #8886 is --border, an alpha
+        // grey that reads on both schemes.
+        + 'html{scrollbar-width:thin;scrollbar-color:#8886 transparent}'
+        + '::-webkit-scrollbar{width:10px;height:10px}'
+        + '::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}'
+        + '::-webkit-scrollbar-thumb{background:#8886;border-radius:5px;border:2px solid transparent;background-clip:padding-box}'
         + 'img{max-width:100%}pre{overflow-x:auto}'
         + 'table{border-collapse:collapse}td,th{border:1px solid #8886;padding:.3em .5em}'
-        + '</style>' + previewFit() + localHtml(pkind.value, src.value);
+        + '</style>' + localHtml(pkind.value, src.value);
     } catch {}
   };
 
@@ -3919,7 +3872,6 @@
       paintLocal();
     } else if (current) {
       prev.removeAttribute('srcdoc');
-      fitCur = null; prev.style.minHeight = '';
       // preview=1: the ship adds the editor's scrollbar rules to an html
       // answer, so a computed page's live document scrolls like the rest of
       // the editor instead of with the engine's native, theme-following bars
@@ -6295,11 +6247,6 @@
     try { localStorage.latBeaconRev = rev; } catch {}
   };
   let dropStream = null;
-  // consecutive attempts that never reached registration. A stream that
-  // registers and later ends is the NORMAL cycle, not a failure: the keep
-  // closes itself after ~80s (measured against ~ricsul-bilwyt), so every
-  // open editor reconnects about once a minute and must do so promptly.
-  let fail = 0;
   (async () => {
     for (;;) {
       // a HIDDEN editor holds no stream: vere is HTTP/1.1 and the browser
@@ -6311,8 +6258,6 @@
         await new Promise((r) => setTimeout(r, 1000));
         continue;
       }
-      // did this attempt get as far as the ship's registration event?
-      let registered = false;
       try {
         const ac = new AbortController();
         dropStream = () => ac.abort();
@@ -6358,7 +6303,6 @@
               // swallow one real remote bump later.
               pendingEchoes = 0;
               streamLive = true;
-              registered = true;
               if (lastRev && data && data !== lastRev) bumped();
               noteRev(data);
               continue;
@@ -6376,24 +6320,8 @@
       } catch {}
       // stream severed: pier restart or proxy hiccup. The rev comparison at
       // the NEXT registration covers whatever happens in this gap.
-      //
-      // An attempt that REGISTERED and then ended is the keep expiring on
-      // schedule, so go straight back and reset the count. An attempt that
-      // never registered failed — ship down, proxy refusing, 502 — and
-      // retrying that every 3s forever is how one outage becomes a steady
-      // drum on a pier that is already struggling. Double up to 30s.
-      //
-      // Jitter BOTH cases. A pier restart drops every client at the same
-      // instant, and tabs opened together expire their keeps together, so a
-      // fixed delay brings them all back on the same tick. Half to one and a
-      // half of the delay spreads them out and costs nothing when it is one
-      // tab. (Reconnect itself is cheap by design: registration replays the
-      // current rev and the client does nothing unless it moved.)
       streamLive = false;
-      fail = registered ? 0 : Math.min(fail + 1, 5);
-      const base = Math.min(3000 * (1 << Math.max(0, fail - 1)), 30000);
-      const wait = Math.min(Math.round(base * (0.5 + Math.random())), 30000);
-      await new Promise((r) => setTimeout(r, wait));
+      await new Promise((r) => setTimeout(r, 3000));
     }
   })();
   // coming back to the tab/window is the moment staleness shows. Catch it

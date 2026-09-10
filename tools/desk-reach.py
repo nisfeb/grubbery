@@ -125,7 +125,13 @@ def is_root(p):
     #                               peers.json poke and /peers mirrors).
     if p.startswith('gub/nex/shell/') or p.startswith('gub/nex/desk/') or p in ('gub/nex/shell.hoon', 'gub/nex/desk.hoon'): return True
     if p.startswith('gub/mar/') or p.startswith('mar/') or p.startswith('sur/'): return True
-    if p.startswith('gub/lib/mcp/') and not no_tools:
+    #  Only LATTICE's tools are roots. Upstream's tool-bundle carries 92
+    #  more - bitcoin, s3, calendar, the assistants - and a lattice ship
+    #  has no use for them; treating the whole directory as roots would
+    #  drag their libs back in and undo the trim. mcp.hoon imports the
+    #  bundle as a DIRECTORY, so a smaller directory is simply a smaller
+    #  tool list, which is what a lattice-only distribution wants.
+    if p.startswith('gub/lib/tool-bundle/tools/lattice-') and not no_tools:
         base = p.split('/')[-1]
         return not any(base.startswith(d) for d in drop)
     return False
