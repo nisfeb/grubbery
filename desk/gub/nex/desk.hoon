@@ -742,7 +742,12 @@
 ::  its own): read the dir, and if its neck is not
 ::  [/ %code], re-fold the SAME contents under the right one. Contents are
 ::  untouched (this is the neck-only case of what +sync-dir does with a
-::  freshly pulled tree), and it is a no-op on a healthy desk.
+::  freshly pulled tree).
+::
+::  A healthy neck is NOT the end of the check. The neck is governance;
+::  a BANG is instance state, and the two go wrong independently. So a
+::  healthy dir falls through to +reload-billed too, which now restarts
+::  only the instances actually carrying a bang.
 ++  ensure-code-nexus
   |=  =rail:tarball
   =/  m  (fiber:fiber:nexus ,~)
@@ -751,7 +756,18 @@
   ;<  cur=view:nexus  bind:m  (peek:io code-road ~)
   ?.  ?=([%ball *] cur)  (pure:m ~)
   =/  nek=(unit neck:tarball)  ?~(fil.ball.cur ~ neck.u.fil.ball.cur)
-  ?:  =(nek `[/ %code])  (pure:m ~)
+  ::  Neck already right: nothing to govern, but an instance may still be
+  ::  holding a stale BANG, so go straight to the reload pass. Measured
+  ::  2026-09-15 on a real subscriber: calendar's /desk/code had the right
+  ::  neck and an EMPTY tree, its root version.json matched the source, so
+  ::  +source-behind said "not behind" and it never synced again. An
+  ::  unconditional +do-fetch refilled it and /nex/calendar/app.hoon
+  ::  compiled in 11s — yet +reload-changed-nexuses ran for 28ms and never
+  ::  touched the instance, because a nexus that never built has no
+  ::  recorded refs for the changed-refs walk to follow. The app stayed
+  ::  dead until the instance was reloaded by hand. Third time this class
+  ::  needed hands: auspex 404, lattice 504, calendar 504.
+  ?:  =(nek `[/ %code])  (reload-billed rail)
   ~&  >>  [%desk-code-nexus-repaired path.rail]
   =/  bol=bole:tarball  (ball-to-bole:tarball ball.cur)
   =/  root=pulp:tarball  (fall fil.bol `pulp:tarball`[~ ~ %.n ~])
@@ -773,15 +789,22 @@
   ::  "Reload nexus".
   ::
   ::  So reload what the bill declares, right here, on the same rise that
-  ::  fixed the neck. Runs ONLY on the repair path (a healthy desk returned
-  ::  above), so this is not a reload storm: it is the one restart the
-  ::  affected instances never got.
+  ::  fixed the neck. It is not a reload storm because +reload-billed skips
+  ::  any instance whose bang is ~: on this path they are all banged, and
+  ::  on the healthy-neck path above it is one peek per bill entry and
+  ::  usually no reload at all.
   (reload-billed rail)
-::  +reload-billed: reload every instance this desk's bill declares.
+::  +reload-billed: reload every BANGED instance this desk's bill declares.
 ::  Mirrors +apply-bill's read of bill.json (json grub or mime text, and a
 ::  key this version cannot read is reported, not fatal) but reloads the
 ::  /desk/data children instead of making them. Soft per entry: one
 ::  instance that refuses to come back must not strand the others.
+::
+::  The bang gate is what makes this safe to call on every rise and every
+::  sync rather than only after a neck repair. A healthy instance is left
+::  alone — one shallow peek per bill entry and no reload — so the cost on
+::  a healthy desk is a peek, and the one case that needs a restart (a
+::  nexus that never built, so nothing re-evaluates it) always gets one.
 ++  reload-billed
   |=  =rail:tarball
   =/  m  (fiber:fiber:nexus ,~)
@@ -806,8 +829,15 @@
   |-
   ?~  names  (pure:m ~)
   =/  data-road=road:tarball  (nex-road:io rail [%| /desk/data/[i.names]])
-  ;<  has=?  bind:m  (peek-exists:io data-road)
-  ?.  has  $(names t.names)
+  ::  Shallow peek, not +peek-exists: we need the instance's bang, and a
+  ::  shallow read gets it without dragging the whole instance ball into
+  ::  this fiber (mail, keys and know subtrees hang off some of them).
+  ::  Absent instance, or one that is not a nexus, or one with no bang:
+  ::  leave it alone. Only a nexus actually holding a BANG is restarted.
+  ;<  cur=view:nexus  bind:m  (peek-shallow:io data-road ~)
+  ?.  ?=([%ball *] cur)  $(names t.names)
+  ?~  fil.ball.cur  $(names t.names)
+  ?~  bang.u.fil.ball.cur  $(names t.names)
   ~&  >>  [%desk-instance-reloaded i.names]
   ;<  err=(unit tang)  bind:m  (reload-soft:io data-road)
   ~?  >>>  ?=(^ err)  [%desk-instance-reload-failed i.names]
