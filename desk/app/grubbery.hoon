@@ -71,9 +71,17 @@
 ::  unconditionally - a few lines per sync tick, per commit, per request -
 ::  and in production they bury the warnings. ~? costs nothing when it is
 ::  |; flip to & and recompile to see them again. Warnings (>> and >>>)
-::  are not behind it.
+::  are not behind it. Debug output carries NO marker, so >, >> and >>>
+::  each keep one meaning: notice, warning, error.
 ::
 ++  dbg  ^-(? |)
+::  +took: time a computation on the console, but only under +dbg. A bare
+::  %bout hint prints on every build, whatever priority it is given.
+::
+++  took
+  |*  [lab=@tas tap=(trap)]
+  ?.  dbg  $:tap
+  ~>(%bout.[1 lab] $:tap)
 :: The subject all code gets compiled against (/nex, /mar or /lib)
 ::
 ++  sut
@@ -267,13 +275,13 @@
       :: Force a reload of the root nexus (reboot the whole namespace)
       ::
         %reload
-      ~?  >  dbg  %grubbery-reload
+      ~?  dbg  %grubbery-reload
       =^  cards  state
         abet:cold-start:hc
       [cards this]
       ::
         %revalidate
-      ~?  >  dbg  %grubbery-revalidate
+      ~?  dbg  %grubbery-revalidate
       =^  cards  state
         abet:revalidate-all:hc
       [cards this]
@@ -282,7 +290,7 @@
       :: human asks for the cleanup.
       ::
         %silo-repair
-      ~?  >  dbg  %grubbery-silo-repair
+      ~?  dbg  %grubbery-silo-repair
       =^  cards  state
         abet:repair-silo:hc
       [cards this]
@@ -292,7 +300,7 @@
       ::  bypasses darts, gates, and state replay entirely.
       ::
         %open-apps
-      ~?  >  dbg  %grubbery-open-apps
+      ~?  dbg  %grubbery-open-apps
       =^  cards  state
         abet:(set-weir:hc /apps ~)
       [cards this]
@@ -303,12 +311,12 @@
       ::  the wrong one and sands silently do nothing.
       ::
         %show-apps-weir
-      ~?  >  dbg  [%apps-weir-ball (get-weir-for:hc /apps)]
-      ~?  >  dbg  [%apps-weir-born (peek-weir:hc /apps)]
+      ~?  dbg  [%apps-weir-ball (get-weir-for:hc /apps)]
+      ~?  dbg  [%apps-weir-born (peek-weir:hc /apps)]
       [~ this]
       ::
         %show-code-map
-      ~?  >  dbg  [%code-namespaces ~(tap in ~(key by code))]
+      ~?  dbg  [%code-namespaces ~(tap in ~(key by code))]
       [~ this]
       ::
         %show-code-refs
@@ -316,16 +324,16 @@
       |-
       ?~  ns-list  [~ this]
       =/  =lode:nexus  (~(got by code) i.ns-list)
-      ~?  >  dbg  [%code-ns i.ns-list refs=(turn ~(tap of refs.lode) |=([p=path n=(map @ta @uv)] [p ~(tap in ~(key by n))]))]
+      ~?  dbg  [%code-ns i.ns-list refs=(turn ~(tap of refs.lode) |=([p=path n=(map @ta @uv)] [p ~(tap in ~(key by n))]))]
       $(ns-list t.ns-list)
       ::
         %show-bins
-      ~?  >  dbg  [%bins-count ~(wyt by bins)]
+      ~?  dbg  [%bins-count ~(wyt by bins)]
       =/  entries=(list [@uv @ud ?(%vase %tang %mime)])
         %+  turn  ~(tap by bins)
         |=  [k=@uv refs=@ud =built:nexus]
         [k refs -.built]
-      ~?  >  dbg  [%bins-summary (scag 50 entries)]
+      ~?  dbg  [%bins-summary (scag 50 entries)]
       [~ this]
     ==
   ==
@@ -416,7 +424,7 @@
     ::  Silo audit: every referenced-but-absent lobe, rendered as
     ::  text lines (see +audit-silo / +audit-render)
     =/  hits  audit-silo:hc
-    ~?  >  dbg  [%audit-hits (lent hits)]
+    ~?  dbg  [%audit-hits (lent hits)]
     ``txt+!>(`wain`(audit-render:hc hits))
   ==
 ::
@@ -570,6 +578,12 @@
 ::
 =|  cards=(list card)
 =|  takes=(qeu take:nexus)
+::  was: the pool as it stood before this event first cleared any bangs.
+::  A reload clears every bang under a nexus and re-bangs what still
+::  fails; this is how +bang-nexus knows a fault is old news. Transient,
+::  like cards and takes.
+::
+=|  was=pool:nexus
 |_  =bowl:gall
 +*  this  .
 ::  +carry-behn-state: one-time rename of the behn service grub from
@@ -773,9 +787,9 @@
     |=  [pax=path name=(unit @ta) =cass:clay latest=? kind=?(%ject %noun) lobe=@]
     [pax name cass]
   ?~  dmg
-    ~?  >  dbg  [%silo-repair-clean rounds=rounds]
+    ~?  dbg  [%silo-repair-clean rounds=rounds]
     this
-  ~?  >  dbg  [%silo-repair round=rounds damaged-versions=(lent dmg)]
+  ~?  dbg  [%silo-repair round=rounds damaged-versions=(lent dmg)]
   =/  before  this
   =/  todo=(list [pax=path name=(unit @ta) =cass:clay])  dmg
   =.  this
@@ -784,7 +798,7 @@
     =.  this  (tomb-version [pax name cass]:i.todo)
     $(todo t.todo)
   ?:  =(born.before born)
-    ~?  >  dbg  [%silo-repair-remaining-latest-guarded (lent dmg)]
+    ~?  dbg  [%silo-repair-remaining-latest-guarded (lent dmg)]
     this
   $(rounds +(rounds))
 ::  +tomb-version: rewrite one hist entry's pace to %tomb, releasing
@@ -806,7 +820,7 @@
   =/  ent=(unit entry:hist:nexus)  (get:hon:hist:nexus sk cass)
   ?~  ent  this
   ?:  ?=(%tomb -.pace.u.ent)  this
-  ~?  >  dbg  [%silo-tombed pax name ud=ud.cass]
+  ~?  dbg  [%silo-tombed pax name ud=ud.cass]
   =?  silo  ?=(^ p.pace.u.ent)
     (~(drop-ject si:nexus silo) u.p.pace.u.ent)
   =/  new-hist=hist:nexus
@@ -842,7 +856,7 @@
     $(entries t.entries)
   ::  All refs present — discharge: build view from snap+silo,
   ::  send %peek intake to the requesting fiber.
-  ~?  >  dbg  [%peek-discharged ship.pk dest.pk key=key peeks-remaining=~(wyt by peeks.remo)]
+  ~?  dbg  [%peek-discharged ship.pk dest.pk key=key peeks-remaining=~(wyt by peeks.remo)]
   =/  =cite:nexus
     ?:  ?=(%tomb -.pace.u.snap.pk)  [%none ~]
     ?~  p.pace.u.snap.pk  [%none ~]
@@ -1272,7 +1286,7 @@
     %=  $
       pending  (skip pending |=([j=jobe:nexus *] (~(has in done) j)))
     ==
-  ~?  >  dbg  [%peek-data-received nouns=(lent good-nouns) jects=(lent good-jects)]
+  ~?  dbg  [%peek-data-received nouns=(lent good-nouns) jects=(lent good-jects)]
   =/  merged=lobes:nexus
     :-  (sy (turn good-jects |=([=jobe:nexus *] jobe)))
     (sy (turn good-nouns |=([=nobe:nexus *] nobe)))
@@ -1366,7 +1380,7 @@
       &(=(ship.pk src) =(dest.pk dest.resp))
     ?~  snap.resp
       ::  Nothing exists at dest — discharge with %none and remove peeks
-      ~?  >  dbg  [%snap-not-found dest=dest.resp]
+      ~?  dbg  [%snap-not-found dest=dest.resp]
       =/  to-discharge=(list [[=rail:tarball =wire] =peek:remo:nexus])
         %+  skim  ~(tap by peeks.remo)
         |=  [[=rail:tarball =wire] pk=peek:remo:nexus]
@@ -1387,19 +1401,19 @@
     ::  Merge it through the same discipline as a %data transfer —
     ::  the want/data legs are skipped entirely.
     ?:  ?=(^ data.resp)
-      ~?  >  dbg  [%snap-inline-from src]
+      ~?  dbg  [%snap-inline-from src]
       (merge-transfer-data u.data.resp)
     =/  missing=lobes:nexus
       :-  (~(dif in jects.refs.u.snap.resp) ~(key by jects.silo))
       (~(dif in nouns.refs.u.snap.resp) ~(key by nouns.silo))
     =/  n-missing=@ud  (add ~(wyt in jects.missing) ~(wyt in nouns.missing))
-    ~?  >  dbg  [%snap-processed refs=(add ~(wyt in jects.refs.u.snap.resp) ~(wyt in nouns.refs.u.snap.resp)) missing=n-missing]
+    ~?  dbg  [%snap-processed refs=(add ~(wyt in jects.refs.u.snap.resp) ~(wyt in nouns.refs.u.snap.resp)) missing=n-missing]
     ?:  =(0 n-missing)
       ::  All refs already in silo — discharge immediately
-      ~?  >  dbg  %snap-all-refs-present-discharging
+      ~?  dbg  %snap-all-refs-present-discharging
       discharge-peeks
     ::  Send %want with snap-id — server uses it to look up pinned refs
-    ~?  >  dbg  [%snap-sending-want missing=n-missing snap-id=snap-id.resp]
+    ~?  dbg  [%snap-sending-want missing=n-missing snap-id=snap-id.resp]
     =/  want-req=transfer:remo:nexus
       [/want %want dest.resp snap-id.resp]
     =.  cards
@@ -1413,7 +1427,7 @@
     this
     ::
       %data
-    ~?  >  dbg  [%data-received-from src]
+    ~?  dbg  [%data-received-from src]
     (merge-transfer-data silo.resp)
     ::
       %veto
@@ -1455,7 +1469,7 @@
 ++  process-intake
   |=  [src=@p resp=intake:remo:nexus]
   ^+  this
-  ~?  >  dbg  [%wave-received-from src dest=dest.resp]
+  ~?  dbg  [%wave-received-from src dest=dest.resp]
   =/  ns-lane=lane:tarball
     =/  prefix=path  /sys/ames/ships/[(scot %p src)]/root
     ?-(-.dest.resp %& [%& (weld prefix path.p.dest.resp) name.p.dest.resp], %| [%| (weld prefix p.dest.resp)])
@@ -2524,9 +2538,17 @@
 ++  bang-nexus
   |=  [dest=fold:tarball err=tang]
   ^+  this
-  %-  (slog [leaf+"BANG nexus {(spud dest)}" err])
-  ::  Set bang on the pipe at dest
   =/  old=pipe:nexus  (fall (~(get of pool) dest) *pipe:nexus)
+  ::  said when the fault begins, not each time a reload finds it still
+  ::  there: a nexus banged with this same error, now or before this
+  ::  event's reload cleared it (+was), prints nothing. The bang on the
+  ::  pipe is the record either way.
+  =/  before=(unit tang)  bang:(fall (~(get of was) dest) *pipe:nexus)
+  =.  this
+    ?:  |(=(bang.old `err) =(before `err))  this
+    %-  (slog [leaf+"BANG nexus {(spud dest)}" err])
+    this
+  ::  Set bang on the pipe at dest
   =.  pool  (~(put of pool) dest old(bang `err))
   ::  Persist bang to fold ject in silo
   =.  this  (bang-fold dest err)
@@ -2633,6 +2655,7 @@
 ++  clear-bangs-under
   |=  dest=fold:tarball
   ^+  this
+  =?  was  =(*pool:nexus was)  pool
   =.  pool  (clear-pool-bangs-at pool dest)
   (clear-ject-bangs-under dest)
 ::
@@ -2728,7 +2751,8 @@
   |=  [dir=path name=@ta]
   ^+  this
   =/  del-check  (peek-grub-now [dir name])
-  ~?  >>  ?=(~ del-check)
+  ::  deleting what is already gone is a no-op, not a fault
+  ~?  &(dbg ?=(~ del-check))
     "no grub at {(spud (weld dir /[name]))}"
   ::  Clean up outgoing subscriptions from this file
   =.  this  (sub-wipe [dir name])
@@ -2760,7 +2784,7 @@
     ?~  pax  ~
     $(pax (snip `path`pax))
   ?~  cod  this
-  ~&  >>>  "delete: triggering build-code from {(spud dir)}"
+  ~?  dbg  "delete: triggering build-code from {(spud dir)}"
   =.  this  (build-code u.cod `(sy `(list rail:tarball)`~[[dir name]]))
   this
 ::  Send ack/nack back to poke source
@@ -3382,14 +3406,14 @@
   ::  %node dart with an unresolvable road — drop at admission.
   ::  Past this point a %node dart always carries a resolved dest.
   ?:  &(?=(%node -.dart) ?=(~ dest))
-    ~&  [%node-bad-road here road.dart]
+    ~&  >>  [%node-bad-road here road.dart]
     this
   =/  =filt:nexus  (allowed jump here dest)
   ?+    filt  (handle-dart here dart filt dest)
       [~ %|]
     ::  Vetoed — crash for foreign ship darts (gall nacks the sender),
     ::  send %veto intake back to source for internal darts.
-    ~&  >>>  [%process-dart-vetoed jump=jump here=(snoc path.here name.here) dest=dest dart-type=-.dart]
+    ~?  dbg  [%process-dart-vetoed jump=jump here=(snoc path.here name.here) dest=dest dart-type=-.dart]
     ?:  ?=([%sys %ames %ships @ ~] path.here)
       ~|  [%peer-vetoed name.here dest]
       !!
@@ -3486,7 +3510,7 @@
       ::  Set weir at dest (must be a directory)
       ?>  ?=(%| -.u.dest-lane)
       =/  dest=fold:tarball  p.u.dest-lane
-      ~&  >>  [%sand-applying dest=dest weir=weir.load.dart from=path.here]
+      ~?  dbg  [%sand-applying dest=dest weir=weir.load.dart from=path.here]
       =/  res=(each _this tang)  (mule |.((set-weir dest weir.load.dart)))
       ?-  -.res
         %&  ~&  >  [%sand-applied dest=dest]
@@ -3957,7 +3981,7 @@
   |=  [here=rail:tarball =prod:fiber:nexus spool-res=(each spool:fiber:nexus tang)]
   ^+  this
   ?:  (is-nexus-banged here)
-    ~&  >>  [%spawn-skip-banged (snoc path.here name.here)]
+    ~?  dbg  [%spawn-skip-banged (snoc path.here name.here)]
     this
   ?:  ?=(%| -.spool-res)
     ~&  >>  "spawn-proc: bang {(spud (snoc path.here name.here))} — on-file crash"
@@ -4374,6 +4398,7 @@
       ?~  done  ~
       in.take.i.done
     ?:  ?=([~ %veto *] culprit)
+      =.  this  (say-parked here dart.u.culprit)
       %+  bang-file  here
       :~  leaf+"fiber parked: a dart was refused by the weir"
           leaf+"grant this app's permits, then reload to retry"
@@ -4700,13 +4725,47 @@
     ::  sandboxed fiber learns where it is (+walk-here climbs until the
     ::  governor says no, and this is the no), so it fires on most requests
     ::  and is not a fault. Still vetoed; just not announced.
-    ~?  >>>  &(loud !=(dest-lane [%| path.here]))
+    ~?  &(dbg loud !=(dest-lane [%| path.here]))
       [%weir-veto-at boundary=path.here jump=jump dest=dest-lane]
     [~ |]
   ::  Reached root - stop
   ?~  path.here
     next
   $(filt next, path.here (snip `fold:tarball`path.here))
+::  +say-parked: ONE console line when an app's fiber is parked on a road
+::  it was not granted. Said at the PARK, not at the veto: a refusal an
+::  app expects and handles softly (an optional road, a probe) is not a
+::  fault and prints nothing. And said once per app, not once per fiber:
+::  while one of its fibers is already parked the operator has been told,
+::  and the bang on that grub is the record.
+::
+++  say-parked
+  |=  [here=rail:tarball =dart:nexus]
+  ^+  this
+  =/  nex  (find-nearest-nexus here)
+  =/  app=path  ?~(nex path.here p.u.nex)
+  ?:  (any-parked app)  this
+  =/  [=jump:nexus dest=(unit lane:tarball)]  (dart-to-dest here dart)
+  =/  road=tape
+    ?~  dest  "a road"
+    ?-  -.u.dest
+      %&  (spud (snoc path.p.u.dest name.p.u.dest))
+      %|  (spud p.u.dest)
+    ==
+  ~&  >>>  "grubbery: {(spud app)} is parked: it may not {(trip jump)} {road}; grant it at /apps/grubbery/permits, then reload"
+  this
+::  +any-parked: is some process under this directory already banged?
+::
+++  any-parked
+  |=  dest=path
+  ^-  ?
+  =/  pol=pool:nexus  (~(dip of pool) dest)
+  |-  ^-  ?
+  ?:  ?&  ?=(^ fil.pol)
+          (lien ~(val by proc.u.fil.pol) |=(p=proc:fiber:nexus ?=(%| -.process.p)))
+      ==
+    &
+  (lien ~(val by dir.pol) |=(kid=pool:nexus ^$(pol kid)))
 ::  Read weir for a directory from its parent's tree ject dir entry.
 ::  A directory's weir is owned by its parent, not by itself.
 ::
@@ -4969,7 +5028,7 @@
 ::
 ++  sync-clay
   ^+  this
-  ~&  >>  "sync-clay: start"
+  ~?  dbg  "sync-clay: start"
   ::  Ensure /sys/clay/desks directory structure exists
   =.  this  (ensure-dir /sys/clay/desks)
   =.  this  (ensure-dir /sys/clay/desks/base)
@@ -5014,7 +5073,7 @@
     =/  res=(each vase tang)
       (validate-noun:acc / [/ mar] q.new-vase)
     ?.  ?=(%& -.res)
-      ~&  [%sync-clay-vale-failed mar fyl]
+      ~&  >>  [%sync-clay-vale-failed mar fyl]
       acc
     (save-file:acc [dir name] [[/ mar] q.p.res])
   ::  Delete files that no longer exist in Clay
@@ -5032,7 +5091,7 @@
     =/  name=@ta   (cat 3 stem (cat 3 '.' mar))
     (delete:acc dir name)
   ::  Subscribe to %next %z on desk root
-  ~&  >>  "sync-clay-desk: subscribing to {<dek>}"
+  ~?  dbg  "sync-clay-desk: subscribing to {<dek>}"
   %-  emit-card
   [%pass /clay-desk/[dek] %arvo %c %warp our.bowl dek `[%next %z da+now.bowl /]]
 ::  +build-new-code-namespaces: register and build new %code directories
@@ -5052,7 +5111,7 @@
     ::  skip if already registered and built
     ?:  (~(has by code) here)  this
     ::  register and build (new namespace: no prior graph, full sweep)
-    ~?  >  dbg  "register-code-namespace: {(spud here)}"
+    ~?  dbg  "register-code-namespace: {(spud here)}"
     =.  this  (build-code here ~)
     this
   ::  recurse into children
@@ -5158,7 +5217,7 @@
   ?~  changed  none
   ?:  =(~ deps.lode)  none
   ?.  =(`[sut-hash sut-hash] (~(get by keys.lode) sut-rail))
-    ~?  >  dbg  "skip-set: subject changed, full sweep"
+    ~?  dbg  "skip-set: subject changed, full sweep"
     none
   ::  Relativize changed rails to the fold. A rail outside the fold
   ::  or absent from the prior graph (a create) forces a sweep.
@@ -5172,7 +5231,7 @@
     ?.  (~(has by deps.lode) rr)  ~
     $(todo t.todo, out (~(put in out) rr))
   ?~  rel
-    ~?  >  dbg  "skip-set: create or foreign rail in diff, full sweep"
+    ~?  dbg  "skip-set: create or foreign rail in diff, full sweep"
     none
   ::  Foundational marks: changed by fiat, every build
   =/  seed=(set rail:tarball)
@@ -5257,7 +5316,7 @@
   ?~  cods  this
   ?:  =(`[sut-hash sut-hash] (~(get by keys.lode.i.cods) sut-rail))
     $(cods t.cods)
-  ~?  >  dbg  "rebuild-stale-code: subject changed, rebuilding {(spud cod.i.cods)}"
+  ~?  dbg  "rebuild-stale-code: subject changed, rebuilding {(spud cod.i.cods)}"
   =.  this  (build-code cod.i.cods ~)
   $(cods t.cods)
 ::  +rebuild-descendant-code: incrementally rebuild descendant code
@@ -5287,14 +5346,14 @@
   =/  todo=(list [cod=path rails=(set rail:tarball)])  ~(tap by affected)
   |-
   ?~  todo  this
-  ~?  >  dbg  "rebuild-descendant-code: {(spud cod.i.todo)} ({<~(wyt in rails.i.todo)>} changed)"
+  ~?  dbg  "rebuild-descendant-code: {(spud cod.i.todo)} ({<~(wyt in rails.i.todo)>} changed)"
   =.  this  (build-code cod.i.todo `rails.i.todo)
   $(todo t.todo)
 ::
 ++  build-code
   |=  [cod=path changed=(unit (set rail:tarball))]
   ^+  this
-  ~?  >  dbg  "build-code: start {(spud cod)}"
+  ~?  dbg  "build-code: start {(spud cod)}"
   ::  1. Source: get ball, force foundational marks
   ::
   =/  src-ball  (peek-ball-now cod)
@@ -5307,19 +5366,28 @@
   ::
   =/  =lode:nexus   (fall (~(get by code) cod) *lode:nexus)
   =/  old-refs       refs.lode
-  =/  old-cache      ~>(%bout.[1 %bins-to-cache] (bins-to-cache:build keys.lode bins))
-  =/  sut-hash=@uv   ~>(%bout.[1 %build-sut-hash] (sham q:sut))
-  =/  skp            ~>(%bout.[1 %build-skip-set] (skip-set cod lode changed sut-hash))
-  =/  res            ~>(%bout.[1 %build-all] (build-inc:build sut sut-hash src-ball old-cache skp))
-  ~?  >  dbg  "build-code: compiled {<~(wyt by results.res)>} results"
+  =/  old-cache      (took %bins-to-cache |.((bins-to-cache:build keys.lode bins)))
+  =/  sut-hash=@uv   (took %build-sut-hash |.((sham q:sut)))
+  =/  skp            (took %build-skip-set |.((skip-set cod lode changed sut-hash)))
+  =/  res            (took %build-all |.((build-inc:build sut sut-hash src-ball old-cache skp)))
+  ~?  dbg  "build-code: compiled {<~(wyt by results.res)>} results"
   ::  3. Index: compute output ckeys, build keys/refs/builds
   ::
   =/  [new-keys=keys:nexus new-refs=refs:nexus builds=(map @uv built:nexus)]
-      ~>(%bout.[1 %index-results] (index-results res lode src-ball))
+      (took %index-results |.((index-results res lode src-ball)))
+  ::  ONE line for every file that did not build, not one per file: each
+  ::  failure is stored as a %tang where the explorer shows it.
+  ::  ponytail: says so on every build while anything is broken; print
+  ::  only when the failing set changes if that proves noisy.
+  ::
+  =/  bad=@ud
+    (lent (skim ~(val by builds) |=(b=built:nexus ?=(%tang -.b))))
+  ~?  >>  (gth bad 0)
+    "grubbery: {<bad>} files under {(spud cod)} did not compile; the explorer shows each trace"
   ::  4. Update bins: increment new refs, decrement old
   ::
-  =.  bins  ~>(%bout.[1 %refs-inc] (refs-inc new-refs builds))
-  =.  bins  ~>(%bout.[1 %refs-dec] (refs-dec old-refs))
+  =.  bins  (took %refs-inc |.((refs-inc new-refs builds)))
+  =.  bins  (took %refs-dec |.((refs-dec old-refs)))
   ::  5. GC vale cache: drop entries whose marc was removed
   ::
   =.  vale  (gc-vale-cache vale bins)
@@ -5332,15 +5400,15 @@
   ::  7. Validate marks: re-clam grubs through changed marks
   ::
   =^  new-refs  this
-    ~>(%bout.[1 %validate-marks] (validate-marks cod old-refs new-refs))
+    (took %validate-marks |.((validate-marks cod old-refs new-refs)))
   =.  code
     =/  upd=lode:nexus  (fall (~(get by code) cod) *lode:nexus)
     (~(put by code) cod upd(refs new-refs))
   ::  8. Reload nexuses whose compiled code changed
   ::
   =.  this
-    ~>(%bout.[1 %reload-changed-nexuses] (reload-changed-nexuses cod old-refs new-refs))
-  ~?  >  dbg  "build-code: done"
+    (took %reload-changed-nexuses |.((reload-changed-nexuses cod old-refs new-refs)))
+  ~?  dbg  "build-code: done"
   this
 ::  Force foundational mark sources into born and the src-ball.
 ::  Overwrites any user modifications; these marks are immutable.
@@ -5392,11 +5460,11 @@
     =/  stem=@ta  (strip-hoon:build name.rail)
     =/  =built:nexus
       ?:  ?=(%| -.build-result)
-        ~&  >>  "WARNING {(spud (snoc path.rail name.rail))} did not compile"
+        ~?  dbg  "build-code: {(spud (snoc path.rail name.rail))} did not compile"
         [%tang p.build-result]
       =/  val-err=(unit tang)  (validate-build rail p.build-result)
       ?^  val-err
-        ~&  >>  "validate-build failed: {(spud (snoc path.rail name.rail))}"
+        ~?  dbg  "build-code: validate-build failed: {(spud (snoc path.rail name.rail))}"
         [%tang u.val-err]
       ::  TODO: consider extracting the marc or nexus here and storing it as its
       ::  own type instead of a raw vase, so readers don't !< it on every read.
@@ -5600,12 +5668,12 @@
       (save-file rail [blot noun])
     =.  n-boom  +(n-boom)
     $(grubs t.grubs)
-  ~?  >  dbg  "validate-marks: {(trip nam)} — {<n-ok>} ok, {<n-boom>} boom"
+  ~?  dbg  "validate-marks: {(trip nam)} — {<n-ok>} ok, {<n-boom>} boom"
   $(remaining t.remaining)
 ::
 ++  revalidate-all
   ^+  this
-  ~?  >  dbg  "revalidate-all: start"
+  ~?  dbg  "revalidate-all: start"
   =/  all-grubs=(list [=rail:tarball lob=jobe:nexus =leaf:nexus])
     %-  zing
     %+  turn  ~(tap of born)
@@ -5621,11 +5689,11 @@
     ?~  entry  ~
     ?.  ?=(%leaf -.ject.u.entry)  ~
     `[[fold name] u.p.pace.val.u.top leaf.ject.u.entry]
-  ~?  >  dbg  "revalidate-all: {<(lent all-grubs)>} grubs"
+  ~?  dbg  "revalidate-all: {<(lent all-grubs)>} grubs"
   =/  [n-ok=@ud n-boom=@ud n-skip=@ud]  [0 0 0]
   |-
   ?~  all-grubs
-    ~?  >  dbg  "revalidate-all: done — {<n-ok>} ok, {<n-boom>} boom, {<n-skip>} skip"
+    ~?  dbg  "revalidate-all: done — {<n-ok>} ok, {<n-boom>} boom, {<n-skip>} skip"
     this
   =/  [=rail:tarball lob=jobe:nexus =leaf:nexus]  i.all-grubs
   =/  nam=@tas  (rail-to-arm:tarball blot.mark.leaf)
@@ -5729,18 +5797,18 @@
     ~&  >>  "reload-changed-nexuses: bang {(spud (weld path.neck ~[name.neck]))} at {(spud dest)}"
     =.  this  (bang-nexus dest p.nex-res)
     $(dir-remaining t.dir-remaining)
-  ~?  >  dbg  "reload-changed-nexuses: reloading {(spud (weld path.neck ~[name.neck]))} at {(spud dest)}"
+  ~?  dbg  "reload-changed-nexuses: reloading {(spud (weld path.neck ~[name.neck]))} at {(spud dest)}"
   =/  old-ball  (peek-ball-now dest)
-  ~?  >  dbg  "reload-changed-nexuses: reload-nexus-at start"
+  ~?  dbg  "reload-changed-nexuses: reload-nexus-at start"
   =.  this  (reload-nexus-at dest p.nex-res)
-  ~?  >  dbg  "reload-changed-nexuses: reload-nexus-at done"
+  ~?  dbg  "reload-changed-nexuses: reload-nexus-at done"
   =.  this  purge-stale-code
   =/  reload-bole  (peek-bole-now dest)
   =.  this  (build-new-code-namespaces dest reload-bole)
   =.  this  (rebuild-descendant-code dest old-ball)
-  ~?  >  dbg  "reload-changed-nexuses: spawn-all-files start"
+  ~?  dbg  "reload-changed-nexuses: spawn-all-files start"
   =.  this  (spawn-all-files dest reload-bole)
-  ~?  >  dbg  "reload-changed-nexuses: spawn-all-files done"
+  ~?  dbg  "reload-changed-nexuses: spawn-all-files done"
   $(dir-remaining t.dir-remaining)
 ::  Validate a compiled artifact based on its source path.
 ::
@@ -5820,7 +5888,7 @@
 ::
 ++  sync-gub
   ^+  this
-  ~?  >  dbg  "sync-gub: start"
+  ~?  dbg  "sync-gub: start"
   =/  pax=path  /(scot %p our.bowl)/grubbery/(scot %da now.bowl)
   ::  Build the target ball for /code/ (see +gub-ball)
   =/  new-src=ball:tarball  (gub-ball pax)
@@ -5830,17 +5898,17 @@
   ::  Get old ball at /code/
   =/  old-src  (peek-ball-now /code)
   ::  Diff and bump src changes (born, silo, hist, notify)
-  ~?  >  dbg  "sync-gub: load-ball-changes start"
+  ~?  dbg  "sync-gub: load-ball-changes start"
   =.  this  (load-ball-changes /code (ball-to-bole:tarball new-src))
-  ~?  >  dbg  "sync-gub: load-ball-changes done"
+  ~?  dbg  "sync-gub: load-ball-changes done"
   ::  Compile — changed set is the ball diff, absolutized to /code
-  ~?  >  dbg  "sync-gub: build-code start"
+  ~?  dbg  "sync-gub: build-code start"
   =/  diff=(set rail:tarball)
     %-  ~(run in (ball-diff old-src new-src))
     |=(r=rail:tarball `rail:tarball`[(weld /code path.r) name.r])
-  ~?  >  dbg  "sync-gub: {<~(wyt in diff)>} changed rails"
+  ~?  dbg  "sync-gub: {<~(wyt in diff)>} changed rails"
   =.  this  (build-code /code `diff)
-  ~?  >  dbg  "sync-gub: build-code done"
+  ~?  dbg  "sync-gub: build-code done"
   this
 ::  List all files mirrored under a /sys/clay/desks/[desk] path
 ::  Returns Clay-style paths (like /app/foo/hoon) with mark as last element
@@ -5895,10 +5963,10 @@
     ~&  >>  "on-clay-writ: desk deleted {<dek>}"
     (unmount-clay-desk dek)
   ::  Desk changed — re-sync files and re-subscribe
-  ~&  >>  "on-clay-writ: desk changed {<dek>}"
+  ~?  dbg  "on-clay-writ: desk changed {<dek>}"
   =.  this  (sync-clay-desk dek)
   =?  this  =(dek %grubbery)
-    ~&  >>  "on-clay-writ: triggering sync-gub"
+    ~?  dbg  "on-clay-writ: triggering sync-gub"
     sync-gub
   this
 ::
@@ -6013,7 +6081,7 @@
   ::  Create live file (%.y = subscribing)
   =.  this  (save-file [dir %live] [[/ %loob] %.y])
   ::  Subscribe
-  ~?  >  dbg  "gall-sub: subscribing to {<ship>}/{(trip agent)}/{(spud path)}"
+  ~?  dbg  "gall-sub: subscribing to {<ship>}/{(trip agent)}/{(spud path)}"
   (emit-card [%pass wir %agent [ship agent] %watch path])
 ::  Unsubscribe from a materialized gall subscription
 ::
@@ -6022,7 +6090,7 @@
   ^+  this
   =/  dir=^path  (gall-sub-dir ship agent path)
   =/  wir=wire   (gall-sub-wire ship agent path)
-  ~?  >  dbg  "gall-unsub: leaving {<ship>}/{(trip agent)}/{(spud path)}"
+  ~?  dbg  "gall-unsub: leaving {<ship>}/{(trip agent)}/{(spud path)}"
   =.  this  (emit-card [%pass wir %agent [ship agent] %leave ~])
   ::  Delete the subscription tree
   =.  pool  (~(lop of pool) dir)
@@ -6046,7 +6114,7 @@
       %watch-ack
     ?~  p.sign
       ::  Success — set live to %.y
-      ~?  >  dbg  "gall-sub: watch-ack ok {<ship>}/{(trip agent)}/{(spud path)}"
+      ~?  dbg  "gall-sub: watch-ack ok {<ship>}/{(trip agent)}/{(spud path)}"
       (save-file [dir %live] [[/ %loob] %.y])
     ::  Failed — set live to %.n, don't retry
     ~&  >>>  "gall-sub: watch-ack failed {<ship>}/{(trip agent)}/{(spud path)}"
@@ -6064,7 +6132,7 @@
       (mole |.(vale:!<(marc:tarball vase.u.res)))
     ?~  vale
       ::  No marc — fall back to page (original mark + raw noun)
-      ~?  >  dbg  "gall-sub: no marc for {<mar>}, storing as page"
+      ~?  dbg  "gall-sub: no marc for {<mar>}, storing as page"
       (save-file [dir %data] [[/ %page] `[p=@tas q=*]`[mar q.q.cage.sign]])
     =/  res=(each vase tang)
       (validate-vase u.vale q.q.cage.sign)
@@ -6075,7 +6143,7 @@
   ::
       %kick
     ::  Set live to %.n, auto-resubscribe
-    ~?  >  dbg  "gall-sub: kicked from {<ship>}/{(trip agent)}/{(spud path)}, resubscribing"
+    ~?  dbg  "gall-sub: kicked from {<ship>}/{(trip agent)}/{(spud path)}, resubscribing"
     =.  this  (save-file [dir %live] [[/ %loob] %.n])
     (emit-card [%pass (gall-sub-wire ship agent path) %agent [ship agent] %watch path])
   ==
@@ -6114,7 +6182,7 @@
     =/  =ship  (slav %p ship-ta)
     =/  agent=dude:gall  agent-ta
     =/  wir=wire  (gall-sub-wire ship agent pax)
-    ~?  >  dbg  "sync-gall: resubscribing {<ship>}/{(trip agent)}/{(spud pax)}"
+    ~?  dbg  "sync-gall: resubscribing {<ship>}/{(trip agent)}/{(spud pax)}"
     (emit-card [%pass wir %agent [ship agent] %watch pax])
   ::  Recurse into subdirectories
   =/  kids=(list [@ta ball:tarball])  ~(tap by dir.sub)
@@ -6163,14 +6231,14 @@
     (save-file [dir %live] [[/ %loob] %.n])
   =?  this  gained
     (set-gain-lane [%& dir %in] %.y)
-  ~?  >  dbg  "lick: spinning {(spud name)}"
+  ~?  dbg  "lick: spinning {(spud name)}"
   (emit-card [%pass (lick-wire name) %arvo %l %spin name])
 ::
 ++  handle-lick-shut
   |=  name=path
   ^+  this
   =/  dir=path  (lick-dir name)
-  ~?  >  dbg  "lick: shutting {(spud name)}"
+  ~?  dbg  "lick: shutting {(spud name)}"
   =.  this  (emit-card [%pass (lick-wire name) %arvo %l %shut name])
   =.  pool  (~(lop of pool) dir)
   (load-ball-changes dir *bole:tarball)
@@ -6224,7 +6292,7 @@
   ::  %.n. %connect/%disconnect soaks own /live.
   =.  this
     ?.  has-live  this
-    ~?  >  dbg  "sync-lick: respinning {(spud pax)}"
+    ~?  dbg  "sync-lick: respinning {(spud pax)}"
     (emit-card [%pass (lick-wire pax) %arvo %l %spin pax])
   =/  kids=(list [@ta ball:tarball])  ~(tap by dir.sub)
   |-
@@ -6644,7 +6712,7 @@
   =/  match=(unit [=binding:eyre handler=rail:tarball])
     (find-eyre-binding bindings.st site)
   ?~  match
-    ~?  >  dbg  [%eyre-no-binding site]
+    ~?  dbg  [%eyre-no-binding site]
     ::  emit-cards (flop-correct) NOT a raw weld into `cards`, which is
     ::  reversed and flopped at abet — a raw weld ships the response
     ::  facts to eyre in the wrong order (data before header).
@@ -6683,7 +6751,7 @@
   ?^  config.st  this
   =/  sub=@t  (rap 3 ~['mailto:' (scot %p our.bowl) '@urbit.org'])
   =/  new-config=push-config:push  (generate-vapid-keypair:web-push eny.bowl sub)
-  ~&  >>  "%push: generated VAPID keypair"
+  ~?  dbg  "%push: generated VAPID keypair"
   (save-push-state st(config `new-config))
 ::
 ::  /sys/push: read/write push state
@@ -6735,7 +6803,7 @@
       ?:  (~(has in exclude.push-send.act) ship.ps)  %.n
       ?:  =(~ targets.push-send.act)  %.y  :: empty = all
       (~(has in targets.push-send.act) ship.ps)
-    ~&  >>  ["%push send:" subs=~(wyt by subs.st) targets=(lent target-subs)]
+    ~?  dbg  ["%push send:" subs=~(wyt by subs.st) targets=(lent target-subs)]
     ::  Send to each subscription
     =/  unix-now=@ud  (div (sub now.bowl ~1970.1.1) ~s1)
     =/  exp=@ud  (add unix-now 86.400)
@@ -6780,7 +6848,7 @@
   ::  If push service returns 404/410, subscription is stale — remove it
   ?:  ?=(%finished -.client-response)
     =/  code=@ud  status-code.response-header.client-response
-    ~&  >>  ["%push response:" code]
+    ~?  dbg  ["%push response:" code]
     ?:  |(=(404 code) =(410 code))
       ::  Extract sub-id from wire (second-to-last segment, before notif-id)
       =/  sub-id=@ta  (rear (snip segs))
