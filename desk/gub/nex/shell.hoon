@@ -227,7 +227,6 @@
           (peek-exists:io (nex-road:io rail [%& / %'bootstrapped.json']))
         ;<  ~  bind:m  ensure-polls
         ?:  done  (pure:m ~)
-        ~&  >  %shell-bootstrap-first-boot
         ;<  ~  bind:m  sync-defaults
         ;<  err=(unit tang)  bind:m
           (make-soft:io (nex-road:io rail [%& / %'bootstrapped.json']) |+[[[/ %json] `json`[%b %.y]] ~])

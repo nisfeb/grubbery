@@ -141,7 +141,7 @@
     =/  config=source-config  (json-to-source src-json)
     ?~  config
       ::  standalone — no source.json, wait for a poke to start following
-      ~&  >  %desk-no-source
+      ~?  dbg  %desk-no-source
       ;<  =sage:tarball  bind:m  take-poke:io
       =/  new-json=json  !<(json q.sage)
       ;<  ~  bind:m  (replace:io new-json)
@@ -154,9 +154,9 @@
     =/  code-road=road:tarball   [%& %| code-path]
     =/  ver-road=road:tarball    [%& %& code-path %'version.json']
     =/  ver-name=@ta             %'version.json'
-    ~?  >  dbg  [%desk-subscribing code.u.config]
+    ~?  dbg  [%desk-subscribing code.u.config]
     ;<  ~  bind:m  (await-source /ver ver-road code.u.config)
-    ~?  >  dbg  [%desk-subscribed code.u.config]
+    ~?  dbg  [%desk-subscribed code.u.config]
     ::  the runtime restarts EVERY fiber on a nexus reload, so this handler
     ::  re-enters constantly. Pull on start only when actually BEHIND: our
     ::  root version.json (null until a real sync) differs from the source's
@@ -171,7 +171,7 @@
     ;<  res=news-or-poke  bind:m  (take-news-or-poke /ver)
     ?-  -.res
         %news
-      ~?  >  dbg  %desk-update-received
+      ~?  dbg  %desk-update-received
       ::  snapshot the world, then pull the new release
       ;<  ~  bind:m  (do-snapshot rail)
       ;<  ~  bind:m  (sync-release ver-road code-road ver-name rail)
@@ -179,7 +179,7 @@
         %poke
       ::  config change: replace state, drop sub, restart
       =/  new-json=json  !<(json q.sage.res)
-      ~?  >  dbg  [%source-config-change new-json]
+      ~?  dbg  [%source-config-change new-json]
       ;<  ~  bind:m  (replace:io new-json)
       ;<  ~  bind:m  (drop:io /ver ver-road)
       ^$
@@ -256,11 +256,11 @@
     ;<  ~  bind:m  (cull-dir rail /checkout/code)
     ;<  ~  bind:m  (cull-dir rail /checkout/data)
     ?~  want
-      ~?  >  dbg  %desk-checkout-clear
+      ~?  dbg  %desk-checkout-clear
       ;<  *  bind:m  (cull-soft:io (nex-road:io rail [%& /checkout %'necks.json']))
       ;<  ~  bind:m  (replace:io `(unit @ud)`~)
       $
-    ~?  >  dbg  [%desk-checkout n=u.want]
+    ~?  dbg  [%desk-checkout n=u.want]
     ::  peek the whole /desk subtree as of snapshot N (files come rooted
     ::  at /desk, e.g. /code/foo, /data/bar) and lay it into /checkout —
     ::  reconstructing /checkout/code and /checkout/data wholesale.
@@ -514,7 +514,8 @@
   |-  ^-  form:m
   ;<  sub=(unit wave:nexus)  bind:m  (keep-soft:io wire rod ~ ~m2)
   ?^  sub  (pure:m ~)
-  ~&  >>  [%desk-source-unreachable src retry-in=lull]
+  ::  said once, on the first failure: the retries after it are silent
+  ~?  >>  =(lull ~m1)  [%desk-source-unreachable src]
   ;<  now=@da  bind:m  get-time:io
   ;<  ~  bind:m  (send-wait:io (add now lull))
   $(lull ?:((gte lull ~h1) ~h1 (mul 2 lull)))
@@ -570,7 +571,7 @@
   ?.  ?=([%file *] ver-view)
     ~&  >>  %desk-no-version-at-source
     (pure:m ~)
-  ~?  >  dbg  [%desk-sync-release ver=(version-text sang.ver-view)]
+  ~?  dbg  [%desk-sync-release ver=(version-text sang.ver-view)]
   ::  pull the source's code tree wholesale into our /desk/code
   ;<  ~  bind:m  (sync-dir code-road rail /desk/code ~)
   ::  Mirroring is not enough on its own. +sync-dir PRESERVES the
@@ -628,7 +629,7 @@
     ?~  mim  ~
     (de:json:html q.q.u.mim)
   ?~  bill
-    ~?  >  dbg  %desk-no-bill
+    ~?  dbg  %desk-no-bill
     (pure:m ~)
   ?.  ?=([%o *] u.bill)
     ~&  >>>  %desk-bill-not-object
@@ -650,7 +651,7 @@
       ~&  >>>  [%desk-bill-entry-unreadable k]
       ~
     `[k p.v]
-  ~?  >  dbg  [%desk-bill (lent entries)]
+  ~?  dbg  [%desk-bill (lent entries)]
   =|  made-any=?
   |-
   ?~  entries
@@ -679,7 +680,7 @@
   ::  (that rides the make, not a weir-gated dart), but stays runtime-inert
   ::  — it can reach nothing until its weir.json is approved in the shell.
   =/  =bole:tarball  [`[`neck `[~ ~ ~] %.n ~] ~]
-  ~?  >  dbg  [%desk-bill-entry nam neck]
+  ~?  dbg  [%desk-bill-entry nam neck]
   ;<  ~  bind:m  (make:io data-road &+bole)
   =.  made-any  %.y
   $(entries t.entries)
@@ -838,7 +839,7 @@
   ?.  ?=([%ball *] cur)  $(names t.names)
   ?~  fil.ball.cur  $(names t.names)
   ?~  bang.u.fil.ball.cur  $(names t.names)
-  ~&  >>  [%desk-instance-reloaded i.names]
+  ~&  >  [%desk-instance-reloaded i.names]
   ;<  err=(unit tang)  bind:m  (reload-soft:io data-road)
   ~?  >>>  ?=(^ err)  [%desk-instance-reload-failed i.names]
   $(names t.names)
@@ -853,7 +854,7 @@
   ?.  ?=([%ball *] view)
     ~&  >>  [%desk-nothing-at-source dir]
     (pure:m ~)
-  ~?  >  dbg  [%desk-sync-dir dir]
+  ~?  dbg  [%desk-sync-dir dir]
   ::  overwrite the whole source subtree in ONE event with over-fold (the
   ::  %over analog for directories) — a per-file write triggers a full
   ::  build-code for every file (a rebuild storm on a /code dir). git
@@ -926,9 +927,9 @@
   ::  top (fresh, untagged) earns a new number.
   ;<  hist=(each binfo tang)  bind:m  (born:io (nex-road:io rail [%| /desk]))
   ?:  (top-is-snap hist)
-    ~?  >  dbg  %desk-snapshot-unchanged
+    ~?  dbg  %desk-snapshot-unchanged
     (pure:m ~)
-  ~?  >  dbg  [%desk-snapshot num=num]
+  ~?  dbg  [%desk-snapshot num=num]
   ::  stamp the world's current version as a `version: <contents>` label —
   ::  a convention, not identity. The `version: ` prefix keeps it non-numeric
   ::  so it never shadows the numeric identity tag (+num-tag / +snap-cass).
@@ -1249,7 +1250,7 @@
     %+  skim
       (turn (ball-to-files ball.view) |=(f=bfile `path`(snoc pax.f name.f)))
     |=(p=path !(~(has in keep) p))
-  ~?  >  dbg  [%desk-prune dir count=(lent extra)]
+  ~?  dbg  [%desk-prune dir count=(lent extra)]
   |-
   ?~  extra  (pure:m ~)
   ;<  *  bind:m
@@ -1385,7 +1386,7 @@
     =/  d  (~(get by p.u.jon) 'data')
     ?:  ?=([~ %n *] d)  [%snap (rash p.u.d dem)]
     %live
-  ~?  >  dbg  [%desk-compose code=code-src data=data-src]
+  ~?  dbg  [%desk-compose code=code-src data=data-src]
   ::  snapshot the current world first — this recomposition is recoverable
   ;<  ~  bind:m  (do-snapshot rail)
   ::  resolve each axis as a neck-preserving bole. %none code = a fresh,
@@ -1411,7 +1412,7 @@
   ::  they survive) then make the assembled bole, reloading both axes at once
   ;<  ~  bind:m  (cull:io (nex-road:io rail [%| /desk]))
   ;<  ~  bind:m  (make:io (nex-road:io rail [%| /desk]) &+desk-bole)
-  ~?  >  dbg  %desk-compose-done
+  ~?  dbg  %desk-compose-done
   (respond eyre-id rail 200 'composed')
 ::
 ++  json-num
@@ -1820,7 +1821,7 @@
   =/  code-road=road:tarball   [%& %| code-path]
   =/  ver-road=road:tarball    [%& %& code-path %'version.json']
   =/  ver-name=@ta             %'version.json'
-  ~?  >  dbg  [%desk-do-fetch code.u.config]
+  ~?  dbg  [%desk-do-fetch code.u.config]
   ;<  ~  bind:m  (do-snapshot rail)
   (sync-release ver-road code-road ver-name rail)
 ::
@@ -1841,7 +1842,7 @@
     ::  contract before it lands.
     =/  jon=json  (fall (de:json:html body) ~)
     =/  clean=json  (source-to-json (json-to-source jon))
-    ~?  >  dbg  [%desk-set-source clean]
+    ~?  dbg  [%desk-set-source clean]
     ;<  ~  bind:m
       (poke:io (nex-road:io rail [%& / %'source.json']) [[/ %json] clean])
     (respond eyre-id rail 200 'ok')
@@ -1857,7 +1858,7 @@
     ?~  cmd
       ;<  ~  bind:m  (respond eyre-id rail 400 'bad share command')
       (pure:m ~)
-    ~?  >  dbg  [%desk-share u.cmd]
+    ~?  dbg  [%desk-share u.cmd]
     ;<  ~  bind:m
       (poke:io (nex-road:io rail [%& / %'share.usergroups']) [[/ %json] u.cmd])
     (respond eyre-id rail 200 'ok')
@@ -1869,7 +1870,7 @@
     ?~  cmd
       ;<  ~  bind:m  (respond eyre-id rail 400 'bad checkout command')
       (pure:m ~)
-    ~?  >  dbg  [%desk-checkout-poke u.cmd]
+    ~?  dbg  [%desk-checkout-poke u.cmd]
     ;<  ~  bind:m
       (poke:io (nex-road:io rail [%& / %'checkout.desk_snap']) [[/ %json] u.cmd])
     (respond eyre-id rail 200 'ok')
@@ -1895,7 +1896,7 @@
     ?~  n
       ;<  ~  bind:m  (respond eyre-id rail 400 'need n')
       (pure:m ~)
-    ~?  >  dbg  [%desk-clear n=u.n]
+    ~?  dbg  [%desk-clear n=u.n]
     ;<  ~  bind:m  (clear-snap rail u.n)
     (respond eyre-id rail 200 'cleared')
   ::
@@ -1912,7 +1913,7 @@
     =/  targets=(list @ud)
       %+  skim  nums
       |=(n=@ud &(!=(n top) ?|(?=(~ before) (lte n u.before))))
-    ~?  >  dbg  [%desk-clear-until before=before count=(lent targets)]
+    ~?  dbg  [%desk-clear-until before=before count=(lent targets)]
     |-  ^-  form:m
     ?~  targets  (respond eyre-id rail 200 'cleared')
     ;<  ~  bind:m  (clear-snap rail i.targets)

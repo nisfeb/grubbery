@@ -86,9 +86,9 @@
       ?+    rail  stay:m
           [~ %'main.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%explorer /main: failed, poke to restart")
-        ~&  >  "%explorer /main: binding /grubbery/ball"
+        ~?  dbg  "%explorer /main: binding /grubbery/ball"
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/ball])
-        ~&  >  "%explorer /main: ready"
+        ~?  dbg  "%explorer /main: ready"
         (http-dispatch:io %explorer)
           [[%requests ~] @]
         ;<  ~  bind:m  (rise-wait:io prod "%explorer /requests: failed, poke to restart")
@@ -98,15 +98,15 @@
         ?.  =(src our)
           ;<  ~  bind:m  (send-simple:srv eyre-id [[403 ~] `(as-octs:mimes:html 'Forbidden')])
           (pure:m ~)
-        ~?  >  dbg  [%explorer-request eyre-id url.request.req]
+        ~?  dbg  [%explorer-request eyre-id url.request.req]
         =/  [site=path args=quay:eyre]  (parse-url:http-utils url.request.req)
         =/  raw-path=path
           ?.  ?=([%grubbery %ball *] site)  ~
           t.t.site
 
-        ~?  >  dbg  %explorer-dispatch-start
+        ~?  dbg  %explorer-dispatch-start
         ;<  dir-view=view:nexus  bind:m  (peek-shallow:io [%& %| raw-path] ~)
-        ~?  >  dbg  %explorer-peek-done
+        ~?  dbg  %explorer-peek-done
         ?.  ?=([%ball *] dir-view)
           ::  Not a directory — try parent for file view
           ?~  raw-path
@@ -124,7 +124,7 @@
           (read-weir-from-parent raw-path)
         ?:  =('POST' method.request.req)
           (handle-post eyre-id raw-path dir-weir ball.dir-view req)
-        ~?  >  dbg  %explorer-handle-get-start
+        ~?  dbg  %explorer-handle-get-start
         (handle-get eyre-id raw-path %.y dir-weir ball.dir-view wave.dir-view args (wants-html req))
       ==
     --
@@ -258,7 +258,7 @@
   |=  [eyre-id=@ta tree-path=path is-dir=? dir-weir=(unit weir:nexus) ball=ball:tarball ball-wave=wave:nexus args=(list [key=@t value=@t]) html-ok=?]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ~?  >  dbg  [%explorer-peek tree-path]
+  ~?  dbg  [%explorer-peek tree-path]
   =/  download-param=(unit @t)  (get-key:kv:html-utils 'download' args)
   ?:  is-dir
     ?:  ?&(?=(^ download-param) =(u.download-param 'tar'))
@@ -269,16 +269,16 @@
     ?:  &(html-ok ?=(~ (get-key:kv:html-utils 'list' args)))
       ;<  ~  bind:m  (send-simple:srv eyre-id (mime-response:http-utils browse-html))
       (pure:m ~)
-    ~?  >  dbg  %explorer-get-time
+    ~?  dbg  %explorer-get-time
     ;<  now=@da  bind:m  get-time:io
-    ~?  >  dbg  %explorer-get-conversions
+    ~?  dbg  %explorer-get-conversions
     ;<  conversions=(map bars:tarball tube:clay)  bind:m
       (get-blot-conversions-shallow:io ball)
-    ~?  >  dbg  %explorer-get-conversions-done
-    ~?  >  dbg  %explorer-get-font
+    ~?  dbg  %explorer-get-conversions-done
+    ~?  dbg  %explorer-get-font
     ;<  font=(unit (unit bend:tarball))  bind:m
       (get-font:io [%& %| tree-path])
-    ~?  >  dbg  %explorer-get-font-done
+    ~?  dbg  %explorer-get-font-done
     =/  code-namespace=(unit path)
       ?~  font  ~
       ?~  u.font  ~
