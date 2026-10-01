@@ -14,6 +14,10 @@
 ::
 /+  tarball, nexus, marks
 |%
+::  +dbg: the build's progress and timing prints only when this is yes.
+::  It lives here because a lib cannot see the kernel's flag.
+::
+++  dbg  ^-(? |)
 +$  import
   $%  [%file name=@tas =road:tarball]       ::  /<  name  path
       [%bare =road:tarball]                  ::  /<  *  path
@@ -378,7 +382,7 @@
 ++  build-all
   |=  [sut=vase =ball:tarball =build-cache]
   ^-  build-out
-  =/  sut-hash=@uv  ~>(%bout.[1 %build-sut-hash] (sham q.sut))
+  =/  sut-hash=@uv  (sham q.sut)
   (build-inc sut sut-hash ball build-cache ~ ~)
 ::  +build-inc: build-all, reusing prior results for unchanged rails.
 ::
@@ -400,7 +404,7 @@
           reuse-deps=(map rail:tarball (set rail:tarball))
       ==
   ^-  build-out
-  ~&  >  "build-all: {<~(wyt by build-cache)>} cached, {<~(wyt by reuse)>} reused"
+  ~?  dbg  "build-all: {<~(wyt by build-cache)>} cached, {<~(wyt by reuse)>} reused"
   =/  sources=source-map  (find-hoon-sources ball)
   =.  sources
     %+  roll  ~(tap by reuse)
@@ -605,13 +609,13 @@
   =/  ckey=@uv  (sham [sut-hash src-hash.fi (snoc path.rail name.rail) (sort dep-keys lth)])
   ::  Cache hit → reuse
   ?:  (~(has by build-cache) ckey)
-    ~&  >  "build: cache hit {(spud (snoc path.rail name.rail))}"
+    ~?  dbg  "build: cache hit {(spud (snoc path.rail name.rail))}"
     %=  $
       order.sort-res  t.order.sort-res
       results  (~(put by results) rail [%& (~(got by build-cache) ckey)])
       key-map  (~(put by key-map) rail ckey)
     ==
-  ~&  >>  "build: cache MISS {(spud (snoc path.rail name.rail))}"
+  ~?  dbg  "build: cache MISS {(spud (snoc path.rail name.rail))}"
   ::  Build augmented subject with named dep faces
   =/  aug=vase
     %+  roll  imports.fi
@@ -666,9 +670,12 @@
   =/  import-lines=@ud
     (sub (lent (to-wain:format src.fi)) (lent (to-wain:format body.fi)))
   =/  res=build-result
-    ~>  %bout.[1 (crip "compile {(spud (snoc path.rail name.rail))}")]
-    =/  r  (mule |.((build-hoon aug (snoc path.rail name.rail) body.fi import-lines)))
-    ?:(?=(%& -.r) p.r [%| ~[leaf+"crash compiling {(spud (snoc path.rail name.rail))}"]])
+    =/  run
+      |.  ^-  build-result
+      =/  r  (mule |.((build-hoon aug (snoc path.rail name.rail) body.fi import-lines)))
+      ?:(?=(%& -.r) p.r [%| ~[leaf+"crash compiling {(spud (snoc path.rail name.rail))}"]])
+    ?.  dbg  (run)
+    ~>(%bout.[1 (crip "compile {(spud (snoc path.rail name.rail))}")] (run))
   ::  For marks: compile raw door into marc
   =.  res
     ?.  ?&  ?=(%& -.res)
