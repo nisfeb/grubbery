@@ -55,7 +55,8 @@
 /=  t-  /tests/loader
 |%
 +$  versioned-state
-  $%  state-3:migrations
+  $%  state-4:migrations
+      state-3:migrations
       state-2:migrations
       state-1:migrations
       state-0:migrations
@@ -108,7 +109,7 @@
   !>(..zuse)
 --
 ::
-=|  state-1:migrations
+=|  state-4:migrations
 =*  state  -
 ::
 =<
@@ -134,35 +135,45 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-state)
   ?-    -.old
-      %0
-    ~>  %slog.[0 leaf+"grubbery: migrating state %0 -> %1"]
-    =.  state  (state-0-to-1:migrations old)
-    =^  start-cards  state
-      abet:cold-start:hc
-    [start-cards this]
-  ::
-      %1
+      %4
     =.  state  old
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]
   ::
+      %1
+    ::  first load of the cite-drop fix (#80): correct the skip queues
+    ::  ONCE (+fsr-pool), then this ship is %4 and never corrects again.
+    =.  state  (state-1-to-4:migrations old)
+    =^  pol=pool:nexus  silo  (fsr-pool:hc pool silo)
+    =.  pool  pol
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
+      %0
+    ~>  %slog.[0 leaf+"grubbery: migrating state %0 -> %4"]
+    =.  state  (state-1-to-4:migrations (state-0-to-1:migrations old))
+    =^  pol=pool:nexus  silo  (fsr-pool:hc pool silo)
+    =.  pool  pol
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
       %2
-    ::  a pier that ran the perf lineage (~ricsul-bilwyt). Drop the
-    ::  transient conns and continue as %1. cold-start rebuilds the rest.
-    ::
-    ~>  %slog.[0 leaf+"grubbery: migrating state %2 -> %1"]
-    =.  state  (state-2-to-1:migrations old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %2 -> %4"]
+    =.  state  (state-1-to-4:migrations (state-2-to-1:migrations old))
+    =^  pol=pool:nexus  silo  (fsr-pool:hc pool silo)
+    =.  pool  pol
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]
   ::
       %3
-    ::  a pier that ran the perf lineage (~ricsul-bilwyt). Drop the
-    ::  transient conns and continue as %1. cold-start rebuilds the rest.
-    ::
-    ~>  %slog.[0 leaf+"grubbery: migrating state %3 -> %1"]
-    =.  state  (state-3-to-1:migrations old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %3 -> %4"]
+    =.  state  (state-1-to-4:migrations (state-3-to-1:migrations old))
+    =^  pol=pool:nexus  silo  (fsr-pool:hc pool silo)
+    =.  pool  pol
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]
@@ -615,6 +626,75 @@
     [%0 (~(uni by timers.u.old-st) timers.new-st)]
   =.  this  (save-file new-rail [[/ %behn-state] merged])
   (cull-if-exists %& old-rail)
+::  +fsr-pool/procs/queue/take: the one-time skip-queue correction for
+::  #80, run from +on-load on the first load of the cite-drop fix. A take
+::  left in a skip queue by the old kernel had its %file/%ball/%peep ref
+::  dropped at +hydrate, which this kernel no longer does; restore the
+::  claim the old kernel spent (bump a present jobe) or neutralise a cite
+::  whose jobe is already gone ([%none ~]), so a later consume cannot
+::  over-drop a leaf that recurred. Only skip queues: a live proc's next
+::  is drained at rest. Errs safe: a never-spent re-bump is a leak, not a
+::  loss, and a held-ref take's jobe is never absent.
+++  fsr-pool
+  |=  [pol=pool:nexus sil=silo:nexus]
+  ^-  [pool:nexus silo:nexus]
+  =^  nfil  sil
+    ?~  fil.pol  [fil.pol sil]
+    =^  procs  sil  (fsr-procs proc.u.fil.pol sil)
+    [`u.fil.pol(proc procs) sil]
+  =^  ndir  sil
+    =/  kids=(list [p=@ta q=pool:nexus])  ~(tap by dir.pol)
+    =|  acc=(map @ta pool:nexus)
+    |-  ^-  [(map @ta pool:nexus) silo:nexus]
+    ?~  kids  [acc sil]
+    =^  sub  sil  (fsr-pool q.i.kids sil)
+    $(kids t.kids, acc (~(put by acc) p.i.kids sub))
+  [[nfil ndir] sil]
+++  fsr-procs
+  |=  [ps=(map @ta proc:fiber:nexus) sil=silo:nexus]
+  ^-  [(map @ta proc:fiber:nexus) silo:nexus]
+  =/  items=(list [p=@ta q=proc:fiber:nexus])  ~(tap by ps)
+  =|  acc=(map @ta proc:fiber:nexus)
+  |-  ^-  [(map @ta proc:fiber:nexus) silo:nexus]
+  ?~  items  [acc sil]
+  =^  sk  sil  (fsr-queue skip.q.i.items sil)
+  $(items t.items, acc (~(put by acc) p.i.items q.i.items(skip sk)))
+++  fsr-queue
+  |=  [q=(qeu take:fiber:nexus) sil=silo:nexus]
+  ^-  [(qeu take:fiber:nexus) silo:nexus]
+  =/  items=(list take:fiber:nexus)  ~(tap to q)
+  =|  acc=(list take:fiber:nexus)
+  |-  ^-  [(qeu take:fiber:nexus) silo:nexus]
+  ?~  items  [(~(gas to *(qeu take:fiber:nexus)) (flop acc)) sil]
+  =^  tk  sil  (fsr-take i.items sil)
+  $(items t.items, acc [tk acc])
+++  fsr-take
+  |=  [tk=take:fiber:nexus sil=silo:nexus]
+  ^-  [take:fiber:nexus silo:nexus]
+  ?~  in.tk  [tk sil]
+  ?+    -.u.in.tk  [tk sil]
+      %peep
+    ?.  ?=(%& -.res.u.in.tk)  [tk sil]
+    ::  keep only the hits whose jobe is present, bump those, and put the
+    ::  trimmed list back, so a later consume cannot over-drop an absent
+    ::  jobe that recurs (the %peek [%none ~] rewrite below, per hit).
+    =/  present=(list [=cass:clay lobe=jobe:nexus])
+      (skim p.res.u.in.tk |=([* lobe=jobe:nexus] (~(has by jects.sil) lobe)))
+    =.  sil
+      %+  roll  present
+      |=  [[* lobe=jobe:nexus] s=_sil]
+      (~(bump-ject-ref si:nexus s) lobe)
+    [tk(in `[%peep wire.u.in.tk &+present]) sil]
+  ::
+      %peek
+    ?+    -.cite.u.in.tk  [tk sil]
+        ?(%file %ball)
+      =/  lobe=jobe:nexus  lobe.cite.u.in.tk
+      ?:  (~(has by jects.sil) lobe)
+        [tk (~(bump-ject-ref si:nexus sil) lobe)]
+      [tk(in `[%peek wire.u.in.tk [%none ~]]) sil]
+    ==
+  ==
 ++  cold-start
   ^-  _this
   =.  this  bootstrap-marcs

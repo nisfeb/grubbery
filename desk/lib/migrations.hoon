@@ -123,6 +123,22 @@
 ::  develop. They are here only so such a pier can come back down to %1:
 ::  conns are transient, everything else is state-1 field for field.
 ::
+::  state-4: the cite-drop fix (#80) plus its one-time skip-queue
+::  correction. Shape-identical to %1; the version only records that the
+::  correction has run, so it runs exactly once, at the upgrade.
++$  state-4
+  $:  %4
+      =born:nexus
+      =silo:nexus
+      =subs:nexus
+      =pool:nexus
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      =remo:nexus
+      =upki:nexus
+      =last:nexus
+  ==
 +$  state-2
   $:  %2
       =born:nexus   ::  truth: version history for every directory and file
@@ -174,6 +190,13 @@
       last.old
   ==
 ::
+++  state-1-to-4
+  |=  old=state-1
+  ^-  state-4
+  :*  %4
+      born.old  silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old
+  ==
 ++  state-2-to-1
   |=  old=state-2
   ^-  state-1
