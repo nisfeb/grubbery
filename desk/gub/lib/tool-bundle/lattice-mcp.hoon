@@ -29,6 +29,18 @@
   ;<  seen=view:nexus  bind:m  (peek:io [%& %| (weld base /know/vault)] ~)
   ?.  ?=([%ball *] seen)  (pure:m ~)
   (pure:m (walk ~ ball.seen))
+::  +read-cache: lattice's term cache (+term-cache:lk), ~ when it is absent
+::  (an older lattice) or unreadable. Soft, and optional: search checks each
+::  row and tokenizes whatever the cache does not cover.
+::
+++  read-cache
+  =/  m  (fiber:fiber:nexus ,term-cache:lk)
+  ^-  form:m
+  ;<  v=(unit view:nexus)  bind:m  (peek-soft:io [%& %& (weld base /know) %terms] ~)
+  ?.  ?=([~ %file *] v)  (pure:m ~)
+  ::  the noun, clammed: the cache is big enough to be stored jammed, and
+  ::  a vase of a jammed grub needs lattice's mark, which this nexus lacks
+  (pure:m (fall (mole |.(;;(term-cache:lk (sang-noun:tarball sang.u.v)))) ~))
 ::  +walk: collect entry leaves under each key-directory (booms skipped).
 ::
 ++  walk
@@ -77,6 +89,70 @@
     %-  mule  |.
     (~(dog jo:json-utils [%o args]) pax so:dejs:format)
   ?:(?=(%| -.res) ~ `p.res)
+::  +num / +flag: an optional number or boolean argument, else a default.
+::  A string where a number belongs reads as the default, not an error.
+::
+++  num
+  |=  [args=(map @t json) pax=path def=@ud]
+  ^-  @ud
+  =/  res  (mule |.((~(dog jo:json-utils [%o args]) pax ni:dejs:format)))
+  ?:(?=(%& -.res) p.res def)
+++  flag
+  |=  [args=(map @t json) pax=path]
+  ^-  ?
+  =/  res  (mule |.((~(dog jo:json-utils [%o args]) pax bo:dejs:format)))
+  ?:(?=(%& -.res) p.res |)
+::  +opt: an optional string argument, '' when absent.
+::
+++  opt
+  |=  [args=(map @t json) pax=path]
+  ^-  @t
+  (fall (arg args pax) '')
+::  +entry-road: where one live entry's grub sits.
+::
+++  entry-road
+  |=  kp=path
+  ^-  road:tarball
+  [%& %& (weld base (weld /know/vault kp)) entry-leaf:lk]
+::  +backlinks: the keys whose bodies link to kp.
+::
+++  backlinks
+  |=  [es=(map path know-entry:lk) kp=path]
+  ^-  (list path)
+  %+  sort
+    %+  murn  ~(tap by es)
+    |=  [k=path e=know-entry:lk]
+    ?.((lien (links:lk body.e) |=(t=path =(t kp))) ~ `k)
+  aor
+::  +full-json: one entry as an agent reads it. The body without its front
+::  matter; provenance, age, links and backlinks as fields; and where it was
+::  superseded, the key that replaced it.
+::
+++  full-json
+  |=  [es=(map path know-entry:lk) kp=path e=know-entry:lk now=@da]
+  ^-  json
+  =/  f  (front:lk body.e)
+  =/  mg  |=(k=@t ^-(json =/(v (meta-get:lk meta.f k) ?~(v ~ s+u.v))))
+  =/  c=@da  (checked:lk e)
+  =/  sup=(unit @t)  (superseded:lk e)
+  %-  pairs:enjs:format
+  :~  ['key' s+(spat kp)]
+      ['body' s+rest.f]
+      ['updated' s+(scot %da updated.e)]
+      (tags-json tags.e)
+      ['created' (mg 'created')]
+      ['author' (mg 'author')]
+      ['source' (mg 'source')]
+      ['verified' (mg 'verified')]
+      ['verified_by' (mg 'verified-by')]
+      ['checked_days_ago' (numb:enjs:format ?:((gth now c) (div (sub now c) ~d1) 0))]
+      ['superseded_by' ?~(sup ~ s+u.sup)]
+      :-  'links'
+      :-  %a
+      %+  turn  (links:lk body.e)
+      |=(t=path (pairs:enjs:format ~[['key' s+(spat t)] ['exists' b+(~(has by es) t)]]))
+      ['backlinks' a+(turn (backlinks es kp) |=(k=path s+(spat k)))]
+  ==
 ::  +low: case-fold a cord for substring matching.
 ::
 ++  low  |=(t=@t (crip (cass (trip t))))

@@ -5,7 +5,7 @@
 ^-  tool:tools
 |%
 ++  name  'lattice-explore'
-++  description  'Filter entries by tag and/or substring. Returns keys with their tags. Use for typed recall.'
+++  description  'Filter entries by tag and/or substring. Returns keys with their tags. A category (user, feedback, project, reference) matches the key prefix as well as the tag.'
 ++  parameters
   ^-  (map @t parameter-def:tools)
   %-  ~(gas by *(map @t parameter-def:tools))
@@ -28,7 +28,10 @@
     =/  tag-ok=?
       ?~  tag  &
       =/  lt=@t  (low:lm u.tag)
-      (lien ~(tap in tags.e) |=(t=@t =((low:lm t) lt)))
+      ::  a category is the key's first segment, tagged or not
+      ?|  (lien ~(tap in tags.e) |=(t=@t =((low:lm t) lt)))
+          &(?=(^ kp) =((low:lm i.kp) lt))
+      ==
     =/  query-ok=?
       ?~  query  &
       |((has-sub:lm u.query (spat kp)) (has-sub:lm u.query body.e))

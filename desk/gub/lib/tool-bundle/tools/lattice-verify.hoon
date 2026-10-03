@@ -4,12 +4,13 @@
 !:
 ^-  tool:tools
 |%
-++  name  'lattice-read'
-++  description  'Read one memory: body, tags, when it was last updated and last checked, who wrote it and whether the user said it or an agent inferred it, its links and backlinks. If superseded_by is set, the fact now lives there: read that instead. Pass updated back to lattice-save as expected_updated when editing.'
+++  name  'lattice-verify'
+++  description  'Record that a memory was checked and still holds: stamps verified (today) and verified-by. Use after confirming a remembered file, function, flag or fact still exists, so the entry stops looking stale.'
 ++  parameters
   ^-  (map @t parameter-def:tools)
   %-  ~(gas by *(map @t parameter-def:tools))
-  :~  ['key' [%string 'Entry key, e.g. "user/ai-models"']]
+  :~  ['key' [%string 'Entry key']]
+      ['author' [%string 'Who checked: your session or agent name']]
   ==
 ++  required  ~['key']
 ++  handler
@@ -25,5 +26,10 @@
   =/  e=(unit know-entry:lk)  (~(get by es) u.kp)
   ?~  e  (pure:m [%error 'not found'])
   ;<  now=@da  bind:m  get-time:io
-  (pure:m [%text (en:json:html (full-json:lm es u.kp u.e now))])
+  =/  f  (front:lk body.u.e)
+  =/  meta  (meta-put:lk meta.f 'verified' (iso-day:lk now))
+  =/  by=@t  (opt:lm args.st /author)
+  =?  meta  !=('' by)  (meta-put:lk meta 'verified-by' by)
+  ;<  ~  bind:m  (poke-writer:lm [%save (spat u.kp) (with-front:lk meta rest.f)])
+  (pure:m [%text (crip "verified {(spud u.kp)} on {(trip (iso-day:lk now))}")])
 --

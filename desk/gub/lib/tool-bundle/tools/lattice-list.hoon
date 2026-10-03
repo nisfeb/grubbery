@@ -5,7 +5,7 @@
 ^-  tool:tools
 |%
 ++  name  'lattice-list'
-++  description  'List all knowledge entries: keys, tags and metadata, no bodies. Cheap index call.'
+++  description  'List all knowledge entries with tags and metadata, no bodies. Large on a big store: prefer lattice-index at session start and lattice-recall for a task.'
 ++  parameters  ^-  (map @t parameter-def:tools)  ~
 ++  required  ~
 ++  handler
