@@ -68,13 +68,7 @@
     %-  crip
     "likely duplicate of {(spud k.i.near)} ({(a-co:co o.i.near)}% of terms shared). Update that entry instead (read it, then save to its key), or pass force_new if this is a different fact."
   ;<  now=@da  bind:m  get-time:io
-  =/  meta=(list [k=@t v=@t])  ?~(old ~ meta:(front:lk body.u.old))
-  =?  meta  =(~ (meta-get:lk meta 'created'))  (meta-put:lk meta 'created' (iso-day:lk ?~(old now updated.u.old)))
-  =?  meta  !=('' author)  (meta-put:lk meta 'author' author)
-  =?  meta  !=('' source)  (meta-put:lk meta 'source' source)
-  =.  meta  (meta-put:lk meta 'verified' (iso-day:lk now))
-  =?  meta  !=('' author)  (meta-put:lk meta 'verified-by' author)
-  ;<  ~  bind:m  (poke-writer:lm [%save (spat u.kp) (with-front:lk meta prose)])
+  ;<  ~  bind:m  (poke-writer:lm [%save (spat u.kp) (stamp:lk old prose author source now ?~(old | (sensitive:lk u.old)))])
   =/  also=tape
     =/  sim=(list [o=@ud k=path])  (scag 3 near)
     ?~  sim  ""

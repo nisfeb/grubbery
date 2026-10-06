@@ -27,35 +27,5 @@
   ;<  es=(map path know-entry:lk)  bind:m  read-vault:lm
   =/  k=@ud  (num:lm args.st /limit 8)
   ;<  tc=term-cache:lk  bind:m  read-cache:lm
-  =/  hs=(list hit:lk)  (search:lk ~(tap by es) tc u.raw |)
-  =/  shown=(set path)  (silt (turn (scag k hs) |=(h=hit:lk key.h)))
-  ::  one hop from the best three, live entries only, five at most
-  =/  hops=(list [to=path via=path])
-    %+  scag  5
-    =|  [out=(list [to=path via=path]) seen=(set path)]
-    =/  top=(list hit:lk)  (scag 3 hs)
-    |-  ^-  (list [to=path via=path])
-    ?~  top  (flop out)
-    =/  ls=(list path)
-      %+  skim  (links:lk body:(~(got by es) key.i.top))
-      |=  t=path
-      ?&  (~(has by es) t)
-          !(~(has in shown) t)
-          !(~(has in seen) t)
-          =(~ (superseded:lk (~(got by es) t)))
-      ==
-    $(top t.top, out (weld (flop (turn ls |=(t=path [t key.i.top]))) out), seen (~(gas in seen) ls))
-  =/  linked=json
-    :-  %a
-    %+  turn  hops
-    |=  [to=path via=path]
-    %-  pairs:enjs:format
-    :~  ['key' s+(spat to)]
-        ['via' s+(spat via)]
-        ['snippet' s+(snippet:lk body:(~(got by es) to) u.raw)]
-    ==
-  %-  pure:m
-  :-  %text
-  %-  en:json:html
-  (pairs:enjs:format ~[['recall' (hits-json:lk es hs u.raw k)] ['linked' linked]])
+  (pure:m [%text (en:json:html (recall-json:lk es (search:lk ~(tap by es) tc u.raw |) u.raw k))])
 --
