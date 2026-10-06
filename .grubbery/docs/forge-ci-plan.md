@@ -239,11 +239,11 @@ Keys are checked in the app, not by eyre. Requests under `/grubbery/forge/ci/run
 
 **Claiming.** `poll` lists `queue/` and takes the oldest marker whose labels the runner holds and whose repo the runner may serve. It pokes that job with a claim carrying the runner id and a fresh random lease. The job fiber accepts only while the job is still queued, then culls the marker. The route reads the job back and returns it only if this runner now holds it, otherwise it tries the next marker. Later calls must carry the lease, like orrery's action claims, which other clients cannot touch while held. A job carries its repo (`owner/repo`), commit, branch, steps, timeout and run ids.
 
-**Liveness.** The job fiber keeps its `log/` directory and arms a 5-minute deadline that each new chunk resets. The runner posts a chunk at least every 60 seconds, empty when the build is quiet. Five silent minutes fail the job as "runner lost". The workflow's `timeout` bounds the whole job.
+**Liveness.** The job fiber keeps its `log/` directory and arms a 5-minute deadline that each new chunk or heartbeat resets. While a job runs, the runner sends a heartbeat every 10 seconds when the build is quiet. A heartbeat rewrites one `beat.json` in the job's log directory instead of spending one of its chunks. Five silent minutes fail the job as "runner lost". The workflow's `timeout` bounds the whole job.
 
 **Cancelling.** The owner's cancel sets a flag on the job. The answer to the runner's next `log` carries `cancel: true`, so the runner kills the step's process tree and reports `cancelled`. No push channel is needed.
 
-**Polling cost.** Every request is one event in the ship's log. Runners poll every 60 seconds and each poll stamps the runner's `seen`, so three runners make about 4,300 requests a day. A runner counts as online when seen within the last 3 minutes. Trigger latency is the repo's poll interval in minutes, so a faster runner poll would buy nothing (`ponytail: 60-second poll; long-poll if job pickup latency ever matters`).
+**Polling cost.** Every request is one event in the ship's log. Runners poll every 60 seconds and each poll stamps the runner's `seen`, so three runners make about 4,300 requests a day. A running job adds one heartbeat every 10 seconds. A runner counts as online when seen within the last 3 minutes. Trigger latency is the repo's poll interval in minutes, so a faster runner poll would buy nothing (`ponytail: 60-second poll; long-poll if job pickup latency ever matters`).
 
 ### Getting the source
 
@@ -317,7 +317,7 @@ A workflow that asks for a release or desk not listed here fails at that step.
 
 ## UI and API
 
-CI lives inside Forge's existing page, with one new panel per repo and one new section on the landing page. The page code stays in Forge's `app.js` and `index.html`. Its data comes from the ci nexus's routes.
+Phase 1 serves CI as its own page at `/grubbery/forge/ci`, linked from Forge's landing page, because watched repos have no workspace in Forge to hold a panel. The page is `nex/git/ci/index.html` and `app.js`, and its data comes from the ci nexus's routes. With mirrored repos, a panel inside Forge's repo workspace joins it.
 
 - **CI panel.** A fourth panel beside status, history and run (`nex/git/forge/index.html:58-60`). It lists runs newest first, with status, workflow, branch, short commit and subject, start time and duration. A run opens to its jobs, each with status, runner, steps, live log and artifacts. It has **Run now** (with a branch picker), **Cancel** and **Rerun** buttons.
 - **History panel.** A status dot beside each commit, matched by hash.
@@ -360,6 +360,33 @@ Six phases, each a PR to `gwbtc/grubbery`. The runner gets its own repo, `nisfeb
 
 Each phase leaves its checks behind: build-time tests in `lib/tests/ci.hoon` for workflow parsing and branch matching, the key-hash and bearer tests ported from lattice, a presign test against AWS's published example, and one Go test that runs the runner against an `httptest` server.
 
+## Phase 1 results
+
+Phase 1 is built and passed every check on a fresh dev ship running `gwbtc/develop`. The code is `nisfeb/grubbery` branch `forge-ci`, and the runner is `nisfeb/forge-runner`.
+
+| Check | Result |
+| --- | --- |
+| A push to a watched repo starts a run within one poll | Passed. A push to forge-runner (97106de) started a run on the next 2-minute poll, and the runner passed it 10 seconds after claiming it. |
+| The Linux job streams its log | Passed. `go vet`, `go test` and the cross-builds streamed to the CI page in chunks. |
+| Cancel stops it within one log interval | Passed after a fix. A quiet build first heard the cancel only at its 60-second heartbeat. The heartbeat is now 10 seconds, and a cancel took 13 seconds end to end. |
+| Killing the runner fails the job within 5 minutes | Passed. After a SIGKILL the job failed with "runner lost: no log for 5 minutes". |
+| A revoked key gets 401 | Passed. The runner's next poll got 401 and it exited. |
+| The ship holds nothing of the repo but its workflow files | Passed. `/repos` stayed empty, and the proxy's call records were culled. |
+| Tests | All 8 build-time tests in `lib/tests/ci.hoon` pass. The runner's 3 Go tests pass under the race detector. |
+
+What phase 1 changed:
+
+- The CI page is its own page, as the UI section now says.
+- Heartbeats run every 10 seconds while a job runs, and an empty one spends no log chunk.
+- A file made inside a directory make gets no fiber until its nexus reloads, so each job file is made on its own.
+- A stop signal makes the runner kill its job's process group and report the job failed, so a stopped service leaves no orphaned build.
+
+Found along the way:
+
+- On a fresh develop ship `/sys/link` stays empty until the shell's permits refresh runs once (`POST /apps/grubbery/permits/refresh`, which the permits page fires). Until then nothing can find the github proxy by name, neither CI nor Forge's own repos. This is upstream's and worth an issue.
+- GitHub allows 60 unauthenticated REST calls an hour per IP. CI spends one listing call plus one per workflow file on each new tip, and its ref checks use git's protocol, not REST. A handful of watched repos stays well under the limit. A busy ship should connect a GitHub account.
+- A ref check in flight when the nexus reloads leaves its record in the proxy's `xfer/`. It is small and happens only on reload.
+
 ## Deferred and open questions
 
 Each deferred item has a trigger for adding it. Questions 1 to 3 gated phase 1 and are answered. Questions 4 to 6 can wait for the phases they affect.
@@ -386,4 +413,4 @@ Questions for the maintainer, the first three answered on 2026-10-05:
 3. Should the runner's source live in `gwbtc/grubbery` or in a repo of its own? **Answered: its own repo, `forge-runner`.** Forge will not always ship inside a grubbery install, so the runner must not live in grubbery's repo. It starts at `nisfeb/forge-runner` and goes to gwbtc by PR, like the grubbery changes. The two share only the versioned runner protocol.
 4. Should `ci_test` also run hoon-test-kit suites in the ship, or is a Linux runner the long-term home for them?
 5. Pull overwrites local branch heads with the remote tips. With in-ship commits driving CI, that drops unpushed commits from the watched branch. Is that intended, or a bug to fix on its own?
-6. Does writing identical content bump a grub's version? CI compares hashes either way, but the answer decides how noisy the `/repos` watch is.
+6. Does writing identical content bump a grub's version? CI compares hashes either way, but the answer decides how noisy the `/repos` watch is. Answered: no. A write of identical content is not a version, so it fires no news.
