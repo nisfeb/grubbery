@@ -220,7 +220,7 @@ A runner is a small program on a build machine that polls the ship over HTTPS wi
 
 1. The owner clicks **Add runner** and names it. Forge mints `<id>.<secret>`, shows it once with a ready config file, and keeps only a salted SHA-256 hash.
 2. The owner puts the config on the machine and starts the service.
-3. The runner calls `hello` with its labels, OS, architecture and version. It shows online from then on.
+3. The runner calls `hello` with its protocol version, labels, OS, architecture and runner version. Forge refuses a protocol version it does not speak, so Forge and the runner can be released separately. It shows online from then on.
 
 This is the agent-key design orrery and lattice already ship (orrery `docs/keys.md`). Their `+hash-token` and `+parse-bearer` are copied into a grubbery library. Revoking deletes the runner's grub, so its next request gets 401. Disabling keeps the key but hands it no jobs.
 
@@ -230,7 +230,7 @@ Keys are checked in the app, not by eyre. Requests under `/grubbery/forge/ci/run
 
 | Route (POST) | Body | Answer |
 | --- | --- | --- |
-| `runner/hello` | labels, os, arch, version | poll interval in seconds |
+| `runner/hello` | protocol, labels, os, arch, version | poll interval in seconds, or 426 for a protocol Forge does not speak |
 | `runner/poll` | nothing | a job and its lease, or 204 |
 | `runner/source` | job, lease | mirrored repos: a git pack of the job's commit |
 | `runner/log` | job, lease, seq, text | `{"cancel": bool}` |
@@ -253,7 +253,7 @@ For a watched repo, the runner clones from GitHub at the job's commit: `git init
 
 ### The runner program
 
-- Go, standard library only. One source cross-compiles to Linux, Windows and macOS binaries.
+- Go, standard library only. One source cross-compiles to Linux, Windows and macOS binaries. It lives in its own repo, `forge-runner`, because Forge will not always ship inside a grubbery install.
 - Config file `forge-runner.json`: `ship`, `key`, `name`, `labels`, `workdir`, `env_file`.
 - One job at a time. Each job gets a fresh directory under `workdir`, deleted afterwards. The service runs as a dedicated unprivileged OS user.
 - `run` steps go through `bash -eo pipefail -c` or `pwsh -NoProfile -Command`. The environment carries `CI=true`, `FORGE_REPO`, `FORGE_SHA`, `FORGE_BRANCH`, `FORGE_RUN` and `FORGE_JOB`, plus the variables in `env_file`.
@@ -347,11 +347,11 @@ Owner routes under `/grubbery/forge/ci/api/`, behind the owner's cookie:
 
 ## Implementation phases
 
-Six phases, each a PR to `gwbtc/grubbery`. Phase 0 is a gate: no code until the maintainer agrees on the layout. External builds come first, because orchestrating them is the hard part, and Hoon on the ship comes last. Every phase is built and checked on a dev ship before it reaches a production ship.
+Six phases, each a PR to `gwbtc/grubbery`. The runner gets its own repo, `forge-runner`. Phase 0 is a gate: no code until the maintainer agrees on the layout. External builds come first, because orchestrating them is the hard part, and Hoon on the ship comes last. Every phase is built and checked on a dev ship before it reaches a production ship.
 
 | Phase | Delivers | Done when (on a dev ship) |
 | --- | --- | --- |
-| 0. Agreement | Answers to the open questions below: the `.grubbery/` path, the ci nexus at `/ci`, the workflow schema, where the runner lives | The maintainer signs off |
+| 0. Agreement | Answers to the open questions below: the `.grubbery/` path, the ci nexus at `/ci`, the workflow schema, where the runner lives | Path, placement and the runner's home were answered on 2026-10-05. The workflow schema still needs a look. |
 | 1. Runners and watched repos | The ci nexus with its queue, runs, leases and log chunks; runner keys and routes; watched repos with the discovery poll and workflow reads; the CI panel and runners page; the Go runner on Linux | A push to a watched GitHub repo starts a run within one poll. The Linux job streams its log. Cancel stops it within one log interval. Killing the runner fails the job within 5 minutes. A revoked key gets 401. The ship holds nothing of the repo but its workflow files. |
 | 2. Artifacts | Storage settings, the presign arm, upload and download | An APK built on the Linux runner downloads from the CI panel, and its SHA-256 matches. |
 | 3. Windows and macOS | Install guides for both, a sample build on each | One Windows job and one macOS job each produce a downloadable artifact. |
@@ -362,7 +362,7 @@ Each phase leaves its checks behind: build-time tests in `lib/tests/ci.hoon` for
 
 ## Deferred and open questions
 
-Each deferred item has a trigger for adding it. The open questions need the maintainer's answer before phase 1.
+Each deferred item has a trigger for adding it. Questions 1 to 3 gated phase 1 and are answered. Questions 4 to 6 can wait for the phases they affect.
 
 | Deferred | Add it when |
 | --- | --- |
@@ -379,11 +379,11 @@ Each deferred item has a trigger for adding it. The open questions need the main
 | Automatic label detection | Hand-written labels drift from what is installed |
 | `git push` into Forge | Developers need to push without GitHub. It needs a smart-HTTP server on the existing pack reader and writer. |
 
-Open questions for the maintainer:
+Questions for the maintainer, the first three answered on 2026-10-05:
 
-1. Is `.grubbery/workflows/` the right home, next to `.grubbery/docs`?
-2. Should CI be a child nexus of Forge at `/ci`, or an app of its own?
-3. Should the runner's Go source live in `gwbtc/grubbery`, for example under `runner/`, or in a repo of its own?
+1. Is `.grubbery/workflows/` the right home, next to `.grubbery/docs`? **Answered: yes.**
+2. Should CI be a child nexus of Forge at `/ci`, or an app of its own? **Answered: inside Forge.** The tools pattern agrees: CI is an engine Forge mounts, as it mounts `/tools`, and Forge serves the UI.
+3. Should the runner's source live in `gwbtc/grubbery` or in a repo of its own? **Answered: its own repo, `forge-runner`.** Forge will not always ship inside a grubbery install, so the runner must not live in grubbery's repo. The two share only the versioned runner protocol.
 4. Should `ci_test` also run hoon-test-kit suites in the ship, or is a Linux runner the long-term home for them?
 5. Pull overwrites local branch heads with the remote tips. With in-ship commits driving CI, that drops unpushed commits from the watched branch. Is that intended, or a bug to fix on its own?
 6. Does writing identical content bump a grub's version? CI compares hashes either way, but the answer decides how noisy the `/repos` watch is.
