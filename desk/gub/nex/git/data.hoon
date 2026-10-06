@@ -213,7 +213,11 @@
           %+  turn  p.u.p
           |=  j=json
           ?.  ?=(%s -.j)  /
-          (stab (crip (weld "/" (trip p.j))))
+          ::  split on '/', never +stab: a file name is any text (README.md),
+          ::  not a knot, and +stab crashed the whole data nexus on it
+          %+  turn
+            (skip (split:git-transport (trip p.j) '/') |=(t=tape =(~ t)))
+          crip
         =/  add-result=[idx=(map path [hash:git-repo mtime=@t]) new-loose=(map hash:git-repo object:git-obj)]
           ?~  add-paths
             ::  add all
@@ -367,8 +371,8 @@
     --
 ::
 |%
-::  +dbg: the progress traces print only when this is yes. It lives in
-::  this helper core, where the nexus core above can see it.
+::  +dbg: the routine traces print only when this is yes. It lives in this
+::  helper core, where the nexus core above can see it.
 ::
 ++  dbg  ^-(? |)
 ::  +read-tree-head: which commit tree/ was last materialized from.

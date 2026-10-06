@@ -11,13 +11,16 @@
     "Call any MCP tool by name, including dynamically added tools "
     "that are not in your cached tools/list. Use list_tools to "
     "discover available tools first. Pass the tool name and its "
-    "arguments as a JSON object."
+    "arguments as a JSON object. A tool that lives in another tools "
+    "nexus (an app's, e.g. /apps/nostr/tools) is called by naming that "
+    "nexus in path. Nothing is scanned; the address is the name."
   ==
 ++  parameters
   ^-  (map @t parameter-def:tools)
   %-  ~(gas by *(map @t parameter-def:tools))
   :~  ['tool_name' [%string 'Name of the tool to call (e.g. "echo", "my_custom_tool")']]
       ['tool_args' [%object 'Arguments to pass to the tool as a JSON object']]
+      ['path' [%string 'A tools nexus to call into, e.g. "/apps/nostr/tools" (its tools live at <path>/code/lib/tools). Omit for this nexus\'s own tools. Apps say where theirs is in their readme.']]
   ==
 ++  required  ~['tool_name']
 ++  handler
@@ -35,12 +38,18 @@
     ?~  v  ~
     ?.  ?=([%o *] u.v)  ~
     p.u.v
+  =/  at=(unit path)
+    =/  v  (~(get by args.st) 'path')
+    ?.  ?=([~ %s *] v)  ~
+    ?:  =('' p.u.v)  ~
+    (rush p.u.v stap)
   ::  Convert underscores to hyphens for filename lookup
   =/  file-name=@ta
     (crip (turn (trip tool-name) |=(c=@t ?:(=(c '_') '-' c))))
   ::  Look up compiled tool from bins — try our own nexus /code first,
   ::  addressed by nex-road from this file's rail (placement-independent).
   ;<  res=built:nexus  bind:m
+    ?^  at  (pure:(fiber:fiber:nexus ,built:nexus) [%tang ~])
     (get-code-full:io [%| 1 [%& /code/lib/tools file-name]])
   =/  root-got=(unit tool:tools)
     ?.  ?=(%vase -.res)  ~
@@ -50,24 +59,19 @@
     ;<  ~  bind:m
       (replace:io `tool-state:tools`[tool-name tool-args %start *json ~])
     handler.u.root-got
-  ::  Try app namespaces
-  ;<  apps-view=view:nexus  bind:m
-    (peek:io [%& %| /apps] ~)
-  =/  app-kids=(list @ta)
-    ?.  ?=([%ball *] apps-view)  ~
-    (turn ~(tap by dir.ball.apps-view) |=([nam=@ta *] nam))
+  ::  the tools nexus named by path, if any; else only this one's own
+  =/  nexes=(list path)  ?~(at ~ ~[u.at])
   |-
-  ?~  app-kids
-    (pure:m [%error (crip "Tool not found: {(trip tool-name)}")])
-  =/  cp=path  (welp ~[%apps i.app-kids] /desk/code/lib/tools)
+  ?~  nexes
+    (pure:m [%error (crip "Tool not found: {(trip tool-name)} (not one of this nexus's tools; a tool that lives elsewhere is called with path=/apps/<app>/tools)")])
+  =/  cp=path  (welp i.nexes /code/lib/tools)
   ;<  ares=built:nexus  bind:m  (get-code-full:io [%& %& cp file-name])
   =/  app-got=(unit tool:tools)
     ?.  ?=(%vase -.ares)  ~
     =/  r=(each tool:tools tang)  (mule |.(!<(tool:tools vase.ares)))
     ?:(?=(%& -.r) `p.r ~)
-  ?^  app-got
-    ;<  ~  bind:m
-      (replace:io `tool-state:tools`[tool-name tool-args %start *json ~])
-    handler.u.app-got
-  $(app-kids t.app-kids)
+  ?~  app-got  $(nexes t.nexes)
+  ;<  ~  bind:m
+    (replace:io `tool-state:tools`[tool-name tool-args %start *json ~])
+  handler.u.app-got
 --

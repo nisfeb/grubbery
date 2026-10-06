@@ -32,7 +32,7 @@
 ++  description
   ^~  %-  crip
   ;:  weld
-    "List all available MCP tools from the live compiled tool registry. "
+    "List the MCP tools of this nexus (or of a tools nexus named by path). "
     "This reflects the current state and includes dynamically added tools "
     "that may not appear in your cached tools/list. Use this to discover "
     "tools added via add_mcp_tool. "
@@ -42,7 +42,8 @@
 ++  parameters
   ^-  (map @t parameter-def:tools)
   %-  ~(gas by *(map @t parameter-def:tools))
-  :~  ['name' [%string 'Glob filter on tool names (* wildcards, e.g. "*clay*", "get_*")']]
+  :~  ['path' [%string 'A tools nexus to list instead of this one, e.g. "/apps/nostr/tools" (its tools live at <path>/code/lib/tools). Apps say where theirs is in their readme.']]
+      ['name' [%string 'Glob filter on tool names (* wildcards, e.g. "*clay*", "get_*")']]
       ['search' [%string 'Substring search in tool descriptions (case-insensitive, e.g. "clay", "custom")']]
       ['names_only' [%boolean 'If true, return only tool names (compact listing)']]
   ==
@@ -82,12 +83,30 @@
     %+  turn  ~(tap by contents.u.fil.ball.src-view)
     |=  [n=@ta *]
     [~ (strip-hoon n)]
-  ::  App namespace tools
-  ;<  apps-view=view:nexus  bind:m
-    (peek:io [%& %| /apps] ~)
-  =/  app-kids=(list @ta)
-    ?.  ?=([%ball *] apps-view)  ~
-    (turn ~(tap by dir.ball.apps-view) |=([nam=@ta *] nam))
+  ::  a tools nexus named by path is listed instead of this one's own
+  =/  at=(unit path)
+    =/  v  (~(get by args.st) 'path')
+    ?.  ?=([~ %s *] v)  ~
+    ?:  =('' p.u.v)  ~
+    (rush p.u.v stap)
+  ::  the tools nexus named by path, else only this one's own tools
+  =/  nexes=(list path)  ?~(at ~ ~[u.at])
+  ;<  pairs=(list [path @ta])  bind:m
+    =/  m  (fiber:fiber:nexus ,(list [path @ta]))
+    =/  acc=(list [path @ta])  ?^(at ~ pairs)
+    |-  ^-  form:m
+    ?~  nexes  (pure:m acc)
+    =/  app-path=path  (welp i.nexes /code/lib/tools)
+    ;<  app-src=view:nexus  bind:m  (peek:io [%& %| app-path] ~)
+    =/  more=(list [path @ta])
+      ?.  ?=([%ball *] app-src)  ~
+      ?~  fil.ball.app-src  ~
+      ^-  (list [path @ta])
+      %+  turn  ~(tap by contents.u.fil.ball.app-src)
+      |=  [n=@ta *]
+      [app-path (strip-hoon n)]
+    $(nexes t.nexes, acc (weld acc more))
+  =/  app-kids=(list @ta)  ~
   |-
   ?~  app-kids
     ::  All pairs collected, now compile and filter
@@ -143,17 +162,5 @@
       (mule |.(!<(tool:tools vase.res)))
     ?.  ?=(%& -.got)  $(pairs t.pairs)
     $(pairs t.pairs, all-tools [p.got all-tools])
-  ::  Peek this app's mcp dir and add any tool sources
-  =/  app-path=path  (welp ~[%apps i.app-kids] /desk/code/lib/tools)
-  ;<  app-src=view:nexus  bind:m
-    (peek:io [%& %| app-path] ~)
-  =.  pairs
-    ?.  ?=([%ball *] app-src)  pairs
-    ?~  fil.ball.app-src  pairs
-    %+  weld  pairs
-    ^-  (list [path @ta])
-    %+  turn  ~(tap by contents.u.fil.ball.app-src)
-    |=  [n=@ta *]
-    [app-path (strip-hoon n)]
   $(app-kids t.app-kids)
 --

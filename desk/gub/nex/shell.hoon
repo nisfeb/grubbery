@@ -23,6 +23,12 @@
 /<  chat-css       shell/chat.css
 /<  marked-js      shell/marked.min.js
 /<  hoon-grammar   shell/hoon-grammar.json
+::  shared <split-view> web component — the resizable docs sidebar
+/&  splitview-js   /lib/ui/split-view.js
+::  shared window components — the docs assistant floats in a <float-window>.
+::  window-manager.js publishes window.floatwm and MUST load before float-window.
+/&  windowmgr-js   /lib/ui/window-manager.js
+/&  floatwin-js    /lib/ui/float-window.js
 =<  ^-  nexus:nexus
     |%
     ++  on-load
@@ -31,6 +37,20 @@
       %+  spin:loader  ball
       :~  (manifest:loader 0)
           [%fall %& [/ %'main.sig'] [[/ %sig] ~]]
+          ::  mirror.sig: keeps a local copy of the covered source under
+          ::  /docs/mirror, so coverage recomputes from our own ball (data.hoon
+          ::  style) and the docs subsystem (config, mirror, agent) is one
+          ::  self-contained subtree. On rise it re-mirrors every target; the
+          ::  mirror dir is rebuildable cache, never user data.
+          [%fall %& [/ %'mirror.sig'] [[/ %sig] ~]]
+          [%fall %| /docs/mirror empty-dir:loader]
+          ::  /docs/hb: the mirrored HANDBOOK prose per collection (its docs
+          ::  home), kept apart from /docs/mirror (the code sources) so coverage
+          ::  never counts the markdown. Rebuildable cache, never user data.
+          [%fall %| /docs/hb empty-dir:loader]
+          ::  /docs/cache: the ship-computed coverage cache (one json grub per
+          ::  collection), recomputed on change — rebuildable, never user data.
+          [%fall %| /docs/cache empty-dir:loader]
           ::  usergroups.sig: the shell's ONE registry liaison. Registrant
           ::  prefixes nest-clobber (%how replaces every road under the
           ::  sender's prefix), so exactly one root-prefix fiber makes all
@@ -94,42 +114,37 @@
           [%fall %| /share empty-dir:loader]
           [%fall %| /peers empty-dir:loader]
           [%fall %| /requests empty-dir:loader]
-          ::  /docs: the grubbery handbook. Markdown grubs served at
-          ::  /apps/grubbery/docs and rendered client-side (marked). Authored
-          ::  in the *-md stubs below and deployed with %over — the Hoon
-          ::  source is the source of truth while there's no in-browser
-          ::  editor. When that editor lands these flip to %fall (seed-once)
-          ::  so live edits win instead of being clobbered on reload.
+          ::  /docs: holds the handbook's CONFIG grubs (targets, ignore, pins).
+          ::  The prose itself is NOT seeded here — it lives in the documented
+          ::  target's own man/docs (referenced, not owned) and is read from the
+          ::  mirror. See the docs page/search/anchor arms.
           [%fall %| /docs empty-dir:loader]
-          [%over %& [/docs %'intro.md'] [[/ %mime] (md-seed intro-md)]]
-          [%over %& [/docs %'nexuses.md'] [[/ %mime] (md-seed nexuses-md)]]
-          [%over %& [/docs %'grubs.md'] [[/ %mime] (md-seed grubs-md)]]
-          [%over %& [/docs %'fibers.md'] [[/ %mime] (md-seed fibers-md)]]
-          [%over %& [/docs %'roadmap.md'] [[/ %mime] (md-seed roadmap-md)]]
-          ::  tutorials
-          [%over %& [/docs %'hello-nexus.md'] [[/ %mime] (md-seed hello-nexus-md)]]
-          [%over %& [/docs %'serving-a-page.md'] [[/ %mime] (md-seed serving-a-page-md)]]
-          [%over %& [/docs %'talking-to-apis.md'] [[/ %mime] (md-seed talking-to-apis-md)]]
-          ::  principles
-          [%over %& [/docs %'namespace-first.md'] [[/ %mime] (md-seed namespace-first-md)]]
-          [%over %& [/docs %'reboot-anytime.md'] [[/ %mime] (md-seed reboot-anytime-md)]]
-          [%over %& [/docs %'composition.md'] [[/ %mime] (md-seed composition-md)]]
-          ::  subsystems
-          [%over %& [/docs %'permissions.md'] [[/ %mime] (md-seed permissions-md)]]
-          [%over %& [/docs %'desks.md'] [[/ %mime] (md-seed desks-md)]]
-          [%over %& [/docs %'cross-ship.md'] [[/ %mime] (md-seed cross-ship-md)]]
-          [%over %& [/docs %'http-serving.md'] [[/ %mime] (md-seed http-serving-md)]]
-          [%over %& [/docs %'code-nexuses.md'] [[/ %mime] (md-seed code-nexuses-md)]]
+          ::  freshness pins for the live-code blocks: a map of
+          ::  "<doc>|<file>|<range>" -> the content hash of that span as of
+          ::  when the block was first seen. %fall so it seeds empty once and
+          ::  then belongs to the runtime — pins persist across reloads. The
+          ::  browser computes the hash (the same cyrb53 the badges use) and
+          ::  the ship only stores it; auto-pin is stamp-once, never re-stamped
+          ::  on view, so drift stays visible.
+          [%fall %& [/docs %'pins.json'] [[/ %json] [%o ~]]]
+          ::  coverage targets: the list of source files we WANT documented,
+          ::  the denominator for coverage. A file on this list with no live
+          ::  block reads as uncovered (a gap); a documented file NOT on the
+          ::  list is extra credit. %fall so the list is editable at runtime
+          ::  and persists. Stored as a json array of "/code"-relative paths.
+          [%fall %& [/docs %'targets.json'] [[/ %json] [%a ~]]]
+          ::  (ignore is not a shell grub — it lives in the documented target's
+          ::  own man/docs manifest, read from the mirror at compute time.)
           [%over %& [/ %'app.js'] [[/ %mime] app-js]]
           [%over %& [/ %'style.css'] [[/ %mime] app-css]]
           [%over %& [/ %'permits.html'] [[/ %mime] permits-html]]
           ::  docs-agent: the docs chatbot as a CONTAINED, sandboxed nexus
           ::  (neck [/ %docs-agent], code at nex/docs-agent.hoon). The
           ::  SANDBOX is the weir WE set on it here (kernel-enforced): the
-          ::  whole agent — and anything it mounts — may only read /docs,
-          ::  root /code, and the raw grubbery desk source, poke the metered
+          ::  whole agent — and anything it mounts — may only read /docs
+          ::  (which holds the source mirror + registry), poke the metered
           ::  provider + bowl, and write within its own subtree.
-          [%fall %| /docs/agent [`[`[/shell %docs-agent] `agent-weir %.n ~] ~]]
+          [%fall %| /docs/agent [`[`[/shell %docs-agent] `(agent-weir ~) %.n ~] ~]]
       ==
     ::
     ++  on-file
@@ -141,9 +156,104 @@
       ?+    rail  stay:m
           [~ %'main.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%shell main: failed")
+        ::  the docs agent reaches the anthropic proxy by NAME. on-load has
+        ::  no fiber to look the name up, so the agent is born with the base
+        ::  weir and sanded here with the resolved roads once per rise.
+        ;<  anth=(unit lane:tarball)  bind:m  (resolve-link:io '@anthropic')
+        ;<  ~  bind:m
+          ?.  ?=([~ %| *] anth)
+            ~&  >>>  %shell-docs-agent-no-anthropic
+            (pure:(fiber:fiber:nexus ,~) ~)
+          (sand:io (nex-road:io rail [%| /docs/agent]) `(agent-weir `p.u.anth))
         ;<  ~  bind:m  (bind-http:io [~ /apps/grubbery])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/tiles])
         (http-dispatch:io %shell)
+          ::  mirror.sig: keep a local copy of every target's source under
+          ::  /docs/mirror (per source, under its tag), so coverage computes
+          ::  from local data. FOLLOWS each target by SUBSCRIPTION: the kernel
+          ::  mirrors Clay desks into the namespace as real grubs (see
+          ::  +sync-clay-desk), so /sys/clay/desks/<desk> is a live grubbery
+          ::  subtree — a directory keep on it wakes us when the target changes.
+          ::  +sync-keeps subscribes to the registry AND every target directory;
+          ::  a +mug check skips re-copying a target whose ball is unchanged.
+          ::  The mirror is not pruned, so coverage counts only current targets.
+          [~ %'mirror.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell mirror: failed")
+        |^
+        ;<  seen0=(map path @)  bind:m  (do-mirror ~)
+        ;<  ~  bind:m  recompute-all
+        ;<  kept0=(set path)    bind:m  (sync-keeps ~)
+        =/  seen=(map path @)   seen0
+        =/  kept=(set path)     kept0
+        |-  ^-  process:fiber:nexus
+        ::  wake whenever the registry, any watched target's source, or the pins
+        ::  change — then re-mirror and recompute coverage into the cache.
+        ;<  woke=wire  bind:m  take-mirror-news
+        ~?  dbg  [%shell-docs-mirror-wake woke]
+        ;<  seen1=(map path @)  bind:m  (do-mirror seen)
+        ;<  ~  bind:m  recompute-all
+        ;<  kept1=(set path)    bind:m  (sync-keeps kept)
+        $(seen seen1, kept kept1)
+        ::  +do-mirror: mirror every current target, skipping those whose source
+        ::  ball is unchanged since we last copied it. seen maps a target path to
+        ::  the mug it was last mirrored at; returns the updated map.
+        ++  do-mirror
+          |=  seen=(map path @)
+          =/  m  (fiber:fiber:nexus ,(map path @))
+          ^-  form:m
+          ;<  tgs=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+          =/  jobs=(list [dest=path src=path])  (mirror-jobs (colls tgs))
+          =/  out=(map path @)  seen
+          |-  ^-  form:m
+          ?~  jobs  (pure:m out)
+          ;<  got=(unit @)  bind:m
+            (mirror-dir rail dest.i.jobs src.i.jobs (~(get by seen) dest.i.jobs))
+          =?  out  ?=(^ got)  (~(put by out) dest.i.jobs u.got)
+          $(jobs t.jobs)
+        ::  +recompute-all: rebuild the coverage cache for every registered
+        ::  collection (its c = the collection's name as a one-segment path).
+        ++  recompute-all
+          =/  m  (fiber:fiber:nexus ,~)
+          ^-  form:m
+          ;<  tgs=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+          =/  cs=(list path)  (turn (colls tgs) |=([name=@t *] ~[name]))
+          |-  ^-  form:m
+          ?~  cs  (pure:m ~)
+          ;<  ~  bind:m  (recompute-coverage rail i.cs)
+          $(cs t.cs)
+        ::  +sync-keeps: subscribe to targets.json, the pins, and every source
+        ::  directory a collection mirrors (its code sources AND its handbook
+        ::  home); drop subscriptions for sources no longer registered. Keeps the
+        ::  newly-added and drops the removed (idempotent per wire). Returns the
+        ::  new set of watched source paths.
+        ++  sync-keeps
+          |=  old=(set path)
+          =/  m  (fiber:fiber:nexus ,(set path))
+          ^-  form:m
+          ;<  *  bind:m
+            (keep:io /cfg-t (nex-road:io rail [%& /docs %'targets.json']) `[/ %json])
+          ::  also watch the pins: a re-confirm changes freshness, so the cache
+          ::  must be recomputed. (Our own stamp settles in one extra pass.)
+          ;<  *  bind:m
+            (keep:io /cfg-p (nex-road:io rail [%& /docs %'pins.json']) `[/ %json])
+          ;<  tgs=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+          =/  now=(set path)
+            %-  ~(gas in *(set path))
+            (turn (mirror-jobs (colls tgs)) |=([* src=path] src))
+          =/  gone=(list path)   ~(tap in (~(dif in old) now))
+          =/  fresh=(list path)  ~(tap in (~(dif in now) old))
+          |-  ^-  form:m
+          ?^  gone
+            ;<  ~  bind:m  (drop:io (welp /tgt i.gone) [%& %| i.gone])
+            $(gone t.gone)
+          ?^  fresh
+            ;<  *  bind:m  (keep:io (welp /tgt i.fresh) [%& %| i.fresh] ~)
+            $(fresh t.fresh)
+          (pure:m now)
+        --
           ::  usergroups.sig: register once, then hold every shell grant
           ::  current — the base /public grant on public.json plus the
           ::  per-group /sys/link shares from permit/share.json — and keep
@@ -227,6 +337,7 @@
           (peek-exists:io (nex-road:io rail [%& / %'bootstrapped.json']))
         ;<  ~  bind:m  ensure-polls
         ?:  done  (pure:m ~)
+        ~?  dbg  %shell-bootstrap-first-boot
         ;<  ~  bind:m  sync-defaults
         ;<  err=(unit tang)  bind:m
           (make-soft:io (nex-road:io rail [%& / %'bootstrapped.json']) |+[[[/ %json] `json`[%b %.y]] ~])
@@ -696,6 +807,20 @@
           ;<  ~  bind:m
             (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.docs-js])
           (pure:m ~)
+        ::  shared <split-view> web component (the resizable sidebar)
+        ?:  ?=([%docs %'split-view.js' ~] suffix)
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.splitview-js])
+          (pure:m ~)
+        ::  window components for the floating docs assistant (manager first)
+        ?:  ?=([%docs %'window-manager.js' ~] suffix)
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.windowmgr-js])
+          (pure:m ~)
+        ?:  ?=([%docs %'float-window.js' ~] suffix)
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.floatwin-js])
+          (pure:m ~)
         ::  the docs assistant widget: sandboxed chatbot UI (js + css)
         ?:  ?=([%docs %'chat.js' ~] suffix)
           ;<  ~  bind:m
@@ -713,12 +838,159 @@
           ;<  ~  bind:m
             (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `q.hoon-grammar])
           (pure:m ~)
-        ::  /apps/grubbery/docs/nav.json → the sidebar tree. Served straight
-        ::  from code (docs-nav) so it's one source of truth: adding a doc is
-        ::  a nav line + a seed row. When the in-browser editor lands we can
-        ::  promote this to a live-editable grub without the seed-once trap.
+        ::  /apps/grubbery/docs/nav.json → the sidebar tree, read from the
+        ::  documented target's own man/docs/docs.json manifest (nav field) via
+        ::  the mirror. The desk owns its sidebar shape; the shell just renders.
         ?:  ?=([%docs %'nav.json' ~] suffix)
-          =/  bod=octs  (as-octs:mimes:html (en:json:html docs-nav))
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
+          ::  tag each section with whether it declares a coverage scope (a ◆).
+          =/  bod=octs  (as-octs:mimes:html (en:json:html (annotate-nav nav)))
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  /apps/grubbery/docs/pins.json → the freshness pins map, read by
+        ::  the reader to check each live block against its stamped hash.
+        ?:  ?=([%docs %'pins.json' ~] suffix)
+          ;<  cur=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
+          =/  bod=octs  (as-octs:mimes:html (en:json:html (fall cur [%o ~])))
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  PROBE: /apps/grubbery/docs/covsrc?path=/lib/x.hoon → read /code
+        ::  source ship-side; report line count + mug + head, to check that
+        ::  the ship's raw-text extraction lines up with the browser's.
+        ?:  ?=([%docs %covsrc ~] suffix)
+          =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
+          =/  pl  (skim args |=([p=@t q=@t] =(p 'path')))
+          =/  pax=@t  ?~(pl '' q.i.pl)
+          =/  raw-pax=tape  (trip pax)
+          =/  full=path
+            (stab (crip ?:(=("/code" (scag 5 raw-pax)) raw-pax (weld "/code" raw-pax))))
+          ;<  =view:nexus  bind:m  (peek:io [%& %& (snip full) (rear full)] ~)
+          ?.  ?=([%file *] view)
+            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'not found')])
+            (pure:m ~)
+          =/  txt=@t  (grub-text view)
+          =/  lines=(list @t)  (to-wain:format txt)
+          =/  resp=json
+            %-  pairs:enjs:format
+            :~  ['lines' (numb:enjs:format (lent lines))]
+                ['mug' (numb:enjs:format `@`(mug txt))]
+                ['head' s+(crip (scag 90 (trip txt)))]
+            ==
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html resp))])
+          (pure:m ~)
+        ::  DEBUG: /apps/grubbery/docs/anchors.json → every live-block anchor
+        ::  across all docs, parsed ship-side. Validates the anchor parser.
+        ?:  ?=([%docs %'anchors.json' ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
+          =/  items=(list [path=@t title=@t])  (nav-items nav)
+          =|  all=(list json)
+          |-  ^-  process:fiber:nexus
+          ?~  items
+            =/  bod=octs  (as-octs:mimes:html (en:json:html [%a (flop all)]))
+            ;<  ~  bind:m
+              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (pure:m ~)
+          ;<  fv=view:nexus  bind:m
+            (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
+          =/  txt=@t  (grub-text fv)
+          =.  all
+            %+  weld  all
+            %+  turn  (parse-anchors txt)
+            |=  [file=@t from=@ud to=@ud]
+            %-  pairs:enjs:format
+            :~  ['doc' s+path.i.items]
+                ['file' s+file]
+                ['from' (numb:enjs:format from)]
+                ['to' (numb:enjs:format to)]
+            ==
+          $(items t.items)
+        ::  /apps/grubbery/docs/coverage.json → the computed coverage, from the
+        ::  mirror: per target file, its line total and how many lines a doc's
+        ::  live block covers. Denominator = mirrored files minus the ignore
+        ::  list. (Freshness via mug + pins is layered on next.)
+        ?:  ?=([%docs %'coverage.json' ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          ::  ignore lives in the collection's own man/docs manifest — the desk
+          ::  declares what within itself doesn't count. nav carries the section
+          ::  scopes (sub-coverage) alongside the sidebar tree.
+          ;<  [ignore=(list @t) nav=json]  bind:m  (read-docs-config rail c)
+          ::  optional ?section=<name>: restrict the denominator to that nav
+          ::  section's scope (a list of "path [range]" selectors). Empty = the
+          ::  whole collection.
+          =/  sec=@t
+            =/  qa=quay:eyre  args:(parse-url:http-utils url.request.req)
+            =/  sl  (skim qa |=([p=@t q=@t] =(p 'section')))
+            ?~(sl '' q.i.sl)
+          =/  in-section=?  !=('' sec)
+          ::  serve the ship-computed coverage CACHE. It's recomputed on a change
+          ::  (+recompute-coverage, driven by the mirror fiber), so a view is a
+          ::  read — not a full recompute. The cache holds the whole-collection
+          ::  result plus a per-section view. A miss (first boot, before the
+          ::  fiber has run) falls back to computing on demand.
+          ;<  cj=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs/cache (cache-name c)]) ,json)
+          ?^  cj
+            =/  cache=(map @t json)  ?:(?=([%o *] u.cj) p.u.cj ~)
+            =/  whole=json  (fall (~(get by cache) 'whole') [%o ~])
+            =/  out=json
+              ?.  in-section  whole
+              =/  vj=json  (fall (~(get by cache) 'views') [%o ~])
+              =/  vm=(map @t json)  ?:(?=([%o *] vj) p.vj ~)
+              (fall (~(get by vm) sec) whole)
+            ;<  ~  bind:m
+              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html out))])
+            (pure:m ~)
+          ::  cache miss: compute now, stamp the pins it returns, serve.
+          ;<  [resp=json np=(map @t @t)]  bind:m  (compute-coverage rail c ignore nav sec)
+          ;<  pj=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
+          =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
+          ;<  ~  bind:m
+            ?:  =(~ np)  (pure:(fiber:fiber:nexus ,~) ~)
+            %+  over:io  (nex-road:io rail [%& /docs %'pins.json'])
+            [[/ %json] [%o (~(uni by pins) (~(run by np) |=(h=@t `json`s+h)))]]
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html resp))])
+          (pure:m ~)
+        ::  /apps/grubbery/docs/mirror?path=/lib/x.hoon → the mirrored source
+        ::  text of one file, so the heatmap reads locally (no per-block /code
+        ::  fetch). Exactly what coverage measured.
+        ?:  ?=([%docs %mirror ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          =/  qargs=quay:eyre  args:(parse-url:http-utils url.request.req)
+          =/  pl  (skim qargs |=([p=@t q=@t] =(p 'path')))
+          =/  src=@t  ?~(pl '' q.i.pl)
+          =/  mir=path  (welp (coll-mirror c) (stab src))
+          ;<  mv=view:nexus  bind:m
+            (peek:io (nex-road:io rail [%& (snip mir) (rear mir)]) ~)
+          =/  txt=@t  (grub-text mv)
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/plain']]] `(as-octs:mimes:html txt)])
+          (pure:m ~)
+        ::  /apps/grubbery/docs/targets.json → the coverage target list.
+        ?:  ?=([%docs %'targets.json' ~] suffix)
+          ;<  cur=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+          =/  bod=octs  (as-octs:mimes:html (en:json:html (fall cur [%a ~])))
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  /apps/grubbery/docs/ignore.json → the coverage ignore list, READ-ONLY.
+        ::  It's authored in the target's man/docs manifest (the desk owns its
+        ::  exclusions), so the UI shows it but no longer edits it.
+        ?:  ?=([%docs %'ignore.json' ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          ;<  [ignore=(list @t) *]  bind:m  (read-docs-config rail c)
+          =/  bod=octs
+            %-  as-octs:mimes:html
+            %-  en:json:html
+            [%a (turn ignore |=(s=@t `json`[%s s]))]
           ;<  ~  bind:m
             (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
@@ -726,6 +998,7 @@
         ::  search over the /docs grubs. Returns hits (path+title+snippet);
         ::  the browser never loads the whole corpus, only what it clicks.
         ?:  ?=([%docs %search ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
           =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
           =/  ql  (skim args |=([p=@t q=@t] =(p 'q')))
           =/  q=@t  ?~(ql '' q.i.ql)
@@ -735,7 +1008,8 @@
             ;<  ~  bind:m
               (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
             (pure:m ~)
-          =/  items=(list [path=@t title=@t])  docs-list
+          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
+          =/  items=(list [path=@t title=@t])  (nav-items nav)
           =|  hits=(list json)
           |-  ^-  process:fiber:nexus
           ?~  items
@@ -744,11 +1018,8 @@
               (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
             (pure:m ~)
           ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& /docs `@ta`path.i.items]) `[/ %mime])
-          =/  txt=@t
-            ?.  ?=([%file *] fv)  ''
-            =/  mm=mime  !<(mime (need-vase:tarball sang.fv))
-            `@t`q.q.mm
+            (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
+          =/  txt=@t  (grub-text fv)
           =/  snip=(unit @t)  (find-snippet txt q)
           =/  tmatch=?  !=(~ (find qlow (cass (trip title.i.items))))
           =?  hits  |(?=(^ snip) tmatch)
@@ -757,21 +1028,132 @@
           $(items t.items)
         ::  /apps/grubbery/docs/page?path=<name.md> → one doc's raw markdown
         ?:  ?=([%docs %page ~] suffix)
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
           =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
           =/  pl  (skim args |=([p=@t q=@t] =(p 'path')))
           =/  pax=@t  ?~(pl '' q.i.pl)
           ?:  =('' pax)
             ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'path required')])
             (pure:m ~)
-          ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& /docs `@ta`pax]) `[/ %mime])
-          ?.  ?=([%file *] fv)
+          ::  prose lives in the collection's target: serve it straight from its
+          ::  mirror handbook dir — the same source coverage measures. No seed
+          ::  fallback; a page absent from the mirror is a real 404.
+          ;<  mv=view:nexus  bind:m
+            (peek:io (nex-road:io rail (doc-lane c pax)) ~)
+          =/  mtxt=@t  (grub-text mv)
+          ?:  =('' mtxt)
             ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
             (pure:m ~)
-          =/  =mime  !<(mime (need-vase:tarball sang.fv))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/plain']]] `q.mime])
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/plain']]] `(as-octs:mimes:html mtxt)])
           (pure:m ~)
+        ::  POST /apps/grubbery/docs/confirm?c=<collection>
+        ::    {"blocks":[{"doc","file","range"},...]}
+        ::  → re-confirm freshness. For each block the SHIP re-hashes the CURRENT
+        ::  span from the collection's mirror and force-stamps its pin. The caller
+        ::  supplies only intent (which blocks it verified); the ship supplies the
+        ::  hash, so the browser never computes a mug. One block from the reader's
+        ::  "re-confirm" button, or a batch from an LLM audit pass — same call.
+        ?:  &(=('POST' method.request.req) ?=([%docs %confirm ~] suffix))
+          ;<  c=path  bind:m  (coll-of rail url.request.req)
+          =/  jon=json
+            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) *json)
+          =/  blocks=(list [doc=@t file=@t range=@t])
+            ?.  ?=([%o *] jon)  ~
+            =/  bl=(unit json)  (~(get by p.jon) 'blocks')
+            ?.  ?=([~ %a *] bl)  ~
+            %+  murn  p.u.bl
+            |=  b=json
+            ^-  (unit [@t @t @t])
+            ?.  ?=([%o *] b)  ~
+            =/  d=(unit json)  (~(get by p.b) 'doc')
+            =/  f=(unit json)  (~(get by p.b) 'file')
+            =/  r=(unit json)  (~(get by p.b) 'range')
+            ?.  ?&(?=([~ %s *] d) ?=([~ %s *] f) ?=([~ %s *] r))  ~
+            `[p.u.d p.u.f p.u.r]
+          ::  read the collection's mirror (to hash spans) and the current pins
+          ;<  mv=view:nexus  bind:m  (peek:io (nex-road:io rail [%| (coll-mirror c)]) ~)
+          =/  finfo=(map @t (list @t))
+            ?.  ?=([%ball *] mv)  ~
+            %-  malt
+            %+  murn  ~(tap ba:tarball ball.mv)
+            |=  [=rail:tarball =sang:tarball]
+            `[(spat (snoc path.rail name.rail)) (to-wain:format (sang-text sang))]
+          ;<  pj=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
+          =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
+          ::  sections to re-confirm (by name) — each scope is read from the
+          ::  manifest nav (or derived from its docs), re-hashed and re-pinned.
+          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
+          ;<  anchors=(list [doc=@t file=@t from=@ud to=@ud])  bind:m
+            (gather-all-anchors rail c)
+          =/  sections=(list @t)
+            ?.  ?=([%o *] jon)  ~
+            =/  sl=(unit json)  (~(get by p.jon) 'sections')
+            ?.  ?=([~ %a *] sl)  ~
+            (murn p.u.sl |=(x=json ?:(?=([%s *] x) `p.x ~)))
+          =/  block-updates=(map @t json)
+            %+  roll  blocks
+            |=  [b=[doc=@t file=@t range=@t] acc=(map @t json)]
+            =/  ls=(unit (list @t))  (~(get by finfo) file.b)
+            ?~  ls  acc
+            =/  rng=[from=@ud to=@ud]
+              ?:  =('all' range.b)  [1 0]
+              =/  dh=(unit @ud)  (find "-" (trip range.b))
+              ?~  dh  [(fall (rush range.b dem) 1) (fall (rush range.b dem) 1)]
+              :-  (fall (rush (crip (scag u.dh (trip range.b))) dem) 1)
+              (fall (rush (crip (slag +(u.dh) (trip range.b))) dem) 0)
+            =/  total=@ud  (lent u.ls)
+            ?:  (gth from.rng total)  acc
+            =/  hi=@ud  (min total ?:(=(0 to.rng) total to.rng))
+            =/  span=(list @t)  (swag [(dec from.rng) +((sub hi from.rng))] u.ls)
+            =/  key=@t  (crip "{(spud c)}|{(trip doc.b)}|{(trip file.b)}|{(trip range.b)}")
+            (~(put by acc) key s+`@t`(scot %ux (mug span)))
+          ::  re-confirming a section re-stamps the anchor pins of every block on
+          ::  its own page(s) — freshness is the block aggregate, so this clears
+          ::  the section's drift by clearing the blocks that caused it.
+          =/  updated=(map @t json)
+            %+  roll  sections
+            |=  [name=@t acc=(map @t json)]
+            =/  nd=(unit json)  (find-node nav name)
+            ?~  nd  acc
+            =/  docs=(set @t)  (~(gas in *(set @t)) (subtree-docs u.nd))
+            %+  roll  anchors
+            |=  [a=[doc=@t file=@t from=@ud to=@ud] ac=_acc]
+            ?.  (~(has in docs) doc.a)  ac
+            =/  ls=(unit (list @t))  (~(get by finfo) file.a)
+            ?~  ls  ac
+            =/  total=@ud  (lent u.ls)
+            ?:  (gth from.a total)  ac
+            =/  hi=@ud  (min total ?:(=(0 to.a) total to.a))
+            =/  span=(list @t)  (swag [(dec from.a) +((sub hi from.a))] u.ls)
+            =/  rng=@t  ?:(=(0 to.a) 'all' (crip "{(a-co:co from.a)}-{(a-co:co to.a)}"))
+            =/  key=@t  (crip "{(spud c)}|{(trip doc.a)}|{(trip file.a)}|{(trip rng)}")
+            (~(put by ac) key s+`@t`(scot %ux (mug span)))
+          =.  updated  (~(uni by updated) block-updates)
+          ;<  ~  bind:m
+            ?:  =(~ updated)  (pure:(fiber:fiber:nexus ,~) ~)
+            (over:io (nex-road:io rail [%& /docs %'pins.json']) [[/ %json] [%o (~(uni by pins) updated)]])
+          =/  bod=octs
+            %-  as-octs:mimes:html
+            %-  en:json:html
+            (pairs:enjs:format ~[['confirmed' (numb:enjs:format ~(wyt by updated))]])
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  POST /apps/grubbery/docs/targets  [{name, docs, sources}, ...] →
+        ::  replace the registry with the posted json array. Each entry is a
+        ::  collection (see +colls); stored verbatim.
+        ?:  &(=('POST' method.request.req) ?=([%docs %targets ~] suffix))
+          =/  jon=json
+            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) [%a ~])
+          ;<  ~  bind:m
+            (over:io (nex-road:io rail [%& /docs %'targets.json']) [[/ %json] jon])
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html [%b %.y]))])
+          (pure:m ~)
+        ::  (no POST /ignore — ignore is authored in the target's man/docs
+        ::  manifest, not editable through the shell.)
         ::  POST /apps/grubbery/docs/chat → the docs assistant. One metered
         ::  round-trip through the anthropic proxy; returns {reply}.
         ?:  &(=('POST' method.request.req) ?=([%docs %chat ~] suffix))
@@ -787,10 +1169,10 @@
             (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  GET /apps/grubbery/docs/history → the stored conversation, read
-        ::  straight from the agent's chat.json. Restores across refreshes.
+        ::  straight from the agent's chats/main.json. Restores across refreshes.
         ?:  ?=([%docs %history ~] suffix)
           =/  chat-road=road:tarball
-            (nex-road:io rail [%& /docs/agent %'chat.json'])
+            (nex-road:io rail [%& /docs/agent/chats %'main.json'])
           ;<  fv=view:nexus  bind:m  (peek:io chat-road `[/ %json])
           =/  conv=json
             ?.  ?=([%file *] fv)  [%a ~]
@@ -885,62 +1267,46 @@
       ==
     --
 |%
+::  +dbg: the routine traces print only when this is yes. It lives in this
+::  helper core, where the nexus core above can see it.
+::
+++  dbg  ^-(? |)
 ++  srv  ~(. http-res:io [%| 1 %& ~ %'main.sig'])
-::  md-seed: wrap stub markdown text as a text/markdown mime, for seeding
-::  the /docs grubs. Seeds only fire once (%fall), so this is a starting
-::  point the user edits in place — never re-applied over live content.
-++  md-seed
-  |=  t=@t  ^-  mime
-  [/text/markdown (as-octs:mimes:html t)]
-::  docs-nav: the initial sidebar tree, the SUMMARY equivalent. Stored as
-::  an editable grub (nav.json) so reordering/adding is a data edit, not a
-::  code change.
-::  docs-nav: THE single structured source for the docs sidebar, as JSON.
-::  Built with two gates — a `doc` leaf ({title,path}) and a `sec` section
-::  ({title,kids}). A section's kids is just a list of json, so sections
-::  NEST ARBITRARILY: drop a `sec` inside another `sec`'s kids for as many
-::  levels as you like. No custom recursive mold (those loop the build) — we
-::  lean on json's own recursion.
-++  docs-nav
-  ^-  json
-  =/  doc
-    |=  [p=@t t=@t]  ^-  json
-    (pairs:enjs:format ~[['title' s+t] ['path' s+p]])
-  =/  sec
-    |=  [t=@t kids=(list json)]  ^-  json
-    (pairs:enjs:format ~[['title' s+t] ['kids' [%a kids]]])
-  :-  %a
-  :~  (doc 'intro.md' 'Introduction')
-      %+  sec  'Principles'
-      :~  (doc 'namespace-first.md' 'Namespace-first')
-          (doc 'reboot-anytime.md' 'Reboot-anytime')
-          (doc 'composition.md' 'Composition over entanglement')
-      ==
-      %+  sec  'Core model'
-      :~  (doc 'nexuses.md' 'Nexuses')
-          (doc 'grubs.md' 'Grubs & the namespace')
-          (doc 'fibers.md' 'Fibers')
-      ==
-      %+  sec  'Tutorials'
-      :~  (doc 'hello-nexus.md' 'Your first nexus')
-          (doc 'serving-a-page.md' 'Serving a web page')
-          (doc 'talking-to-apis.md' 'Talking to external APIs')
-      ==
-      %+  sec  'Subsystems'
-      :~  (doc 'permissions.md' 'Permissions')
-          (doc 'desks.md' 'Desks')
-          (doc 'cross-ship.md' 'Cross-ship')
-          (doc 'http-serving.md' 'HTTP serving')
-          (doc 'code-nexuses.md' 'Code nexuses')
-      ==
-      (doc 'roadmap.md' 'TODO & future topics')
-  ==
-::  docs-list: the flat [path title] of every doc, for server-side search.
-::  Derived by walking the docs-nav json tree — recursion in the ARM (fine),
-::  over json's existing recursive type. Arbitrary depth, still one source.
-++  docs-list
+::  coll-of: the collection a request is scoped to — the `c` query param (a
+::  collection name). Absent, we fall back to the first registered collection,
+::  so a bare request still resolves the default. Returns the one-segment path.
+++  coll-of
+  |=  [=rail:tarball url=@t]
+  =/  m  (fiber:fiber:nexus ,path)
+  ^-  form:m
+  =/  qa=quay:eyre  args:(parse-url:http-utils url)
+  =/  cl  (skim qa |=([p=@t q=@t] =(p 'c')))
+  ?^  cl  (pure:m ~[q.i.cl])
+  ;<  tg=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+  =/  cs  (colls tg)
+  (pure:m ?~(cs ~ ~[name.i.cs]))
+::  read-docs-config: a collection's handbook manifest, read from its mirrored
+::  handbook — {ignore, nav}. Config lives WITH the documented handbook (the desk
+::  owns its coverage exclusions and its sidebar shape), not in the shell. Empty
+::  when the manifest isn't mirrored yet.
+++  read-docs-config
+  |=  [=rail:tarball c=path]
+  =/  m  (fiber:fiber:nexus ,[ignore=(list @t) nav=json])
+  ^-  form:m
+  ::  the manifest is a %json grub in the mirror — clam it to json directly,
+  ::  not through grub-text (which extracts source TEXT, not a json noun).
+  ;<  ju=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& (coll-docs c) %'docs.json']) ,json)
+  =/  obj=(map @t json)  ?~(ju ~ ?:(?=([%o *] u.ju) p.u.ju ~))
+  =/  nav=json  (fall (~(get by obj) 'nav') [%a ~])
+  (pure:m [(json-strs (~(get by obj) 'ignore')) nav])
+::  nav-items: the flat [path title] of every doc in a nav tree, walking the
+::  {title,path} / {title,kids} json. Arbitrary depth, over json's recursion.
+++  nav-items
+  |=  nav=json
   ^-  (list [path=@t title=@t])
-  |^  (walk docs-nav)
+  |^  (walk nav)
   ++  walk
     |=  j=json
     ^-  (list [path=@t title=@t])
@@ -957,6 +1323,496 @@
     =/  kids  (~(get by p.node) 'kids')
     ?~(kids ~ (walk u.kids))
   --
+::  subtree-scopes: every `scope` selector in a node's subtree (its own plus all
+::  its descendants'). A grouping section's coverage rolls up to this union.
+++  subtree-scopes
+  |=  nd=json
+  ^-  (list @t)
+  ?.  ?=([%o *] nd)  ~
+  =/  own=(list @t)  (json-strs (~(get by p.nd) 'scope'))
+  =/  kids  (~(get by p.nd) 'kids')
+  =/  sub=(list @t)
+    ?~  kids  ~
+    ?.  ?=([%a *] u.kids)  ~
+    (zing (turn p.u.kids subtree-scopes))
+  (weld own sub)
+::  find-node: the nav node titled `name`, at any depth.
+++  find-node
+  |=  [nav=json name=@t]
+  ^-  (unit json)
+  ?.  ?=([%a *] nav)  ~
+  |-  ^-  (unit json)
+  ?~  p.nav  ~
+  =/  nd  i.p.nav
+  ?.  ?=([%o *] nd)  $(p.nav t.p.nav)
+  =/  ttl  (~(get by p.nd) 'title')
+  ?:  ?&(?=([~ %s *] ttl) =(name p.u.ttl))  `nd
+  =/  kids  (~(get by p.nd) 'kids')
+  =/  sub  ?~(kids ~ (find-node u.kids name))
+  ?^(sub sub $(p.nav t.p.nav))
+::  node-cover-scope: a node's coverage scope — its own `scope` selectors UNIONED
+::  with every scoped descendant's. So a leaf measures its own code, a scopeless
+::  parent rolls its children up, and a parent that ALSO declares a scope adds
+::  that on top of the roll-up. ~ if there's no scope anywhere in the subtree.
+++  node-cover-scope
+  |=  [nav=json name=@t]
+  ^-  (list @t)
+  =/  nd=(unit json)  (find-node nav name)
+  ?~  nd  ~
+  (subtree-scopes u.nd)
+::  any-cov: does any node in this annotated nav array carry cov=true?
+++  any-cov
+  |=  nav=json
+  ^-  ?
+  ?.  ?=([%a *] nav)  |
+  %+  lien  p.nav
+  |=(nd=json &(?=([%o *] nd) =([~ %b %.y] (~(get by p.nd) 'cov'))))
+::  annotate-nav: tag each node with `cov` — whether it has measured coverage:
+::  its own `scope`, OR any scoped descendant (a grouping section rolls its
+::  children up). Coverage is opt-in on ANY node — a section or a leaf page. A
+::  node with no scope anywhere under it just has loose live blocks, unmeasured.
+::  The reader shows a ◆ handle wherever cov is true.
+++  annotate-nav
+  |=  nav=json
+  ^-  json
+  ?.  ?=([%a *] nav)  nav
+  :-  %a
+  %+  turn  p.nav
+  |=  nd=json
+  ^-  json
+  ?.  ?=([%o *] nd)  nd
+  =/  kids  (~(get by p.nd) 'kids')
+  =/  ann=(unit json)  ?~(kids ~ `(annotate-nav u.kids))
+  =/  po=(map @t json)  ?~(ann p.nd (~(put by p.nd) 'kids' u.ann))
+  =/  own=?  ?=(^ (~(get by po) 'scope'))
+  =/  kidcov=?  ?~(ann | (any-cov u.ann))
+  [%o (~(put by po) 'cov' [%b |(own kidcov)])]
+::  scoped-sections: the titles of every nav node with measured coverage — its
+::  own scope OR any scoped descendant — at any depth. So a grouping section (its
+::  rolled-up aggregate) appears alongside the pages/sections that scope directly.
+++  scoped-sections
+  |=  nav=json
+  ^-  (list @t)
+  ?.  ?=([%a *] nav)  ~
+  %-  zing
+  %+  turn  p.nav
+  |=  nd=json
+  ^-  (list @t)
+  ?.  ?=([%o *] nd)  ~
+  =/  ttl  (~(get by p.nd) 'title')
+  =/  self=(list @t)
+    ?:(?&(?=([~ %s *] ttl) ?=(^ (subtree-scopes nd))) ~[p.u.ttl] ~)
+  =/  kids  (~(get by p.nd) 'kids')
+  (weld self ?~(kids ~ (scoped-sections u.kids)))
+::  section-status-of: a section's freshness — drifted iff any live block in its
+::  own page (or, for a grouping node, any descendant page) is drifted. An
+::  anchor's `doc` ties a block to its section, so this is just the aggregate of
+::  the section's blocks: no separate scope pin (adding a file to the scope
+::  can't drift it), no cross-section bleed (a shared source file's drift only
+::  counts against the section whose page anchored the changed block).
+++  section-status-of
+  |=  [nav=json name=@t doc-drift=(set @t)]
+  ^-  @t
+  =/  nd=(unit json)  (find-node nav name)
+  ?~  nd  'fresh'
+  ?:((lien (subtree-docs u.nd) |=(d=@t (~(has in doc-drift) d))) 'drifted' 'fresh')
+::  subtree-docs: every page path in the nav subtree at nd — its own `path` plus
+::  all descendants'. These are the .md files whose live blocks the section owns.
+++  subtree-docs
+  |=  nd=json
+  ^-  (list @t)
+  ?.  ?=([%o *] nd)  ~
+  =/  own=(list @t)
+    =/  p  (~(get by p.nd) 'path')
+    ?:(?=([~ %s *] p) ~[p.u.p] ~)
+  =/  kids  (~(get by p.nd) 'kids')
+  =/  kd=(list @t)
+    ?.  ?=([~ %a *] kids)  ~
+    (zing (turn p.u.kids |=(k=json (subtree-docs k))))
+  (weld own kd)
+::  section-covered: the lines covered by a section's OWN pages — the union of
+::  the per-page covered sets over subtree-docs. A section's number is what
+::  its pages cite, not what any page anywhere cites inside its scope.
+++  section-covered
+  |=  [doc-cov=(map @t (map @t (set @ud))) nav=json name=@t]
+  ^-  (map @t (set @ud))
+  =/  nd=(unit json)  (find-node nav name)
+  ?~  nd  ~
+  %+  roll  (subtree-docs u.nd)
+  |=  [d=@t acc=(map @t (set @ud))]
+  %+  roll  ~(tap by (fall (~(get by doc-cov) d) ~))
+  |=  [[f=@t s=(set @ud)] a=_acc]
+  (~(put by a) f (~(uni in (fall (~(get by a) f) ~)) s))
+::  section-summaries: one summary per scoped section — {name, covered, total,
+::  status} — for the coverage overview. Numbers come from the section's own
+::  pages' blocks (section-covered); freshness is the block aggregate via
+::  `doc-drift` (the set of pages with a drifted live block). Read-only.
+++  section-summaries
+  |=  $:  nav=json
+          finfo=(map @t (list @t))
+          doc-cov=(map @t (map @t (set @ud)))
+          ig-set=(set @t)
+          ignore-lines=(map @t (set @ud))
+          doc-drift=(set @t)
+      ==
+  ^-  json
+  :-  %a
+  %+  turn  (scoped-sections nav)
+  |=  name=@t
+  ^-  json
+  =/  scope-lines=(map @t (set @ud))  (ref-lines finfo (node-cover-scope nav name))
+  =/  covered=(map @t (set @ud))  (section-covered doc-cov nav name)
+  =/  in-scope
+    |=  f=@t
+    ^-  (set @ud)
+    ?:  (~(has in ig-set) f)  ~
+    (~(dif in (fall (~(get by scope-lines) f) ~)) (fall (~(get by ignore-lines) f) ~))
+  =/  keys=(list @t)  ~(tap in ~(key by scope-lines))
+  =/  total=@ud
+    (roll keys |=([f=@t a=@ud] (add a ~(wyt in (in-scope f)))))
+  =/  cov=@ud
+    %+  roll  keys
+    |=  [f=@t a=@ud]
+    (add a ~(wyt in (~(int in (fall (~(get by covered) f) ~)) (in-scope f))))
+  =/  status=@t  (section-status-of nav name doc-drift)
+  %-  pairs:enjs:format
+  :~  ['name' s+name]
+      ['covered' (numb:enjs:format cov)]
+      ['total' (numb:enjs:format total)]
+      ['status' s+status]
+  ==
+::  cov-state: everything coverage needs from the mirror, loaded ONCE per
+::  collection: the line map of every mirrored file, the ignore sets, and the
+::  fold over every live-block anchor (covered lines, per-file fresh/drifted/
+::  gone counts, the pins to stamp, the per-file anchor json, the pages with a
+::  drifted block, and the covered lines PER PAGE, so a section view counts only
+::  the blocks on its own pages). Every section view is then a pure render over
+::  this.
++$  cov-state
+  $:  finfo=(map @t (list @t))
+      ig-set=(set @t)
+      ignore-lines=(map @t (set @ud))
+      covered=(map @t (set @ud))
+      flags=(map @t [f=@ud d=@ud g=@ud])
+      newpins=(map @t @t)
+      fancs=(map @t (list json))
+      doc-drift=(set @t)
+      nanc=@ud
+      doc-cov=(map @t (map @t (set @ud)))
+  ==
+::  load-coverage: the expensive half of coverage — peek the whole mirror, split
+::  every file into lines, gather every anchor, fold them against the pins.
+::  Runs once per recompute; +render-coverage derives each view from it.
+++  load-coverage
+  |=  [=rail:tarball c=path ignore=(list @t)]
+  =/  m  (fiber:fiber:nexus ,cov-state)
+  ^-  form:m
+  ;<  mv=view:nexus  bind:m  (peek:io (nex-road:io rail [%| (coll-mirror c)]) ~)
+  ~?  dbg  [%shell-docs-split c]
+  =/  finfo=(map @t (list @t))
+    ~>  %bout
+    ?.  ?=([%ball *] mv)  ~
+    %-  malt
+    %+  murn  ~(tap ba:tarball ball.mv)
+    |=  [=rail:tarball =sang:tarball]
+    =/  src=@t  (spat (snoc path.rail name.rail))
+    `[src (to-wain:format (sang-text sang))]
+  =/  ig-set=(set @t)
+    (silt (skim ~(tap in ~(key by finfo)) |=(s=@t (ignored s ignore))))
+  ;<  anchors=(list [doc=@t file=@t from=@ud to=@ud])  bind:m
+    (gather-all-anchors rail c)
+  =/  ignore-lines=(map @t (set @ud))
+    (ref-lines finfo (skim ignore |=(e=@t !=(~ (find " " (trip e))))))
+  ;<  pj=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
+  =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
+  =/  nanc=@ud  (lent anchors)
+  =+  ^=  res
+    =|  cov=(map @t (set @ud))
+    =|  flg=(map @t [f=@ud d=@ud g=@ud])
+    =|  np=(map @t @t)
+    =|  ancs=(map @t (list json))
+    =|  dcv=(map @t (map @t (set @ud)))
+    |-  ^-  $:  (map @t (set @ud))
+                (map @t [f=@ud d=@ud g=@ud])
+                (map @t @t)
+                (map @t (list json))
+                (map @t (map @t (set @ud)))
+            ==
+    ?~  anchors  [cov flg np ancs dcv]
+    =/  a  i.anchors
+    =/  fl=[f=@ud d=@ud g=@ud]  (fall (~(get by flg) file.a) [0 0 0])
+    =/  al=(list json)  (fall (~(get by ancs) file.a) ~)
+    =/  mka
+      |=  st=@t
+      ^-  json
+      %-  pairs:enjs:format
+      :~  ['doc' s+doc.a]
+          ['from' (numb:enjs:format from.a)]
+          ['to' (numb:enjs:format to.a)]
+          ['status' s+st]
+      ==
+    =/  ls=(unit (list @t))  (~(get by finfo) file.a)
+    ?:  |(?=(~ ls) (gth from.a (lent u.ls)))
+      %=  $
+        anchors  t.anchors
+        flg   (~(put by flg) file.a fl(g +(g.fl)))
+        ancs  (~(put by ancs) file.a [(mka 'gone') al])
+      ==
+    =/  total=@ud  (lent u.ls)
+    =/  hi=@ud  (min total ?:(=(0 to.a) total to.a))
+    =/  s=(set @ud)  (fall (~(get by cov) file.a) ~)
+    =/  dm=(map @t (set @ud))  (fall (~(get by dcv) doc.a) ~)
+    =/  ds=(set @ud)  (fall (~(get by dm) file.a) ~)
+    =^  ds  s
+      =/  ln=@ud  from.a
+      |-  ^-  [(set @ud) (set @ud)]
+      ?:  (gth ln hi)  [ds s]
+      $(ln +(ln), s (~(put in s) ln), ds (~(put in ds) ln))
+    =/  span=(list @t)  (swag [(dec from.a) +((sub hi from.a))] u.ls)
+    =/  hash=@t  `@t`(scot %ux (mug span))
+    =/  rng=@t  ?:(=(0 to.a) 'all' (crip "{(a-co:co from.a)}-{(a-co:co to.a)}"))
+    =/  key=@t  (crip "{(spud c)}|{(trip doc.a)}|{(trip file.a)}|{(trip rng)}")
+    =/  stored=(unit json)  (~(get by pins) key)
+    =+  ^=  fps
+      ?~  stored  [fl(f +(f.fl)) (~(put by np) key hash) 'fresh']
+      ?:  =(hash ?:(?=([%s *] u.stored) p.u.stored ''))
+        [fl(f +(f.fl)) np 'fresh']
+      [fl(d +(d.fl)) np 'drifted']
+    %=  $
+      anchors  t.anchors
+      cov   (~(put by cov) file.a s)
+      dcv   (~(put by dcv) doc.a (~(put by dm) file.a ds))
+      flg   (~(put by flg) file.a -.fps)
+      np    +<.fps
+      ancs  (~(put by ancs) file.a [(mka +>.fps) al])
+    ==
+  =/  fancs=(map @t (list json))  +>+<.res
+  ::  doc-drift: the pages that carry at least one drifted live block. A
+  ::  section's freshness is the aggregate of the blocks on its own page(s) —
+  ::  no separate section pin, so adding scope can't spuriously drift it.
+  =/  doc-drift=(set @t)
+    %-  ~(gas in *(set @t))
+    %-  zing
+    %+  turn  ~(val by fancs)
+    |=  js=(list json)
+    ^-  (list @t)
+    %+  murn  js
+    |=  j=json
+    ^-  (unit @t)
+    ?.  ?=([%o *] j)  ~
+    =/  st  (~(get by p.j) 'status')
+    =/  dc  (~(get by p.j) 'doc')
+    ?.  ?=([~ %s *] st)  ~
+    ?.  =('drifted' p.u.st)  ~
+    ?.  ?=([~ %s *] dc)  ~
+    `p.u.dc
+  %-  pure:m
+  :*  finfo
+      ig-set
+      ignore-lines
+      -.res
+      +<.res
+      +>-.res
+      fancs
+      doc-drift
+      nanc
+      +>+>.res
+  ==
+::  render-coverage: the coverage result for collection c (whole, or scoped to
+::  a section) — per-file numbers, overall totals, section drift, the sections
+::  overview — as a pure function of a loaded cov-state. Called once per view.
+::  want-files=%.n skips the per-file list (the cached whole view strips it
+::  anyway). The whole view never materializes "every line of every file" as
+::  a set — totals come from file lengths minus ignores, coverage from the
+::  anchored sets minus ignores — because that set costs a put per line of
+::  the mirror (~17s over 2k files) and is only needed to paint one file.
+++  render-coverage
+  |=  [cs=cov-state nav=json sec=@t want-files=?]
+  ^-  json
+  =,  cs
+  =/  in-section=?  !=('' sec)
+  ::  a section counts only the live blocks on its own page(s); the whole
+  ::  view counts every block in the collection
+  =/  covered=(map @t (set @ud))
+    ?.(in-section covered.cs (section-covered doc-cov nav sec))
+  =/  scope-strs=(list @t)
+    ?:(=('' sec) ~ (node-cover-scope nav sec))
+  =/  scope-lines=(map @t (set @ud))
+    ?.(in-section ~ (ref-lines finfo scope-strs))
+  =/  section-status=@t
+    ?.(in-section '' (section-status-of nav sec doc-drift))
+  =/  in-scope
+    |=  [src=@t ls=(list @t)]
+    ^-  (set @ud)
+    =/  base=(set @ud)
+      ?.  in-section
+        =/  n=@ud  1
+        =|  s=(set @ud)
+        |-  ^-  (set @ud)
+        ?:  (gth n (lent ls))  s
+        $(n +(n), s (~(put in s) n))
+      (fall (~(get by scope-lines) src) ~)
+    (~(dif in base) (fall (~(get by ignore-lines) src) ~))
+  =/  ign
+    |=  src=@t
+    ^-  (set @ud)
+    (fall (~(get by ignore-lines) src) ~)
+  =/  file-jsons=(list json)
+    ?.  want-files  ~
+    %+  murn  (sort ~(tap by finfo) |=([[a=@t *] [b=@t *]] (aor a b)))
+    |=  [src=@t ls=(list @t)]
+    ^-  (unit json)
+    =/  sc=(set @ud)  (in-scope src ls)
+    ?:  &(in-section =(~ sc))  ~
+    =/  ig=?  (~(has in ig-set) src)
+    =/  fl=[f=@ud d=@ud g=@ud]  (fall (~(get by flags) src) [0 0 0])
+    =/  documented=?  |(!=(0 f.fl) !=(0 d.fl) !=(0 g.fl))
+    ?:  &(ig !documented)  ~
+    =/  cset=(set @ud)  (~(int in (fall (~(get by covered) src) ~)) sc)
+    :-  ~
+    %-  pairs:enjs:format
+    :~  ['file' s+src]
+        ['extra' [%b ig]]
+        ['total' (numb:enjs:format ~(wyt in sc))]
+        ['covered' (numb:enjs:format ~(wyt in cset))]
+        ['fresh' (numb:enjs:format f.fl)]
+        ['drifted' (numb:enjs:format d.fl)]
+        ['gone' (numb:enjs:format g.fl)]
+        :-  'ranges'
+        :-  %a
+        %+  turn  (ranges cset)
+        |=([lo=@ud hi=@ud] `json`[%a ~[(numb:enjs:format lo) (numb:enjs:format hi)]])
+        :-  'scope'
+        :-  %a
+        %+  turn  (ranges sc)
+        |=([lo=@ud hi=@ud] `json`[%a ~[(numb:enjs:format lo) (numb:enjs:format hi)]])
+        ['anchors' [%a (flop (fall (~(get by fancs) src) ~))]]
+    ==
+  =/  tot-lines=@ud
+    %+  roll  ~(tap by finfo)
+    |=  [[s=@t l=(list @t)] a=@ud]
+    ?:  (~(has in ig-set) s)  a
+    ?.  in-section  (add a (sub (lent l) ~(wyt in (ign s))))
+    (add a ~(wyt in (in-scope s l)))
+  =/  tot-cov=@ud
+    %+  roll  ~(tap by covered)
+    |=  [[s=@t c=(set @ud)] a=@ud]
+    ?:  (~(has in ig-set) s)  a
+    ?.  in-section  (add a ~(wyt in (~(dif in c) (ign s))))
+    (add a ~(wyt in (~(int in c) (in-scope s (fall (~(get by finfo) s) ~)))))
+  =/  tf=[f=@ud d=@ud g=@ud]
+    %+  roll  ~(tap by flags)
+    |=  [[s=@t x=[f=@ud d=@ud g=@ud]] a=[f=@ud d=@ud g=@ud]]
+    ?:  &(in-section =(~ (fall (~(get by scope-lines) s) *(set @ud))))  a
+    [(add f.x f.a) (add d.x d.a) (add g.x g.a)]
+  %-  pairs:enjs:format
+  :~  ['files' [%a file-jsons]]
+      ['totalLines' (numb:enjs:format tot-lines)]
+      ['coveredLines' (numb:enjs:format tot-cov)]
+      ['fresh' (numb:enjs:format f.tf)]
+      ['drifted' (numb:enjs:format d.tf)]
+      ['gone' (numb:enjs:format g.tf)]
+      :-  'section'
+      ?:  =('' sec)  ~
+      (pairs:enjs:format ~[['name' s+sec] ['status' s+section-status]])
+      :-  'sections'
+      ?:  in-section  [%a ~]
+      (section-summaries nav finfo doc-cov ig-set ignore-lines doc-drift)
+  ==
+::  compute-coverage: one view (whole, or a section) plus the pins it wants
+::  stamped — load then render. The endpoint's cache-miss fallback; the
+::  recompute fiber loads once and renders every view itself.
+++  compute-coverage
+  |=  [=rail:tarball c=path ignore=(list @t) nav=json sec=@t]
+  =/  m  (fiber:fiber:nexus ,[resp=json np=(map @t @t)])
+  ^-  form:m
+  ;<  cs=cov-state  bind:m  (load-coverage rail c ignore)
+  (pure:m [(render-coverage cs nav sec %.y) newpins.cs])
+::  cache-name: the coverage cache grub for a collection — one json grub under
+::  /docs/cache, keyed by a mug of the collection path (outside /docs/mirror, so
+::  a re-mirror never wipes it).
+++  cache-name
+  |=  c=path
+  ^-  @ta
+  `@ta`(rap 3 'cov-' (scot %uv (mug c)) '.json' ~)
+::  recompute-coverage: (re)build and STORE the coverage cache for one collection
+::  — the whole-collection result plus each scoped section's view — and stamp the
+::  freshness pins once. Driven by the mirror fiber when a target's source (code
+::  or docs) or the pins change; the endpoint only reads what this writes. The
+::  mirror is loaded ONCE; every view renders from that load. Prints one timing
+::  line per collection.
+++  recompute-coverage
+  |=  [=rail:tarball c=path]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  [ignore=(list @t) nav=json]  bind:m  (read-docs-config rail c)
+  ;<  cs=cov-state  bind:m  (load-coverage rail c ignore)
+  =/  secs=(list @t)  (scoped-sections nav)
+  ::  %bout: vere prints the wall time of the wrapped render (in-event time
+  ::  is otherwise unobservable — the bowl clock only ticks per event).
+  ~?  dbg  [%shell-docs-render c sections=(lent secs)]
+  =/  [whole=json views=(map @t json)]
+    ~>  %bout
+    :-  (render-coverage cs nav '' %.n)
+    %-  malt
+    %+  turn  secs
+    |=(s=@t [s (render-coverage cs nav s %.y)])
+  ::  the overview reads `whole` only for its totals + section summaries, never
+  ::  the 1600-file list — so strip files from the cached whole (each section
+  ::  view keeps its own scoped, small file list).
+  =/  whole-slim=json
+    ?.(?=([%o *] whole) whole [%o (~(put by p.whole) 'files' [%a ~])])
+  =/  cache=json  (pairs:enjs:format ~[['whole' whole-slim] ['views' [%o views]]])
+  ~?  dbg  [%shell-docs-recompute c files=~(wyt by finfo.cs) anchors=nanc.cs]
+  ::  stamp every new pin once, then store the cache grub for this collection.
+  ;<  pj=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
+  =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
+  ;<  ~  bind:m
+    ?:  =(~ newpins.cs)  (pure:(fiber:fiber:nexus ,~) ~)
+    %+  over:io  (nex-road:io rail [%& /docs %'pins.json'])
+    [[/ %json] [%o (~(uni by pins) (~(run by newpins.cs) |=(h=@t `json`s+h)))]]
+  (over:io (nex-road:io rail [%& /docs/cache (cache-name c)]) [[/ %json] cache])
+::  ref-lines: resolve a list of "path [range]" selectors against the mirror
+::  line map into per-file line sets — the shared primitive for section scopes
+::  and ranged ignores. A bare path (no range) selects the whole file.
+++  ref-lines
+  |=  [finfo=(map @t (list @t)) refs=(list @t)]
+  ^-  (map @t (set @ud))
+  %+  roll  refs
+  |=  [ss=@t acc=(map @t (set @ud))]
+  =/  ref=(unit [file=@t from=@ud to=@ud])  (parse-ref (trip ss))
+  ?~  ref  acc
+  =/  ls=(unit (list @t))  (~(get by finfo) file.u.ref)
+  ?~  ls  acc
+  =/  total=@ud  (lent u.ls)
+  =/  hi=@ud  (min total ?:(=(0 to.u.ref) total to.u.ref))
+  =/  lset=(set @ud)
+    =/  n=@ud  from.u.ref
+    =|  s=(set @ud)
+    |-  ^-  (set @ud)
+    ?:  (gth n hi)  s
+    $(n +(n), s (~(put in s) n))
+  (~(put by acc) file.u.ref (~(uni in (fall (~(get by acc) file.u.ref) ~)) lset))
+::  scope-content: the concatenated text of a section's in-scope lines (files
+::  sorted, lines in order) — the thing we mug for a section's freshness. A
+::  whole-file scope mugs the whole file, so any edit to it drifts the section.
+++  scope-content
+  |=  [finfo=(map @t (list @t)) scope-lines=(map @t (set @ud))]
+  ^-  @t
+  %-  crip  %-  zing
+  %+  turn  (sort ~(tap by scope-lines) |=([[a=@t *] [b=@t *]] (aor a b)))
+  |=  [file=@t lset=(set @ud)]
+  =/  ls=(list @t)  (fall (~(get by finfo) file) ~)
+  =/  i=@ud  0
+  =|  out=(list tape)
+  |-  ^-  tape
+  ?~  ls  (zing (flop out))
+  =/  n=@ud  +(i)
+  ?:  (~(has in lset) n)
+    $(ls t.ls, i n, out ["{(trip i.ls)}\0a" out])
+  $(ls t.ls, i n)
 ::  find-snippet: first line of `text` containing `q` (case-insensitive),
 ::  capped for display. ~ if no line matches. Grep's line-as-context trick.
 ++  find-snippet
@@ -974,66 +1830,32 @@
   |=  [p=@t t=@t snip=@t]
   ^-  json
   (pairs:enjs:format ~[['path' s+p] ['title' s+t] ['snippet' s+snip]])
-::  docs-system: the assistant's persona and scope. It answers only from
-::  the docs, reached through its two read-only tools.
-++  docs-system
-  ^-  @t
-  '''
-  You are the Grubbery docs assistant, embedded in the Grubbery handbook.
-  Answer questions about Grubbery using ONLY the search_docs and read_doc
-  tools: search first, read the relevant docs, then answer from what they
-  actually say. If the docs do not cover something, say so plainly rather
-  than guessing. Be concrete and brief, and cite doc paths when useful.
-  '''
-::  docs-tools: the Anthropic tool schema for the two scoped capabilities.
-++  docs-tools
-  ^-  json
-  =/  tool
-    |=  [nm=@t desc=@t prop=@t pdesc=@t]
-    ^-  json
-    %-  pairs:enjs:format
-    :~  ['name' s+nm]
-        ['description' s+desc]
-        :-  'input_schema'
-        %-  pairs:enjs:format
-        :~  ['type' s+'object']
-            :-  'properties'
-            %-  pairs:enjs:format
-            :~  :-  prop
-                (pairs:enjs:format ~[['type' s+'string'] ['description' s+pdesc]])
-            ==
-            ['required' [%a ~[s+prop]]]
-        ==
-    ==
-  :-  %a
-  :~  %+  tool  'search_docs'
-        :*  'Full-text search the Grubbery docs. Returns matching doc paths, titles, and snippets.'
-            'query'  'the search terms'
-        ==
-      %+  tool  'read_doc'
-        :*  'Read one Grubbery doc in full by its path (as returned by search_docs).'
-            'path'  'the doc path, e.g. intro.md'
-        ==
-  ==
 ::  agent-weir: THE SANDBOX. The complete external reach we grant the
 ::  docs-agent when we mount it — the kernel refuses everything else.
 ::  Files (sigs) are granted as rails; directories as folds. make stays
 ::  empty: writing its own subtree (chats) is inherent, and it writes
 ::  nothing outside itself.
-::    peek: the docs, root /code, the raw grubbery desk source, proxy calls
-::    poke: bowl.sig (time + entropy), the proxy's main.sig
+::
+::  The agent sees ONLY the docs subtree — nothing external. That subtree holds
+::  everything it needs: the local mirror (/docs/mirror, a copy of every
+::  documented target's source AND handbook), the registry (targets.json), and
+::  its own chats. No /code or raw-desk grant: the mirror already contains that
+::  source, so the sandbox stays the docs' own data.
+::    peek: /docs (mirror + registry + own subtree), the anthropic name
+::          in /sys/link, and the proxy's calls once resolved
+::    poke: bowl.sig (time + entropy), the proxy's main.sig once resolved
 ++  agent-weir
+  |=  anth=(unit path)
   ^-  weir:tarball
   =/  dir  |=(p=path `road:tarball`[%& %| p])
   =/  fil  |=([p=path n=@ta] `road:tarball`[%& %& p n])
   :*  make=~
-      poke=(sy ~[(fil /sys 'bowl.sig') (fil /apps/'anthropic.anthropic' 'main.sig')])
       %-  sy
-      :~  (dir /apps/'shell.shell'/docs)
-          (dir /code)
-          (dir /sys/clay/desks/grubbery)
-          (dir /apps/'anthropic.anthropic'/calls)
-      ==
+      %+  weld  ~[(fil /sys 'bowl.sig')]
+      ?~(anth ~ ~[(fil u.anth 'main.sig')])
+      %-  sy
+      %+  weld  ~[(dir /apps/'shell.shell'/docs) (dir /sys/link/anthropic)]
+      ?~(anth ~ ~[(dir (snoc u.anth %calls))])
   ==
 ::  ask-agent: bridge one browser turn to the docs-agent nexus. Subscribe
 ::  to the conversation grub, poke the agent's main.sig with {chat-id,
@@ -1044,7 +1866,7 @@
   =/  m  (fiber:fiber:nexus ,[reply=@t trace=json])
   ^-  form:m
   =/  chat-road=road:tarball
-    (nex-road:io rail [%& /docs/agent %'chat.json'])
+    (nex-road:io rail [%& /docs/agent/chats %'main.json'])
   =/  main-road=road:tarball
     (nex-road:io rail [%& /docs/agent %'main.sig'])
   ;<  *  bind:m  (keep:io /agent chat-road ~)
@@ -1079,173 +1901,8 @@
   =/  last=json  (rear msgs)
   ?.  &(?=([%o *] last) ?=([~ %s %'assistant'] (~(get by p.last) 'role')))  $
   (pure:m conv)
-::  run-chat: the agent loop. Each turn pokes the metering proxy, and if
-::  the model asks for tools, runs them (scoped to the docs) and loops.
-::  Returns the final text plus a trace of every tool call, for the UI.
-++  run-chat
-  |=  [rail=rail:tarball jon=json]
-  =/  m  (fiber:fiber:nexus ,[reply=@t trace=(list json)])
-  ^-  form:m
-  ::  keep only {role, content} per message — the client also carries a
-  ::  `trace` field for its own UI, which the API rejects as an extra input.
-  =/  msgs=(list json)
-    =/  raw=(list json)
-      ?.  ?=([%o *] jon)  ~
-      =/  mj  (~(get by p.jon) 'messages')
-      ?.(?=([~ %a *] mj) ~ p.u.mj)
-    %+  turn  raw
-    |=  mj=json
-    ^-  json
-    ?.  ?=([%o *] mj)  mj
-    %-  pairs:enjs:format
-    %+  murn  `(list @t)`~['role' 'content']
-    |=  k=@t
-    =/  v=(unit json)  (~(get by p.mj) k)
-    ?~(v ~ `[k u.v])
-  =|  trace=(list json)
-  |-  ^-  form:m
-  =/  body=json
-    %-  pairs:enjs:format
-    :~  ['model' s+'claude-sonnet-4-6']
-        ['max_tokens' (numb:enjs:format 1.024)]
-        ['system' s+docs-system]
-        ['tools' docs-tools]
-        ['messages' [%a msgs]]
-    ==
-  ;<  resp=json  bind:m  (call-anthropic body)
-  =/  content-arr=(list json)
-    ?.  ?=([%o *] resp)  ~
-    =/  c  (~(get by p.resp) 'content')
-    ?.(?=([~ %a *] c) ~ p.u.c)
-  =/  tool-uses=(list json)
-    %+  skim  content-arr
-    |=  b=json
-    ?&(?=([%o *] b) ?=([~ %s %'tool_use'] (~(get by p.b) 'type')))
-  ?~  tool-uses
-    (pure:m [(extract-text resp) (flop trace)])
-  ;<  [results=(list json) new-trace=(list json)]  bind:m
-    (run-tools rail tool-uses)
-  =.  trace  (weld (flop new-trace) trace)
-  =/  asst=json  (pairs:enjs:format ~[['role' s+'assistant'] ['content' [%a content-arr]]])
-  =/  usr=json   (pairs:enjs:format ~[['role' s+'user'] ['content' [%a results]]])
-  $(msgs (weld msgs ~[asst usr]))
-::  call-anthropic: one metered round-trip. Subscribe to the call grub,
-::  poke main.sig with {id, body}, await done, drop. Key custody and
-::  metering live in the proxy.
-++  call-anthropic
-  |=  body=json
-  =/  m  (fiber:fiber:nexus ,json)
-  ^-  form:m
-  ;<  eny=@uvJ  bind:m  get-entropy:io
-  =/  call-id=@t     (scot %uv (end [3 8] eny))
-  =/  call-name=@ta  (crip "{(trip call-id)}.json")
-  =/  main-road=road:tarball  [%& %& /apps/'anthropic.anthropic' %'main.sig']
-  =/  call-road=road:tarball  [%& %& /apps/'anthropic.anthropic'/calls call-name]
-  ;<  *  bind:m  (keep:io /chat-call call-road ~)
-  ;<  ~  bind:m
-    %-  poke:io
-    :+  main-road  [/ %json]
-    (pairs:enjs:format ~[['id' s+call-id] ['body' body]])
-  ;<  resp=json  bind:m  (await-call call-road)
-  ;<  ~  bind:m  (drop:io /chat-call call-road)
-  (pure:m resp)
-::  run-tools: execute each requested tool_use, returning the tool_result
-::  blocks (for the model) and trace entries (for the UI).
-++  run-tools
-  |=  [rail=rail:tarball tool-uses=(list json)]
-  =/  m  (fiber:fiber:nexus ,[(list json) (list json)])
-  ^-  form:m
-  =|  results=(list json)
-  =|  trace=(list json)
-  |-  ^-  form:m
-  ?~  tool-uses  (pure:m [(flop results) (flop trace)])
-  =*  tu  i.tool-uses
-  ?.  ?=([%o *] tu)  $(tool-uses t.tool-uses)
-  =/  tid=@t      (jstr tu 'id')
-  =/  name=@t     (jstr tu 'name')
-  =/  input=json  (fall (~(get by p.tu) 'input') [%o ~])
-  ;<  [out=@t note=@t]  bind:m  (run-one-tool rail name input)
-  =/  result=json
-    %-  pairs:enjs:format
-    :~  ['type' s+'tool_result']
-        ['tool_use_id' s+tid]
-        ['content' s+out]
-    ==
-  =/  arg=@t
-    ?.  ?=([%o *] input)  ''
-    =/  q  (~(get by p.input) 'query')
-    ?:  ?=([~ %s *] q)  p.u.q
-    =/  pa  (~(get by p.input) 'path')
-    ?:(?=([~ %s *] pa) p.u.pa '')
-  =/  te=json
-    (pairs:enjs:format ~[['tool' s+name] ['arg' s+arg] ['note' s+note]])
-  $(tool-uses t.tool-uses, results [result results], trace [te trace])
-::  run-one-tool: dispatch by name to a scoped, read-only capability.
-++  run-one-tool
-  |=  [rail=rail:tarball name=@t input=json]
-  =/  m  (fiber:fiber:nexus ,[@t @t])
-  ^-  form:m
-  ?:  =(name 'search_docs')
-    (tool-search-docs rail ?:(?=([%o *] input) (jstr input 'query') ''))
-  ?:  =(name 'read_doc')
-    (tool-read-doc rail ?:(?=([%o *] input) (jstr input 'path') ''))
-  (pure:m ['unknown tool' 'error'])
-::  tool-search-docs: full-text search over the /docs grubs (the same
-::  corpus the reader's search box uses). Returns a compact hit list.
-++  tool-search-docs
-  |=  [rail=rail:tarball q=@t]
-  =/  m  (fiber:fiber:nexus ,[@t @t])
-  ^-  form:m
-  =/  qlow=tape  (cass (trip q))
-  ?:  =(~ qlow)  (pure:m ['(empty query)' '0 hits'])
-  =/  items=(list [path=@t title=@t])  docs-list
-  =|  hits=(list tape)
-  |-  ^-  form:m
-  ?~  items
-    =/  n=@ud  (lent hits)
-    =/  out=@t
-      ?:  =(0 n)  'No matching docs.'
-      %-  crip
-      %-  zing
-      (turn (flop hits) |=(l=tape (weld l "\0a")))
-    (pure:m [out (crip "{(a-co:co n)} hits")])
-  ;<  fv=view:nexus  bind:m
-    (peek:io (nex-road:io rail [%& /docs `@ta`path.i.items]) `[/ %mime])
-  =/  txt=@t
-    ?.  ?=([%file *] fv)  ''
-    `@t`q.q:!<(mime (need-vase:tarball sang.fv))
-  =/  snip=(unit @t)  (find-snippet txt q)
-  =/  tmatch=?  !=(~ (find qlow (cass (trip title.i.items))))
-  ?.  |(?=(^ snip) tmatch)  $(items t.items)
-  =/  line=tape
-    "{(trip path.i.items)} — {(trip title.i.items)}: {?~(snip "" (trip u.snip))}"
-  $(items t.items, hits [line hits])
-::  tool-read-doc: read one /docs grub in full as markdown.
-++  tool-read-doc
-  |=  [rail=rail:tarball p=@t]
-  =/  m  (fiber:fiber:nexus ,[@t @t])
-  ^-  form:m
-  ?:  =('' p)  (pure:m ['(no path given)' 'error'])
-  ;<  fv=view:nexus  bind:m
-    (peek:io (nex-road:io rail [%& /docs `@ta`p]) `[/ %mime])
-  ?.  ?=([%file *] fv)
-    (pure:m [(crip "no doc at {(trip p)}") 'not found'])
-  =/  txt=@t  `@t`q.q:!<(mime (need-vase:tarball sang.fv))
-  (pure:m [txt (crip "{(a-co:co (met 3 txt))} bytes")])
-::  await-call: loop on news for our call grub until status is done,
-::  then yield the raw provider response json.
-++  await-call
-  |=  call-road=road:tarball
-  =/  m  (fiber:fiber:nexus ,json)
-  ^-  form:m
-  |-
-  ;<  ~  bind:m  (take-news /chat-call)
-  ;<  =view:nexus  bind:m  (peek:io call-road ~)
-  ?.  ?=([%file *] view)  $
-  =/  jon=json  (fall (mole |.(!<(json (need-vase:tarball sang.view)))) *json)
-  ?.  ?=(%o -.jon)  $
-  ?.  ?=([~ %s %'done'] (~(get by p.jon) 'status'))  $
-  (pure:m (fall (~(get by p.jon) 'response') [%o ~]))
+::  (the docs chat loop that used to live here moved into the sandboxed
+::  docs-agent nexus, now built on lib/clanker)
 ::  take-news: wait for a news wave on `wire`, ignore everything else.
 ++  take-news
   |=  =wire
@@ -1257,378 +1914,6 @@
     ~              [%wait ~]
     [~ %news * *]  ?:(=(wire wire.u.in) [%done ~] [%skip ~])
   ==
-::  extract-text: concatenate the text blocks of an Anthropic Messages
-::  response; surface proxy/API errors as plain text.
-++  extract-text
-  |=  resp=json
-  ^-  @t
-  ?.  ?=([%o *] resp)  'no response'
-  =/  err=(unit json)  (~(get by p.resp) 'error')
-  ?^  err
-    ?:  ?=(%s -.u.err)  p.u.err
-    (crip "API error: {(trip (en:json:html u.err))}")
-  =/  content=(unit json)  (~(get by p.resp) 'content')
-  ?.  ?=([~ %a *] content)  'no content in response'
-  %-  crip
-  %-  zing
-  %+  turn  p.u.content
-  |=  b=json
-  ^-  tape
-  ?.  ?=([%o *] b)  ""
-  ?.  ?=([~ %s %'text'] (~(get by p.b) 'type'))  ""
-  =/  t=(unit json)  (~(get by p.b) 'text')
-  ?:(?=([~ %s *] t) (trip p.u.t) "")
-::  Stub handbook content — deliberately thin. Flesh these out live at
-::  /apps/grubbery/docs; edits persist (grubs), the seeds never overwrite.
-++  intro-md
-  '''
-  # The Grubbery Handbook
-
-  Grubbery is a general-purpose application model for Urbit. A stock Gall app
-  is one agent holding one big state noun, migrated by hand every time that
-  shape changes. Grubbery takes the opposite bet: an application is a set of
-  small **nexuses** composing over a shared **namespace** of content-addressed
-  **grubs**, and all their work runs as restartable **fibers**. State doesn't
-  live in an agent heap — it lives in the namespace, versioned and portable,
-  and code reads it back on demand.
-
-  Three nouns carry the whole model:
-
-  - **Nexus** — the unit of an application. Declares what lives in its slice
-    of the namespace, and answers requests against it.
-  - **Grub** — the unit of state. One content-addressed file carrying a mark
-    (its type).
-  - **Fiber** — the unit of work. A monadic process that reads and writes the
-    namespace and can be rebooted at any point.
-
-  ## Why bother
-
-  The payoff is how it scales. A monolithic agent gets *harder* to extend the
-  bigger it grows — every feature entangles with one state and one event
-  handler. Nexuses compose instead of entangle, so the next feature reuses
-  primitives rather than thickening a core. And because state *is* the
-  namespace, the two worst Gall taxes — hand-written migrations and cross-ship
-  auth boilerplate — mostly evaporate.
-
-  ## Where to start
-
-  - [Nexuses](#nexuses.md) — the unit of an application
-  - [Grubs & the namespace](#grubs.md) — where state actually lives
-  - [Fibers](#fibers.md) — how work gets done
-
-  ## This handbook is live
-
-  > These pages are markdown grubs served by the shell nexus, and they quote
-  > source **straight from the running ship** — no copy-paste, so a snippet
-  > can't drift from the code it describes.
-
-  Here is a whole nexus helper lib, read live from the namespace through the
-  kernel's own file API and highlighted in place:
-
-  ```live
-  /lib/shell.hoon
-  ```
-  '''
-++  nexuses-md
-  '''
-  # Nexuses
-
-  A nexus is the grubbery unit of an application — a core with two arms:
-
-  - **`on-load`** declares what persistently lives in the nexus's subtree of
-    the namespace: the grubs it owns and their initial state.
-  - **`on-file`** answers "given this file — a request, a timer, a
-    subscription update — do the work." HTTP handlers and fibers live here.
-
-  ## on-load: declaring your state
-
-  `on-load` returns a *bole* built by `spin:loader` over a list of loader
-  operations. The two you'll reach for constantly:
-
-  - **`%fall`** seeds a grub *only if absent* — the runtime owns it after, and
-    reloads never clobber it. For state edited at runtime.
-  - **`%over`** *overwrites* on every load — the code is the source of truth.
-    For assets and content authored in-source.
-
-  ```hoon
-  %+  spin:loader  ball
-  :~  (manifest:loader 0)
-      [%fall %& [/ %'main.sig'] [[/ %sig] ~]]      ::  a fiber entrypoint
-      [%fall %| /cache empty-dir:loader]           ::  a rebuildable cache dir
-      [%over %& [/ %'app.js'] [[/ %mime] app-js]]  ::  a served asset
-  ==
-  ```
-
-  Getting these backwards is the classic footgun: seed content with `%fall`
-  and it freezes at first boot; author it with `%over` and every commit
-  redeploys it. It's the same record-vs-cache distinction as
-  [Grubs](#grubs.md).
-
-  ## on-file: doing the work
-
-  Requests route in as the file that represents them. A nexus binds an HTTP
-  path and hands off to a fiber:
-
-  ```hoon
-  [~ %'main.sig']
-    ;<  ~  bind:m  (rise-wait:io prod "failed")
-    ;<  ~  bind:m  (bind-http:io [~ /apps/grubbery])
-    (http-dispatch:io %shell)
-  ```
-
-  The kernel routes matching requests here and spawns a fiber per request.
-
-  ## Reading anything, live
-
-  A nexus can read any file in the running namespace. Here's how a tool greps
-  the whole ball — the same read primitive the live-code embeds use:
-
-  ```live
-  /lib/mcp/grep.hoon 53-64
-  ```
-
-  _TODO: registration via a `%fall` row in `root.hoon`; the full loader
-  vocabulary; declaring weirs._
-  '''
-++  grubs-md
-  '''
-  # Grubs & the namespace
-
-  A **grub** is one file in the namespace: a path, a name, and a **blot** —
-  its content plus a **mark** (its type). Marks are what let the system
-  convert a grub on the way out — the kernel's file API serves a `.hoon` grub
-  as text by running its mark's `mime` tube.
-
-  The **namespace** is the shared tree of every nexus's grubs. It's
-  content-addressed, so identical content is stored once and dedup'd across
-  the whole system. Crucially it *is* the state — there is no separate agent
-  heap to migrate when a type changes.
-
-  ## Two tiers: record vs cache
-
-  Not all state is equal, and grubbery keeps a hard line between:
-
-  - **System of record** — authoritative state, the truth. Lose it and you
-    lose data.
-  - **Cache** — derived, rebuildable state. Lose it and you recompute it.
-
-  The convention is to keep them in *separate sibling grubs* so the tiers are
-  legible at a glance. The shell nexus does exactly this: consent records live
-  under `/permit`, rebuildable views under `/cache`. That split is a design
-  rule, not a suggestion — it's how you know, staring at an `on-load`, what's
-  precious and what's disposable.
-
-  ## %fall vs %over encode lifecycle
-
-  The two loader verbs aren't just "seed" and "write" — they declare who owns
-  a grub:
-
-  - **`%fall`** = "owned at runtime; seed once." Record tier, or anything a
-    user or editor mutates.
-  - **`%over`** = "defined in code; overwrite." Assets, and content with no
-    runtime editor yet.
-
-  ## Reading a grub
-
-  From inside a fiber you `peek` a grub by its road, optionally casting to a
-  mark:
-
-  ```hoon
-  ;<  jon=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /cache %'weirs.json']) ,json)
-  ```
-
-  A `~` back means "nothing there" — a clean miss the reader handles, not an
-  error.
-
-  _TODO: content-addressing internals; the blot type in depth; marks and
-  tubes; cross-nexus and cross-ship peeks._
-  '''
-++  fibers-md
-  '''
-  # Fibers
-
-  A **fiber** is grubbery's unit of work: a monadic process that reads and
-  writes the namespace, binds HTTP, peeks other nexuses, waits on timers —
-  and, the whole point, **restarts cleanly from state** at any moment.
-
-  ## The monad
-
-  Open a fiber by naming its result type, sequence effects with `;< … bind:m`,
-  finish with `pure:m`:
-
-  ```hoon
-  =/  m  (fiber:fiber:nexus ,~)
-  ;<  now=@da         bind:m  get-time:io
-  ;<  ~               bind:m  (bind-http:io [~ /apps/grubbery])
-  ;<  wv=(unit json)  bind:m  (peek-as:io road ,json)
-  (pure:m ~)
-  ```
-
-  Each `;<` line is one step: run the effect on the right, bind its result on
-  the left, continue. Reads, writes, time, HTTP — everything sequences the
-  same way, and the main arm reads top-to-bottom as the action it performs.
-
-  ## Roads and weirs
-
-  A **road** names a location in the namespace —
-  `(nex-road:io rail [%& /dir %'file'])` addresses a grub relative to the
-  nexus. A **weir** is a *capability*: the set of reaches a nexus declares it
-  may make. Reaching outside your declared weir is refused — that's how
-  cross-nexus and cross-ship reads stay safe without per-call auth checks.
-
-  > An empty weir `{}` means "declared, with no holes"; an *absent* weir `~`
-  > means "no filter at all." That's a real, intentional distinction — not a
-  > typo to paper over.
-
-  ## The restart contract
-
-  The load-bearing invariant: **reboot at any time, recover from state.** A
-  fiber isn't a long-lived thread you must keep alive — it's derived from the
-  namespace, so the runtime can restart it whenever and it resumes from where
-  the state says. This is why grubbery treats restarts as ordinary rather than
-  hazardous, and why a loud crash is a *bug report*, not corruption to hide.
-
-  _TODO: timeouts and `%timer-rest`; `poke` / `poke-soft`; the fiber
-  code-style conventions (one-line binds, helpers in a bottom core)._
-  '''
-++  roadmap-md
-  '''
-  # TODO & future topics
-
-  The doc backlog. Check things off as pages land; add topics freely.
-
-  ## Core model (the fundamentals)
-
-  - [ ] Nexuses: `on-load` vs `on-file`, the request/fiber lifecycle
-  - [ ] The loader vocabulary: `%fall` vs `%over`, `manifest`, `spin`
-  - [ ] Grubs, marks, and content-addressing
-  - [ ] System-of-record vs rebuildable-cache tiers (sibling grubs)
-  - [ ] Fibers: the `bind:m` monad, shadowing `m`, helper cores
-  - [ ] Roads: `nex-road`, `peek`/`peek-as`, cross-nexus reads
-  - [ ] Reboot-anytime + recover-from-state: the core contract
-
-  ## Cross-ship
-
-  - [ ] Weirs: capability-scoped reaches, empty `{}` vs absent `~`
-  - [ ] Cross-ship peeks, veto/tomb, the snap protocol
-  - [ ] Discovery: usergroups, grants, the /sys/link registry
-
-  ## Building real things
-
-  - [ ] Serving HTTP: binding, static shell + data endpoints
-  - [ ] The permission system: sources vs views, consent, enforcement
-  - [ ] Desks: install, sync, follower model, publishing
-  - [ ] Dynamic tools: `write_code`, `check_bin`, the MCP surface
-
-  ## Why grubbery (the pitch)
-
-  - [ ] A program vs a substrate: composition beats entanglement
-  - [ ] Migrating a Gall agent: the strangler-fig pattern (see lattice)
-  - [ ] The overlay pattern: keep source in your own repo, sync into gub
-
-  ## Meta
-
-  - [ ] The in-browser editor (`<code-editor>` + save)
-  - [ ] A worked example, end to end
-  '''
-::
-::  === tutorials ===
-::
-++  hello-nexus-md
-  '''
-  # Your first nexus
-
-  *How to build a minimal nexus from scratch — on-load, on-file, and the fiber lifecycle.*
-
-  (Coming soon)
-  '''
-++  serving-a-page-md
-  '''
-  # Serving a web page
-
-  *Bind an HTTP route, serve static assets, and build a simple UI on grubbery primitives.*
-
-  (Coming soon)
-  '''
-++  talking-to-apis-md
-  '''
-  # Talking to external APIs
-
-  *Use iris to call HTTP APIs, parse JSON responses, and persist results as grubs.*
-
-  (Coming soon)
-  '''
-::
-::  === principles ===
-::
-++  namespace-first-md
-  '''
-  # Namespace-first
-
-  *Authoritative state lives in the namespace. Derived and rebuildable caches go in sibling grubs. Write-cost never justifies moving truth out.*
-
-  (Coming soon)
-  '''
-++  reboot-anytime-md
-  '''
-  # Reboot-anytime
-
-  *The core contract: reboot at any point, recover from persisted state. Restarts are not hazards — they are the normal case.*
-
-  (Coming soon)
-  '''
-++  composition-md
-  '''
-  # Composition over entanglement
-
-  *A program vs a substrate. Nexuses compose through the namespace, not through shared mutable state. The strangler-fig pattern for migrating Gall agents.*
-
-  (Coming soon)
-  '''
-::
-::  === subsystems ===
-::
-++  permissions-md
-  '''
-  # Permissions
-
-  *Sources vs views, grant.json, consent flows, the active/denied/missing/unmanaged overlay.*
-
-  (Coming soon)
-  '''
-++  desks-md
-  '''
-  # Desks
-
-  *Install, sync, the follower model, publishing from a git repo to a desk.*
-
-  (Coming soon)
-  '''
-++  cross-ship-md
-  '''
-  # Cross-ship
-
-  *Weirs, capability-scoped reaches, cross-ship peeks, veto/tomb, the snap protocol.*
-
-  (Coming soon)
-  '''
-++  http-serving-md
-  '''
-  # HTTP serving
-
-  *Binding routes, web.sig, static shell + data endpoints, the serve pattern, content-types.*
-
-  (Coming soon)
-  '''
-++  code-nexuses-md
-  '''
-  # Code nexuses
-
-  *Scoped code builds, find-code resolution, check_bin, dynamic tools.*
-
-  (Coming soon)
-  '''
 ::  === repos-to-sync bootstrap (shell-owned git_repo + desk setup) ===
 ::  default-repos: the shipped list of libraries this ship follows by
 ::  default. Each becomes a git_repo (polling github) + a desk following
@@ -1753,13 +2038,19 @@
   ^-  form:m
   =/  name=@t  (stock-name entry)
   =/  desk-dir=path  /apps/'shell.shell'/desks/[(cat 3 `@ta`name '.desk')]
-  =/  repo-dir=path  /apps/'forge.git_forge'/repos/[(cat 3 `@ta`name '.git_repo')]
+  ::  forge houses the repo instances; it is found by name
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  ?.  ?=([~ %| *] fr)
+    ~&  >>>  %shell-pairing-no-forge
+    (pure:m ~)
+  =/  forge=path  p.u.fr
   ::  the /code path the desk will follow
   =/  code=@t
     ?-  -.entry
       %code    code.entry
-      %github  (crip "/apps/forge.git_forge/repos/{(trip name)}.git_repo/data/tree/code")
+      %github  (crip "{(spud forge)}/repos/{(trip name)}.git_repo/data/tree/code")
     ==
+  =/  repo-dir=path  (weld forge /repos/[(cat 3 `@ta`name '.git_repo')])
   ::  ORDER MATTERS HERE, and it used to leave a user with a repo, no desk,
   ::  and nothing at all in the log.
   ::
@@ -1795,17 +2086,16 @@
       =/(v (~(get by cur-obj) 'repo') ?:(?=([~ %s *] v) p.u.v ''))
     =/  cur-ref=@t
       =/(v (~(get by cur-obj) 'ref') ?:(?=([~ %s *] v) p.u.v ''))
-    ?:  &(=(cur-repo repo.entry) =(cur-ref ref.entry))  (pure:m ~)
-    ::  config.json is a plain data grub (no poke handler), so overwrite
-    ::  it with over:io — poke:io would nack and crash this handler.
-    (over:io [%& %& repo-dir %'config.json'] [[/ %json] (repo-config repo.entry ref.entry)])
-  ::  1b. the poll daemon reads poll.json, not config.json's `poll`: a
-  ::  repo is seeded with minutes 0 (off) and nothing ever copied the
-  ::  cadence across, so a stock mirror only pulled when something poked
-  ::  it — a version pushed to github never reached the distributor on
-  ::  its own. Turn the daemon on once; a cadence someone set stays.
-  ;<  ~  bind:m
-    ?.  ?=(%github -.entry)  (pure:m ~)
+    ;<  ~  bind:m
+      ?:  &(=(cur-repo repo.entry) =(cur-ref ref.entry))  (pure:m ~)
+      ::  config.json is a plain data grub (no poke handler), so overwrite
+      ::  it with over:io — poke:io would nack and crash this handler.
+      (over:io [%& %& repo-dir %'config.json'] [[/ %json] (repo-config repo.entry ref.entry)])
+    ::  the poll daemon reads poll.json, not config.json's `poll`: a repo
+    ::  is seeded with minutes 0 (off) and nothing ever copied the cadence
+    ::  across, so a stock mirror only pulled when something poked it —
+    ::  a version pushed to github never reached the distributor on its
+    ::  own. Turn the daemon on once; a cadence someone set stays.
     (ensure-poll repo-dir)
   ::  2. the desk, BEFORE any network work
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
@@ -2285,11 +2575,10 @@
   ;<  cur=(map @t json)  bind:m  (read-notified rail)
   %+  put:io  (nex-road:io rail [%& /permit %'notified.json'])
   [[/ %json] [%o (~(put by cur) app ask)]]
-::  +notify-target: poke road to the notifications nexus's main.sig.
+::  +notify-target: the notifications nexus's main.sig, found by name
 ::
 ++  notify-target
-  ^-  road:tarball
-  [%& %& [/apps/'notifications.notifications' %'main.sig']]
+  (resolve-link-at:io '@notifications' [%& / %'main.sig'])
 ::  +register-notify: register the shell with the notifications nexus so
 ::  its notify pokes are accepted (senders must be registered). Poke-soft
 ::  so a failed registration is logged, not fatal — re-run on every rise.
@@ -2300,7 +2589,9 @@
   ^-  form:m
   =/  payload=json
     (pairs:enjs:format ~[['action' s+'register'] ['name' s+'permissions']])
-  ;<  *  bind:m  (poke-soft:io notify-target [[/ %json] payload])
+  ;<  nt=(unit road:tarball)  bind:m  notify-target
+  ?~  nt  (pure:m ~)
+  ;<  *  bind:m  (poke-soft:io u.nt [[/ %json] payload])
   (pure:m ~)
 ::  +is-settled: has this exact declared ask already been ruled on? True iff
 ::  permit/approved holds a record for the app whose `declared` roads match
@@ -2367,7 +2658,10 @@
         ['push' s+'true']
         ['metadata' meta]
     ==
-  ;<  err=(unit tang)  bind:m  (poke-soft:io notify-target [[/ %json] payload])
+  ;<  nt=(unit road:tarball)  bind:m  notify-target
+  ;<  err=(unit tang)  bind:m
+    ?~  nt  (pure:(fiber:fiber:nexus ,(unit tang)) `~[leaf+"notifications is not in /sys/link"])
+    (poke-soft:io u.nt [[/ %json] payload])
   (pure:m =(~ err))
 ::  +apply-permit-action: dispatch a validated POST permission action to the
 ::  authoritative component grubs. The caller already gated on src==our, so
@@ -2464,7 +2758,10 @@
 ++  read-local-tiles
   =/  m  (fiber:fiber:nexus ,(list tile))
   ^-  form:m
-  ;<  =view:nexus  bind:m  (peek:io [%& %| /apps/'tiles.tiles'/tiles] ~)
+  ;<  tl=(unit lane:tarball)  bind:m  (resolve-link:io '@tiles')
+  ?.  ?=([~ %| *] tl)  (pure:m ~)
+  =/  tiles-root=path  p.u.tl
+  ;<  =view:nexus  bind:m  (peek:io [%& %| (weld tiles-root /tiles)] ~)
   ?.  ?=([%ball *] view)
     (pure:m ~)
   =/  subdirs=(list [@ta ball:tarball])  ~(tap by dir.ball.view)
@@ -2473,7 +2770,7 @@
   ?~  subdirs  (pure:m (flop acc))
   =/  name=@ta  -.i.subdirs
   ;<  tv=view:nexus  bind:m
-    (peek:io [%& %& /apps/'tiles.tiles'/tiles/[name] %'tile.json'] `[/ %json])
+    (peek:io [%& %& (weld tiles-root /tiles/[name]) %'tile.json'] `[/ %json])
   ?.  ?=([%file *] tv)
     $(subdirs t.subdirs)
   =/  til=(unit tile)  (json-to-tile name sang.tv)
@@ -2663,6 +2960,257 @@
   ^-  path
   =/  bare=tape  ?~((trip nm) ~ (slag 1 (trip nm)))
   (weld /sys/link (stab (crip (weld "/" bare))))
+::  +json-strs: the string elements of a (unit json) array, in order.
+::
+++  json-strs
+  |=  j=(unit json)
+  ^-  (list @t)
+  ?~  j  ~
+  ?.  ?=([%a *] u.j)  ~
+  (murn p.u.j |=(x=json ?:(?=([%s *] x) `p.x ~)))
+::  +colls: parse targets.json into the collection registry. Each entry is
+::  {name, docs, sources}: `name` is the collection's identity (its URL key),
+::  `docs` the namespace dir its handbook prose lives in, `sources` the tagged
+::  source roots it documents. A live block or scope selector names a source by
+::  its tag as the leading path segment (/gub/lib/build.hoon), so the tag is
+::  literally where that source mounts under the collection's mirror.
+++  colls
+  |=  j=(unit json)
+  ^-  (list [name=@t docs=path sources=(list [tag=@t path=path])])
+  ?~  j  ~
+  ?.  ?=([%a *] u.j)  ~
+  %+  murn  p.u.j
+  |=  x=json
+  ^-  (unit [name=@t docs=path sources=(list [tag=@t path=path])])
+  ?.  ?=([%o *] x)  ~
+  =/  nm  (~(get by p.x) 'name')
+  ?.  ?=([~ %s *] nm)  ~
+  =/  dc  (~(get by p.x) 'docs')
+  =/  docs=path  ?.(?=([~ %s *] dc) ~ (stab p.u.dc))
+  =/  sj  (~(get by p.x) 'sources')
+  =/  sources=(list [tag=@t path=path])
+    ?.  ?=([~ %a *] sj)  ~
+    %+  murn  p.u.sj
+    |=  s=json
+    ^-  (unit [tag=@t path=path])
+    ?.  ?=([%o *] s)  ~
+    =/  tg  (~(get by p.s) 'tag')
+    =/  pp  (~(get by p.s) 'path')
+    ?.  ?&(?=([~ %s *] tg) ?=([~ %s *] pp))  ~
+    `[p.u.tg (stab p.u.pp)]
+  `[p.u.nm docs sources]
+::  +col-name: a collection path's identity — its single name segment.
+++  col-name
+  |=  c=path
+  ^-  @t
+  ?~(c '' i.c)
+::  +coll-rec: the registry record for a collection path, matched by name.
+++  coll-rec
+  |=  [=rail:tarball c=path]
+  =/  m  (fiber:fiber:nexus ,(unit [name=@t docs=path sources=(list [tag=@t path=path])]))
+  ^-  form:m
+  ;<  tg=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
+  =/  hit  (skim (colls tg) |=([nm=@t *] =(nm (col-name c))))
+  (pure:m ?~(hit ~ `i.hit))
+::  +src-path: a source's configured path to the namespace path it names. A path
+::  rooted at a known namespace top (/code, /sys, /apps, /docs) is taken as-is
+::  — so a source can point at raw desk source under /sys/clay/desks/<desk> —
+::  anything else is /code-relative (a bare "/lib/..." means "/code/lib/...").
+::
+++  src-path
+  |=  t=path
+  ^-  path
+  ?~  t  t
+  ?:  ?=(?(%code %sys %apps %docs) i.t)  t
+  [%code t]
+::  +coll-mirror: the mirror subtree holding a collection's CODE sources, each
+::  under its tag (/docs/mirror/<name>/<tag>/...). Coverage peeks this root, so a
+::  mirrored file keys as /<tag>/<desk-path> — the tag is just the first segment.
+++  coll-mirror
+  |=  c=path
+  ^-  path
+  (welp /docs/mirror c)
+::  +source-mirror: where one tagged source of a collection mounts.
+++  source-mirror
+  |=  [c=path tag=@t]
+  ^-  path
+  (welp (coll-mirror c) ~[tag])
+::  +coll-docs: the mirror subtree holding a collection's HANDBOOK prose (its
+::  docs home), under /docs/hb — kept out of /docs/mirror so the markdown never
+::  counts as code. nav/page/search read straight from here.
+++  coll-docs
+  |=  c=path
+  ^-  path
+  (welp /docs/hb c)
+::  +doc-lane: one handbook page by its nav path. The path may carry
+::  directories (faults/x.md); every segment but the last is a dir under
+::  the collection's docs mirror, the last is the file.
+++  doc-lane
+  |=  [c=path doc=@t]
+  ^-  lane:tarball
+  =/  seg=path  (stab (cat 3 '/' doc))
+  [%& (welp (coll-docs c) (snip seg)) (rear seg)]
+::  +mirror-jobs: the [dest src] copies that keep the mirror current — one per
+::  source (its namespace dir → /docs/mirror/<name>/<tag>) plus the handbook
+::  (its docs home → /docs/hb/<name>). do-mirror runs them; sync-keeps watches
+::  their src sides.
+++  mirror-jobs
+  |=  cs=(list [name=@t docs=path sources=(list [tag=@t path=path])])
+  ^-  (list [dest=path src=path])
+  %-  zing
+  %+  turn  cs
+  |=  co=[name=@t docs=path sources=(list [tag=@t path=path])]
+  ^-  (list [dest=path src=path])
+  =/  c=path  ~[name.co]
+  %+  weld
+    ?~(docs.co ~ ~[[(coll-docs c) docs.co]])
+  %+  turn  sources.co
+  |=  s=[tag=@t path=path]
+  [(source-mirror c tag.s) (src-path path.s)]
+::  +mirror-dir: mirror one target directory subtree into our own /docs/mirror
+::  in a single event — a deep peek of the whole subtree as a ball,
+::  written back with over-fold (the %over analog for directories). The
+::  namespace's own copy-a-directory primitive; no per-file walk. The mirror
+::  is a faithful grub copy; what counts toward coverage (ignore) is applied
+::  later, at compute time.
+::
+++  mirror-dir
+  |=  [=rail:tarball dest=path src=path prior=(unit @)]
+  =/  m  (fiber:fiber:nexus ,(unit @))
+  ^-  form:m
+  ;<  =view:nexus  bind:m  (peek:io [%& %| src] ~)
+  ?.  ?=([%ball *] view)  (pure:m ~)
+  ::  a mug of the source ball is the change check — same mug as last time
+  ::  means the source hasn't changed, so skip the (expensive) re-copy.
+  =/  mg=@  (mug ball.view)
+  ?:  =(`mg prior)  (pure:m ~)
+  =/  bol=bole:tarball  (ball-to-bole:tarball ball.view)
+  ::  preserve the dest dir's own neck (what on-load established) so the
+  ::  overwrite doesn't strip it — the same care sync-dir takes in nex/desk.
+  ;<  cur=view:nexus  bind:m  (peek:io (nex-road:io rail [%| dest]) ~)
+  =/  nek  ?.(?=([%ball *] cur) ~ ?~(fil.ball.cur ~ neck.u.fil.ball.cur))
+  =/  root=pulp:tarball  (fall fil.bol `pulp:tarball`[~ ~ %.n ~])
+  =.  bol  bol(fil `root(neck nek))
+  ;<  ~  bind:m  (over-fold:io (nex-road:io rail [%| dest]) bol)
+  (pure:m `mg)
+::  +triml: drop leading spaces from a tape.
+::
+++  triml
+  |=  t=tape
+  ^-  tape
+  ?~  t  t
+  ?:  =(' ' i.t)  $(t t.t)
+  t
+::  +parse-ref: one live-block ref line -> [file from to]. "path a-b" is a
+::  line range; "path" alone is the whole file (to=0 sentinel). ~ if unparsable.
+::
+++  parse-ref
+  |=  ln=tape
+  ^-  (unit [file=@t from=@ud to=@ud])
+  =/  t=tape  (triml ln)
+  ?~  t  ~
+  =/  full=tape  t
+  =/  sp=(unit @ud)  (find " " full)
+  ?~  sp
+    `[(crip full) 1 0]
+  =/  file=@t   (crip (scag u.sp full))
+  =/  rest=tape  (triml (slag +(u.sp) full))
+  =/  dash=(unit @ud)  (find "-" rest)
+  ?~  dash
+    =/  n=(unit @ud)  (rush (crip rest) dem)
+    ?~(n `[file 1 0] `[file u.n u.n])
+  =/  from=(unit @ud)  (rush (crip (scag u.dash rest)) dem)
+  =/  to=(unit @ud)    (rush (crip (slag +(u.dash) rest)) dem)
+  ?:  |(?=(~ from) ?=(~ to))  ~
+  `[file u.from u.to]
+::  +parse-anchors: the live-block anchors in one doc's markdown — each a
+::  ` ```live ` fence whose body is "path range". Returns [file from to] list.
+::
+++  parse-anchors
+  |=  md=@t
+  ^-  (list [file=@t from=@ud to=@ud])
+  =/  lines=(list tape)  (turn (to-wain:format md) trip)
+  =|  out=(list [@t @ud @ud])
+  =/  live=?  %.n
+  |-  ^-  (list [@t @ud @ud])
+  ?~  lines  (flop out)
+  =/  ln=tape  (triml i.lines)
+  ?:  live
+    ?:  =("```" (scag 3 ln))  $(lines t.lines, live |)
+    =/  a=(unit [@t @ud @ud])  (parse-ref ln)
+    ?~  a  $(lines t.lines, live |)
+    $(lines t.lines, out [u.a out], live |)
+  ?:  =("```live" (scag 7 ln))  $(lines t.lines, live &)
+  $(lines t.lines)
+::  +gather-all-anchors: every live-block anchor across all docs, tagged with
+::  its doc. Reads each /docs grub, parses its fences.
+::
+++  gather-all-anchors
+  |=  [=rail:tarball c=path]
+  =/  m  (fiber:fiber:nexus ,(list [doc=@t file=@t from=@ud to=@ud]))
+  ^-  form:m
+  ;<  [* nav=json]  bind:m  (read-docs-config rail c)
+  =/  items=(list [path=@t title=@t])  (nav-items nav)
+  =|  all=(list [@t @t @ud @ud])
+  |-  ^-  form:m
+  ?~  items  (pure:m (flop all))
+  ;<  fv=view:nexus  bind:m
+    (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
+  =/  txt=@t  (grub-text fv)
+  =.  all
+    %+  weld  all
+    %+  turn  (parse-anchors txt)
+    |=([file=@t from=@ud to=@ud] [path.i.items file from to])
+  $(items t.items)
+::  +ranges: a set of line numbers as a compact list of contiguous [lo hi]
+::  runs, for painting the heatmap without shipping every line number.
+::
+++  ranges
+  |=  s=(set @ud)
+  ^-  (list [@ud @ud])
+  =/  ns=(list @ud)  (sort ~(tap in s) lth)
+  ?~  ns  ~
+  =/  lo=@ud  i.ns
+  =/  hi=@ud  i.ns
+  =/  rest  t.ns
+  =|  out=(list [@ud @ud])
+  |-  ^-  (list [@ud @ud])
+  ?~  rest  (flop [[lo hi] out])
+  ?:  =(i.rest +(hi))  $(hi i.rest, rest t.rest)
+  $(out [[lo hi] out], lo i.rest, hi i.rest, rest t.rest)
+::  +ignored: is a source path excluded by the ignore list (itself or under
+::  an ignored directory)?
+::
+++  ignored
+  |=  [src=@t ign=(list @t)]
+  ^-  ?
+  %+  lien  ign
+  |=  ip=@t
+  =/  ipt=tape  (trip ip)
+  =(ip (crip (scag (lent ipt) (trip src))))
+::  +grub-text: raw text of a source grub view. A .hoon/.js/.css grub holds
+::  its source in the vase as a @t; %txt is a wain; %mime carries octs.
+::  Empty for a boom or a shape we can't read.
+::
+++  grub-text
+  |=  =view:nexus
+  ^-  @t
+  ?.  ?=([%file *] view)  ''
+  (sang-text sang.view)
+::  +sang-text: the raw text of a grub's sang directly (for enumerating a
+::  mirrored ball, where we hold the sang, not a file view).
+::
+++  sang-text
+  |=  =sang:tarball
+  ^-  @t
+  ?:  ?=(%| -.q.sang)  ''
+  =/  =sage:tarball  (need-sage:tarball sang)
+  =/  mk=@tas  name.p.sage
+  ?:  =(%txt mk)   (of-wain:format !<(wain q.sage))
+  ?:  =(%md mk)    (of-wain:format !<(wain q.sage))
+  ?:  =(%mime mk)  `@t`q.q:!<(mime q.sage)
+  (fall (mole |.(!<(@t q.sage))) '')
 ::  +spawn-followers: ensure a /sync/<app> follower grub exists for every
 ::  top-level app in /apps. Making the grub starts its follower fiber (the
 ::  [[%sync ~] @] case). Idempotent — skips ones already present. (Culling
@@ -2736,6 +3284,20 @@
     ?:  |(=(/alias wire.u.in) =(/weir wire.u.in))  [%done ~]
     [%skip ~]
   ==
+::  +take-mirror-news: wake on ANY news this fiber receives. The mirror.sig
+::  fiber only holds mirror subscriptions (the registry + each target dir), so
+::  every news that reaches it is one of ours — unlike +take-any-news, which is
+::  wired to the usergroups fiber's /alias and /weir and drops everything else.
+::
+++  take-mirror-news
+  =/  m  (fiber:fiber:nexus ,wire)
+  ^-  form:m
+  |=  input:fiber:nexus
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+    ~              [%wait ~]
+    [~ %news * *]  [%done wire.u.in]
+  ==
 ::  +spawn-followers: ensure a /sync follower grub exists for every app-root
 ::  (descending desks, via app-roots). Making the grub starts its follower
 ::  fiber. Idempotent. (Culling removed apps is a later increment.)
@@ -2768,12 +3330,12 @@
   ~?  >>>  ?=(^ err)  [%shell-sync-spawn-failed i.roots]
   $(roots t.roots, made |(made ?=(~ err)))
 ::  +build-links: materialize the discovery registry at /sys/link/. For
-::  each @name, write /sys/link/<segments>/dest.lanes — a (set lane:tarball)
-::  of target locations. Only writes on genuine content change.
+::  each @name, write /sys/link/<segments>/dest.lanes — a (list lane:tarball)
+::  of target locations, earliest claimant first. Only writes on genuine
+::  content change. Driven by the /sync followers (each app's link.json is
+::  kept by subscription), not by a poll.
 ::
 ::  INVARIANT: /sys/link MUST always be current.
-::
-::  TODO (not built yet): drive this by SUBSCRIPTION, never a poll.
 ::
 ::  +build-share: invert every local desk's share.usergroups into per-
 ::  usergroup discovery directories. /share/<group>/desks.json lists the
@@ -2848,17 +3410,26 @@
     ;<  *  bind:m  (cull-soft:io [%& %| /sys/link/[i.haves]])
     $(haves t.haves)
   =/  road=road:tarball  (link-road nm.i.entries)
-  =/  lanes=(set lane:tarball)
-    %-  silt
+  =/  want=(list lane:tarball)
     %+  murn  opts.i.entries
     |=  o=json
     =/  p=@t  (fall (jget o 'path') '')
     ?:(=('' p) ~ `[%| (stab p)])
   ;<  cur=view:nexus  bind:m  (peek:io road `[/ %lanes])
-  =/  have=(unit (set lane:tarball))
+  =/  have=(list lane:tarball)
     ?.  ?=([%file *] cur)  ~
-    (mole |.(!<((set lane:tarball) (need-vase:tarball sang.cur))))
-  ?:  =(`lanes have)  $(entries t.entries)
+    (fall (mole |.(!<((list lane:tarball) (need-vase:tarball sang.cur)))) ~)
+  ::  the list is ORDERED, earliest claimant first, and the order is
+  ::  kept across rebuilds: claimants already listed stay in place,
+  ::  claimants gone are dropped, new ones are appended. So the head is
+  ::  whoever claimed the name first, and a resolver may take it as the
+  ::  default without the shell having to remember anything else.
+  =/  want-set=(set lane:tarball)  (silt want)
+  =/  kept=(list lane:tarball)  (skim have |=(l=lane:tarball (~(has in want-set) l)))
+  =/  kept-set=(set lane:tarball)  (silt kept)
+  =/  lanes=(list lane:tarball)
+    (weld kept (skip want |=(l=lane:tarball (~(has in kept-set) l))))
+  ?:  =(lanes have)  $(entries t.entries)
   ;<  ~  bind:m  (over:io road [[/ %lanes] lanes])
   $(entries t.entries)
 ::  +build-aliases: materialize the alias directory (menus incl. hidden

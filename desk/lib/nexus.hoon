@@ -1,21 +1,10 @@
 /-  push
 /+  tarball
 |%
-::  +dbg: the silo refcount traces below print only when this is yes.
+::  +dbg: the silo refcount traces print only when this is yes. They
+::  fire per occurrence from a pure core that cannot dedupe them, and
+::  unconditionally they bury real warnings.
 ::
-::    They were unconditional `~& >>>` and they bury real warnings: one
-::    ship logged 3.041 identical lines for a SINGLE lobe in one burst.
-::    Measured 2026-09-15 — and that lobe did not appear in +audit-silo's
-::    report at all, i.e. it was already fully collected with nothing
-::    referencing it, so the print was not telling anyone about damage.
-::
-::    A drop or bump against an absent lobe is still worth knowing about,
-::    but per-occurrence is the wrong surface: this core is pure and holds
-::    no state, so it cannot dedupe by lobe. +audit-silo is the authority
-::    — it reports every referenced-but-absent lobe with the path and
-::    version that names it, and it is readable without a poke at
-::    .^(wain %gx /=grubbery=/peek/audit/txt). Flip this to & when
-::    chasing a live refcount bug.
 ++  dbg  ^-(? |)
 +$  card  card:agent:gall
 +$  built
@@ -23,11 +12,30 @@
       [%tang =tang]
       [%mime =mime]
   ==
-+$  keys  (map rail:tarball [in=@uv out=@uv])
+::  keys: one content-addressed build key per rail. The key of a file
+::  is sham [its source hash, its path, its deps' keys] — the same key
+::  is both cache lookup and bins address.
+::
++$  keys  (map rail:tarball @uv)
+::  deps: the dependency graph. Every file depends on sut-rail, the
+::  build subject: it is a node like any other, keyed by the subject
+::  hash, with no artifact (it is an input, not an output). A subject
+::  change is then just a changed dep — its reverse closure is every
+::  file — with no sentinel to check by hand.
+::
 +$  deps  (map rail:tarball (set rail:tarball))
-+$  refs  (axal (map @ta @uv))
-+$  lode  [=keys =deps =refs]
+++  sut-rail  `rail:tarball`[/ %sut]
+::  lode: a code namespace's build index. Artifacts are addressed by
+::  their SOURCE RAIL — the marc for blot [/ %json] is the artifact of
+::  /mar/json.hoon — so keys is also the artifact index; there is no
+::  second one.
+::
++$  lode  [=keys =deps]
 +$  code  (map fold:tarball lode)
+::  +artifacts: the keys that have an artifact in bins — every rail
+::  but the subject node, which is an input.
+::
+++  artifacts  |=(=keys ^-(^keys (~(del by keys) sut-rail)))
 +$  bins  (map @uv [refs=@ud =built])
 ::  A "grub" is the entity that lives at a rail: its file content and
 ::  its running process, considered as one thing. You create, delete,
@@ -116,12 +124,11 @@
       [%lose =lose]             :: drop hist entries, decrement silo refs
       [%gain flag=?]            :: set gain flag (recursive on directories)
       [%firm ~]                 :: promote current entry to %firm
-      [%tag case=(unit case) tags=(set @t)]  :: set tags on hist entry (~ = current)
+      [%tags case=(unit case) tags=(set @t)]  :: set tags on hist entry (~ = current)
       [%seek =nobe]              :: find all [rail cass] pairs with this hash
       [%peep =find]
       [%born ~]                 :: read hist metadata at dest (file or fold)
       [%code ~]                 :: look up compiled artifacts at dest
-      [%font ~]                 :: find code responsible for dest node
   ==
 +$  dart
   $%  [%node =wire road=road:tarball =load]
@@ -151,6 +158,12 @@
 +$  server-state
   $:  %0
       bindings=(map binding:eyre rail:tarball)
+      ::  the live conns map is grubbery's agent state. keeping it here
+      ::  would make every inbound HTTP request a grub write, which on
+      ::  a real ship measured about 4.5KB of permanent event log and
+      ::  about a second of latency per request. the field stays so
+      ::  stored server-states still nest, and grubbery always writes
+      ::  it as ~.
       conns=(map @ta binding:eyre)
   ==
 ::  Timer service state.
@@ -163,6 +176,37 @@
 ::
 +$  iris-state
   [%0 requests=(map wire [sender=rail:tarball url=@t])]
+::  Websocket client service (groundwire vere, UIP-125). Grubbery ships
+::  its own copies of the runtime's frame and event shapes so the desk
+::  builds on any runtime; where the vane lacks websockets, a connect
+::  fails with a tang instead of the build failing. The faces match the
+::  runtime's (opcode/message/data) so vases nest both ways at the
+::  agent boundary.
+::
++$  ws-message  [opcode=@ud message=(unit data=octs)]
++$  ws-event
+  $%  [%accept ~]
+      [%reject ~]
+      [%disconnect ~]
+      [%message message=ws-message]
+  ==
+::  the service table. Like behn's timers, a socket is keyed by
+::  [owner key]: the fiber that asked and the wire it asked on. A
+::  connect on a key that already has a socket closes that socket
+::  first (a respun fiber reconnects on the same key and gets a clean
+::  replacement; it carries no state and reads no table). Rows sit in
+::  `pending` under the arvo wire of the connect (which spells owner +
+::  key) until iris subscribes for frames, then in `open` by wid.
+::  Sockets do not survive the runtime; a row for a dead socket lingers
+::  until its key is reused or its owner closes it.
+::  Stored as a grub at /sys/iris/ws.ws-state.
+::
++$  ws-row  [owner=rail:tarball key=wire url=@t]
++$  ws-state
+  $:  %0
+      pending=(map wire ws-row)
+      open=(map @ud ws-row)
+  ==
 ::  Remote-scry service state: outstanding keens, keyed by the arvo
 ::  wire each was passed on. Lets a yawn cancel by duct (ames %yawn
 ::  matches the listener's duct, i.e. the original wire) exactly the
@@ -258,7 +302,6 @@
         [%news =wire =wave] :: subscription wave (initial or update)
         [%veto =dart] :: notify that a dart was sandboxed
         [%code =wire res=(each (axal (map @ta built)) built)]  :: code subtree or single artifact
-        [%font =wire res=(unit (unit bend:tarball))]  :: ~: blocked, [~ ~]: none, [~ ~ bend]: found
         [%here =wire =here]
     ==
   ::  +$  pend: cold intake for queuing. No vases — lobes and ckeys only.
@@ -283,7 +326,6 @@
         [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)]
         [%fell =wire]
         [%veto =dart]
-        [%font =wire res=(unit (unit bend:tarball))]
         [%here =wire =here]
     ==
   ::
@@ -523,6 +565,19 @@
 ++  record-trees
   |=  [=born =silo =code now=@da dir=path]
   ^-  [^born ^silo]
+  =/  res=[bumped=(set lane:tarball) bon=^born sil=^silo]
+    (record-trees-lanes born silo code now dir ~)
+  [bon.res sil.res]
+::  +record-trees-lanes: +record-trees, reporting the dirs it bumped.
+::
+::    The walk already knows this. It stops the moment a level hashes
+::    the same as before, so every level it passes through is a real
+::    change. Callers that want the change set take it from here
+::    instead of rediscovering it with a whole-namespace diff.
+::
+++  record-trees-lanes
+  |=  [=born =silo =code now=@da dir=path bumped=(set lane:tarball)]
+  ^-  [(set lane:tarball) ^born ^silo]
   =/  sub-born=^born  (~(dip of born) dir)
   =/  boo  ~(. bo now born)
   =/  top-fold  top:hist
@@ -546,22 +601,20 @@
     ?~  existing-tree  ~
     ?~  nek.u.existing-tree  ~
     =/  =neck:tarball  neck.u.nek.u.existing-tree
-    =/  nex-ns=(unit fold:tarball)
-      =/  pax=path  dir
+    ::  the namespace whose artifact governs this nexus: the first
+    ::  candidate (code-candidates order) whose keys have its source
+    =/  src=rail:tarball  (source-rail:tarball %nex neck)
+    =/  hit=(unit [ns=fold:tarball ckey=@uv])
+      =/  cands=(list fold:tarball)  (code-candidates:tarball dir)
       |-
-      =/  cod=(list @ta)
-        ?~  pax  /code
-        (snoc (snip `(list @ta)`pax) %code)
-      ?:  (~(has by code) cod)  `cod
-      ?~  pax  ~
-      $(pax (snip `(list @ta)`pax))
-    =/  nex-ckey=@uv
-      ?~  nex-ns  0v0
-      =/  =lode  (~(got by code) u.nex-ns)
-      =/  node=(unit (map @ta @uv))  (~(get of refs.lode) (weld /nex path.neck))
-      ?~  node  0v0
-      (fall (~(get by u.node) name.neck) 0v0)
-    `[neck nex-ckey (fall nex-ns /)]
+      ?~  cands  ~
+      =/  lod=(unit lode)  (~(get by code) i.cands)
+      ?~  lod  $(cands t.cands)
+      =/  k=(unit @uv)  (~(get by keys.u.lod) src)
+      ?~  k  $(cands t.cands)
+      `[i.cands u.k]
+    ?~  hit  `[neck 0v0 /]
+    `[neck ckey.u.hit ns.u.hit]
   ::  fil: each grub's current ject-lobe from hist (skip deleted/tombed)
   =/  fil=(map @ta jobe)
     %-  ~(rep by file.node)
@@ -598,8 +651,9 @@
   =/  =tree  [nek tree-gain tree-bang fil dir-map]
   =/  [changed=? new-born=^born new-silo=^silo]
     (put-tree born silo now dir node tree)
-  ?.  changed  [born silo]
-  ?~  dir  [new-born new-silo]
+  ?.  changed  [bumped born silo]
+  =.  bumped  (~(put in bumped) |+dir)
+  ?~  dir  [bumped new-born new-silo]
   $(born new-born, silo new-silo, dir (snip `path`dir))
 ::  +put-tree: store a tree ject at dir, update born fold hist.
 ::  Returns [changed born silo].
@@ -642,7 +696,14 @@
 ::    - top of hist = current version; (top:hist fold) / (top:hist file)
 ::
 ::  Invariants:
-::    - Born records are NEVER deleted (high-water mark for ordering)
+::    - A gained grub's born record is never deleted. It is the
+::      high-water mark that keeps version numbering monotonic across
+::      a delete and a later re-creation, which is what page history
+::      reads. An un-gained grub has no history to order, so its
+::      record goes when the grub does. Keeping it would leave every
+::      request fiber ever run sitting in its directory, and both the
+::      tree walk and the born diff scan that directory on every
+::      later write.
 ::    - Sack hist bumps IFF content changes
 ::    - Tote hist bumps on any descendant change (fold)
 ::    - Weir cass bumps on weir change at that directory
@@ -672,6 +733,17 @@
     =/  node=[fold=hist file=(map @ta hist)]
       (fall (~(get of old) path.here) default-node)
     (~(put of old) path.here node(file (~(put by file.node) name.here sok)))
+  ::  Drop a file's hist entirely. Only ever called for a grub that was
+  ::  never gained, so there is no ordering high-water mark to lose.
+  ::
+  ++  del
+    |=  here=rail:tarball
+    ^-  born
+    =/  node=(unit [fold=hist file=(map @ta hist)])
+      (~(get of old) path.here)
+    ?~  node  old
+    %+  ~(put of old)  path.here
+    u.node(file (~(del by file.u.node) name.here))
   ::  Get dir cass
   ::
   ++  get-dir-cass

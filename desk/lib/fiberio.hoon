@@ -39,7 +39,7 @@
 ::    %code — built can be [%vase vase] → store as noun, re-vale
 ::  Unaffected: %made/%gone/%pack/%sand/%load/%lost/%gain/%held (just
 ::  wire+tang), %fell (wire), %news (wave), %here (pant), %veto (dart),
-::  %font (bend), %kept (set bend).
+::  %kept (set bend).
 ::
 
 /-  push
@@ -504,7 +504,7 @@
   ^-  form:m
   ;<  =wire  bind:m  (nonce /tag)
   ;<  ~  bind:m
-    (send-dart %node wire road %tag cas tags)
+    (send-dart %node wire road %tags cas tags)
   (take-held wire)
 ::
 ++  peek
@@ -514,7 +514,6 @@
   ;<  =wire  bind:m  (nonce /peek)
   ;<  ~  bind:m  (send-dart %node wire road %peek blot ~ %.y)
   (take-peek wire)
-::
 ::  Veto-tolerant peek: a peek whose destination may be outside our weir.
 ::  On veto it yields ~ instead of crashing — for scans that reach for
 ::  something they might legitimately not be permitted to see.
@@ -1155,26 +1154,6 @@
       [%skip ~]
     [%done p.res.u.in]
   ==
-::  +get-font: find code responsible for a node
-::  ~: blocked (weir), [~ ~]: definitively none, [~ ~ bend]: found
-::
-++  get-font
-  |=  =road:tarball
-  =/  m  (fiber ,(unit (unit bend:tarball)))
-  ^-  form:m
-  ;<  =wire  bind:m  (nonce /font)
-  ;<  ~  bind:m  (send-dart %node wire road %font ~)
-  |=  input
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %veto *]
-    [%fail (veto-error dart.u.in)]
-      [~ %font * *]
-    ?.  =(wire wire.u.in)
-      [%skip ~]
-    [%done res.u.in]
-  ==
 ::  +get-marc: look up a compiled marc from bins
 ::
 ++  get-marc
@@ -1678,6 +1657,83 @@
       [%fail leaf+"http-request-cancelled" ~]
     [%done resp]
   ==
+::  websocket client, at /sys/iris/ws.ws-state (a weir must allow the
+::  poke). A socket is a wid; frames arrive as pokes [/ %ws-frame]
+::  [wid msg] on the fiber's rail and are picked up by +take-ws-frame.
+::  Text frames only for now. Sockets die with a runtime restart and
+::  no poke says so: a fiber blocked in +take-ws-frame owns its own
+::  timeout/reconnect policy. On a runtime without websocket support
+::  +ws-connect returns ~ (the tang is printed) instead of the desk
+::  failing to build. Shape of a client:
+::
+::    ;<  wid=(unit @ud)  bind:m  (ws-connect:io url)
+::    ?~  wid  (pure:m ~)
+::    ;<  ~  bind:m  (ws-send:io u.wid '["REQ", ...]')
+::    |-
+::    ;<  frame=(unit @t)  bind:m  (take-ws-frame:io u.wid)
+::    ?~  frame  ...reconnect...
+::    ...handle u.frame...
+::    $
+::
+::  +ws-connect: open a socket under `key`; `wid once live, ~ on
+::  reject/drop. Like set-timer's wire: a fiber may hold one socket per
+::  key, and connecting again on a key closes the socket it had there —
+::  so a respun fiber just connects again and gets a clean one.
+++  ws-connect
+  |=  [key=wire url=@t]
+  =/  m  (fiber ,(unit @ud))
+  ^-  form:m
+  ;<  ~  bind:m  (poke &+&+[/sys/iris %'ws.ws-state'] [[/ %ws-connect] [key url]])
+  |=  input
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %veto *]  [%fail (veto-error dart.u.in)]
+      [~ %poke * *]
+    ?:  =([/ %ws-open] p.sage.u.in)  [%done `!<(@ud q.sage.u.in)]
+    ?:  =([/ %ws-fail] p.sage.u.in)
+      ~&  >>>  [%ws-connect-failed !<(tang q.sage.u.in)]
+      [%done ~]
+    [%skip ~]
+  ==
+::  +ws-send: one text frame down an open socket
+++  ws-send
+  |=  [wid=@ud text=@t]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  (poke &+&+[/sys/iris %'ws.ws-state'] [[/ %ws-send] [wid text]])
+::  +ws-close: close it. The %ws-closed poke follows once iris leaves.
+++  ws-close
+  |=  wid=@ud
+  =/  m  (fiber ,~)
+  ^-  form:m
+  (poke &+&+[/sys/iris %'ws.ws-state'] [[/ %ws-close] wid])
+::  +take-ws-frame: the next text frame on `wid` as a cord; ~ when the
+::  socket closes. Any other poke (an interrupt, say) is skipped, so a
+::  caller that wants cancellation composes its own intake.
+++  take-ws-frame
+  |=  wid=@ud
+  =/  m  (fiber ,(unit @t))
+  ^-  form:m
+  |=  input
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %veto *]  [%fail (veto-error dart.u.in)]
+      [~ %poke * *]
+    ::  a frame or close for another socket is dropped (%wait), not
+    ::  skipped: %skip retains the input and re-offers it on every later
+    ::  step, and nobody else can want a socket this fiber owns
+    ?:  =([/ %ws-closed] p.sage.u.in)
+      ?.  =(wid !<(@ud q.sage.u.in))  [%wait ~]
+      [%done ~]
+    ?.  =([/ %ws-frame] p.sage.u.in)  [%skip ~]
+    =/  [w=@ud msg=ws-message:nexus]  !<([@ud ws-message:nexus] q.sage.u.in)
+    ?.  =(w wid)  [%wait ~]
+    ?~  message.msg  [%wait ~]
+    =/  bytes=octs  u.message.msg
+    [%done `q.bytes]
+  ==
 ::
 ++  extract-body
   |=  =client-response:iris
@@ -1706,14 +1762,14 @@
 ::  opaque (title/body/url are conventions). The service owns
 ::  delivery (push) and ack tracking.
 ::
-++  notify-road
-  `road:tarball`[%& %& /apps/[%'notifications.notifications'] %'main.sig']
+::  The bus is found by NAME: a caller needs peek on /sys/link/ in its
+::  weir, and the poke on @notifications/main.sig, as for any name.
 ::
 ++  register-app
   |=  name=@t
   =/  m  (fiber ,~)
   ^-  form:m
-  %+  poke  notify-road
+  %^  poke-link  '@notifications'  [%& / %'main.sig']
   :-  [/ %json]
   (pairs:enjs:format ~[['action' s+'register'] ['name' s+name]])
 ::
@@ -1721,7 +1777,7 @@
   |=  [push=? metadata=json]
   =/  m  (fiber ,~)
   ^-  form:m
-  %+  poke  notify-road
+  %^  poke-link  '@notifications'  [%& / %'main.sig']
   :-  [/ %json]
   %-  pairs:enjs:format
   :~  ['action' s+'notify']
@@ -1934,8 +1990,8 @@
   :+  ~  q.state
   ?+  in  [%skip ~]
       ~  [%wait ~]
-    ::  refused in jail: expected, and silent. The kernel names the app
-    ::  once; the approval reload re-runs this bind.
+    ::  refused in jail: expected, and silent. The approval reload
+    ::  re-runs this bind.
       [~ %veto *]
     [%done ~]
       [~ %pack * *]
@@ -2066,6 +2122,22 @@
   =/  m  (fiber ,~)
   ^-  form:m
   (reg-poke [%how group weir])
+::  The same three, soft. Registering with the usergroup machinery is an
+::  OPTIONAL road for most apps: refuse it and the app keeps every local
+::  feature and loses only the ability to publish itself for cross-ship
+::  reads. That promise is what these make keepable: the hard versions
+::  %fail the fiber on a veto, and a %fail annuls the failing INVOCATION
+::  — its state and darts — and leaves the fiber failed. Prior
+::  invocations stand (a write awaited through put:io is one), so this
+::  is not an event rollback; it is a fiber that dies at an optional
+::  step and never does the work after it.
+::
+::  Observed: an app proved its key road, poked itself %set-caps, wrote
+::  /caps, and then ran rise work that called +reg-register-at, which
+::  was vetoed. The fiber failed there, so the app never reached the
+::  state it reports from, and reported "not granted the key road" on a
+::  ship where that road WAS granted — the veto was for a road it had
+::  never declared, and nothing named it.
 ::
 ++  reg-poke-soft
   |=  act=registry-action:nexus
@@ -2084,4 +2156,144 @@
   =/  m  (fiber ,(unit tang))
   ^-  form:m
   (reg-poke-soft [%how group weir])
+::  Discovery (/sys/link) helpers.
+::
+::  An app is addressed by NAME, not by where it is installed: a name
+::  resolves through /sys/link/<name>/dest.lanes, the list of app roots
+::  claiming it, earliest claimant first (the shell keeps the list). A
+::  caller that needs another app's grub asks for the name and appends
+::  the grub's place under that app, so a move from /apps/x to a desk
+::  changes nothing for its callers. Reads are peeks, so the caller's
+::  weir must grant peek on /sys/link/ (local) or on the publisher's
+::  ships prefix (remote). ~ means no claimant.
+::
+::  +link-segs: '@chat/v1' or 'chat/v1' -> /chat/v1
+::
+++  link-segs
+  |=  name=@t
+  ^-  path
+  =/  t=tape  (trip name)
+  =?  t  &(?=(^ t) =('@' i.t))  t.t
+  (stab (crip ['/' t]))
+::  +link-road: the dest.lanes grub for a name
+::
+++  link-road
+  |=  name=@t
+  ^-  road:tarball
+  [%& %& (weld /sys/link (link-segs name)) %'dest.lanes']
+::  +link-lanes: every root claiming a name, earliest first; ~ if none
+::
+++  link-lanes
+  |=  name=@t
+  =/  m  (fiber ,(list lane:tarball))
+  ^-  form:m
+  ;<  got=(unit (list lane:tarball))  bind:m
+    (peek-as (link-road name) ,(list lane:tarball))
+  (pure:m (fall got ~))
+::  +resolve-link: the default root for a name — the earliest claimant
+::
+++  resolve-link
+  |=  name=@t
+  =/  m  (fiber ,(unit lane:tarball))
+  ^-  form:m
+  ;<  lanes=(list lane:tarball)  bind:m  (link-lanes name)
+  (pure:m ?~(lanes ~ `i.lanes))
+::  +resolve-link-at: a place under the app that claims a name, as a
+::  road: (resolve-link-at '@anthropic' [%& / %'main.sig']) is the
+::  anthropic nexus's main.sig wherever that nexus lives. A file
+::  resolves only under a directory root (every claimant is one).
+::
+++  resolve-link-at
+  |=  [name=@t at=lane:tarball]
+  =/  m  (fiber ,(unit road:tarball))
+  ^-  form:m
+  ;<  root=(unit lane:tarball)  bind:m  (resolve-link name)
+  ?~  root  (pure:m ~)
+  ?.  ?=(%| -.u.root)  (pure:m ~)
+  %-  pure:m
+  :-  ~
+  ?-  -.at
+    %&  [%& %& (weld p.u.root path.p.at) name.p.at]
+    %|  [%& %| (weld p.u.root p.at)]
+  ==
+::  +link-lanes-on: a name's claimants on ANOTHER ship, each prefixed
+::  with that ship's place in our tree, so the result is addressable
+::  here as it stands. The publisher grants the read through usergroups.
+::
+++  link-lanes-on
+  |=  [=ship name=@t]
+  =/  m  (fiber ,(list lane:tarball))
+  ^-  form:m
+  ;<  =view:nexus  bind:m  (peek-remote (link-road name) ship ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  got=(unit (list lane:tarball))
+    (mole |.(!<((list lane:tarball) (need-vase:tarball sang.view))))
+  ?~  got  (pure:m ~)
+  =/  prefix=path  /sys/ames/ships/[(scot %p ship)]/root
+  %-  pure:m
+  %+  turn  u.got
+  |=  l=lane:tarball
+  ?-  -.l
+    %&  [%& (weld prefix path.p.l) name.p.l]
+    %|  [%| (weld prefix p.l)]
+  ==
+::  +resolve-link-on: the default root for a name on another ship
+::
+++  resolve-link-on
+  |=  [=ship name=@t]
+  =/  m  (fiber ,(unit lane:tarball))
+  ^-  form:m
+  ;<  lanes=(list lane:tarball)  bind:m  (link-lanes-on ship name)
+  (pure:m ?~(lanes ~ `i.lanes))
+::  +no-link: the failure a name with no claimant raises. A caller
+::  handles it as it handles a veto: the place it named is not there.
+::
+++  no-link
+  |=  name=@t
+  ^-  tang
+  ~[leaf+"link: no claimant for {(trip name)}"]
+::  The verbs by name. Each resolves the name, then acts at the place
+::  under the claimant's root, and fails the fiber with +no-link when
+::  nothing claims the name. Nothing here asks the kernel for anything
+::  special: the caller's weir must grant peek on /sys/link/<name>/
+::  and the act itself on the resolved road, and the shell resolves
+::  the same @name in the caller's weir.json ask at approval, so the
+::  two agree as long as the registry does.
+::
+++  poke-link
+  |=  [name=@t at=lane:tarball =bask:tarball]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ;<  road=(unit road:tarball)  bind:m  (resolve-link-at name at)
+  ?~  road  |=(input [~ q.state %fail (no-link name)])
+  (poke u.road bask)
+::
+++  peek-link
+  |=  [name=@t at=lane:tarball blot=(unit blot:tarball)]
+  =/  m  (fiber ,view:nexus)
+  ^-  form:m
+  ;<  road=(unit road:tarball)  bind:m  (resolve-link-at name at)
+  ?~  road  |=(input [~ q.state %fail (no-link name)])
+  (peek u.road blot)
+::
+++  make-link
+  |=  [name=@t at=lane:tarball mak=make:nexus]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ;<  road=(unit road:tarball)  bind:m  (resolve-link-at name at)
+  ?~  road  |=(input [~ q.state %fail (no-link name)])
+  (make u.road mak)
+::  +keep-link: keep a place by name. Also keeps the name's registry
+::  grub, on /link/<wire>, so the caller is told when the claimant
+::  changes: on news there, drop `wire` and call +keep-link again,
+::  which keeps the new place. Returns the target's initial wave.
+::
+++  keep-link
+  |=  [=wire name=@t at=lane:tarball blot=(unit blot:tarball)]
+  =/  m  (fiber ,wave:nexus)
+  ^-  form:m
+  ;<  road=(unit road:tarball)  bind:m  (resolve-link-at name at)
+  ?~  road  |=(input [~ q.state %fail (no-link name)])
+  ;<  *  bind:m  (keep (weld /link wire) (link-road name) ~)
+  (keep wire u.road blot)
 --

@@ -1,4 +1,5 @@
 ::  git/forge: the single UI over git repo instances. Repos live under
+::  (respin: single expand/collapse-all toggle, label = pending action)
 ::  /repos/<name>.git_repo; forge creates them, reads their state,
 ::  and drives their actions by poking. Transport stays in /git/repo —
 ::  this is the visibility layer.
@@ -18,14 +19,23 @@
 /&  forge-js    forge/app.js
 /&  forge-css   forge/style.css
 /&  todo        /lib/todo.md
+::  the self-hosting development flow, materialized like TODO.md
+/&  ratchet-md  forge/ratchet.md
 ::  web-component kit: shared sources in /lib/ui (one copy for all nexuses),
 ::  welded into one components.js bundle in on-load so a page makes a single
 ::  request (no staggered per-file "flash-in").
 /&  modal-js    /lib/ui/modal-dialog.js
 /&  dropmenu-js  /lib/ui/drop-menu.js
 /&  splitview-js  /lib/ui/split-view.js
-::  shared classic helper (window.FilePreview) — loaded before app.js
+/&  tabgroup-js  /lib/ui/tab-group.js
+/&  treeview-js  /lib/ui/tree-view.js
+/&  filetable-js  /lib/ui/file-table.js
+::  shared classic helpers — the FileView editor (and the FilePreview renderer
+::  it leans on) reused from the explorer, loaded before app.js
 /&  fp-js       /lib/ui/file-preview.js
+/&  fv-js       /lib/ui/file-view.js
+::  marked: renders markdown previews (window.marked), loaded before app.js
+/&  marked-js   forge/marked.min.js
 /<  nex-tools   /lib/tools.hoon
 /&  forge-tools  forge/tool-bundle/
 =<  ^-  nexus:nexus
@@ -47,7 +57,7 @@
       =/  wrap  |=(=mime ^-(@ (rap 3 ~[123 10 q.q.mime 10 125 10])))
       =/  kit-js=mime
         :-  /application/javascript
-        (as-octs:mimes:html (rap 3 ~[(wrap modal-js) (wrap dropmenu-js) (wrap splitview-js)]))
+        (as-octs:mimes:html (rap 3 ~[(wrap modal-js) (wrap dropmenu-js) (wrap splitview-js) (wrap tabgroup-js) (wrap treeview-js) (wrap filetable-js)]))
       %+  spin:loader  ball
       :~  (manifest:loader 0)
           [%fall %& [/ %'main.sig'] [[/ %sig] ~]]
@@ -58,14 +68,19 @@
           ::  config — the one thing not scoped to a selected repo.
           [%fall %& [/ %'defaults.json'] [[/ %json] (pairs:enjs:format ~[['author_name' s+''] ['author_email' s+''] ['account' s+'']])]]
           [%over %& [/ %'tile.json'] [[/ %json] tile]]
+          [%over %& [/ %'link.json'] [[/ %json] (pairs:enjs:format ~[['name' s+'forge'] ['description' s+'git repos: the UI over repo instances']])]]
           [%over %& [/ %'icon.svg'] [[/ %mime] icon]]
           [%over %& [/ %'index.html'] [[/ %mime] forge-html]]
           [%over %& [/ %'app.js'] [[/ %mime] forge-js]]
           ::  the nexus backlog, materialized like README — browsable at root
           [%over %& [/ %'TODO.md'] [[/ %mime] todo]]
+          ::  the ratchet: how grubbery develops itself from in-ship
+          [%over %& [/ %'RATCHET.md'] [[/ %mime] ratchet-md]]
           [%over %& [/ %'style.css'] [[/ %mime] forge-css]]
           [%over %& [/ %'components.js'] [[/ %mime] kit-js]]
           [%over %& [/ %'file-preview.js'] [[/ %mime] fp-js]]
+          [%over %& [/ %'file-view.js'] [[/ %mime] fv-js]]
+          [%over %& [/ %'marked.min.js'] [[/ %mime] marked-js]]
           [%over %| /tools (seed-tools:nex-tools forge-tools)]
       ==
     ::
@@ -114,6 +129,8 @@
           ;<  cur=(unit json)  bind:m
             (peek-as:io (nex-road:io rail [%& / %'defaults.json']) ,json)
           (send-json rail eyre-id (fall cur ~))
+        ?:  ?=([%api %stock ~] suffix)
+          (send-json rail eyre-id stock-repos)
         ?:  ?=([%api %list ~] suffix)
           ;<  lst=json  bind:m  (gather-repos rail)
           (send-json rail eyre-id lst)
@@ -158,6 +175,21 @@
       ==
     --
 |%
+::  +stock-repos: the house catalog — one-click clones surfaced on the
+::  landing page. Names here become <name>.git_repo instances; do-add
+::  handles the rest exactly as if typed into the create form.
+++  stock-repos
+  ^-  json
+  =/  entry
+    |=  [name=@t repo=@t desc=@t]
+    ^-  json
+    %-  pairs:enjs:format
+    :~  ['name' s+name]  ['repo' s+repo]  ['ref' s+'main']  ['desc' s+desc]
+    ==
+  :-  %a
+  :~  (entry 'grubbery' 'gwbtc/grubbery' 'grubbery itself — kernel + desk. The self-hosting ratchet: see RATCHET.md')
+      (entry 'hatchery' 'gwbtc/hatchery' 'experimental apps migrated out of the kernel, followed as a desk')
+  ==
 ++  jstr
   |=  [j=json k=@t]
   ^-  @t
@@ -198,19 +230,25 @@
   ^-  path
   /data/tree
 ::  +parse-src-path: a client file path like "lib/commit-all.hoon"
-::  as [dir name], rejecting anything that could walk out of the tree
+::  as [dir name], rejecting anything that could walk out of the tree.
+::  Splits on "/" allowing any printable non-slash char per segment —
+::  NOT `stap`, whose @ta segments are lowercase-only and so reject
+::  uppercase names like README.md / LICENSE.txt (grub names carry case
+::  fine; only the parser choked).
 ::
 ++  parse-src-path
   |=  file=@t
   ^-  (unit [dir=path name=@ta])
   =/  t=tape  (trip file)
   =.  t  ?:(&(?=(^ t) =('/' i.t)) t.t t)
-  =/  pax=(unit path)  (rush (crip (weld "/" t)) stap)
-  ?~  pax  ~
-  ?.  %+  levy  `path`u.pax
+  =/  segs=(unit (list tape))
+    (rush (crip t) (more fas (plus ;~(less fas prn))))
+  ?~  segs  ~
+  =/  pax=path  (turn u.segs |=(s=tape `@ta`(crip s)))
+  ?.  %+  levy  pax
       |=(seg=@ta !|(=('' seg) =('.' seg) =('..' seg)))
     ~
-  =/  flopped=path  (flop `path`u.pax)
+  =/  flopped=path  (flop pax)
   ?~  flopped  ~
   `[(flop `path`t.flopped) i.flopped]
 ::  +walk-files: every file path in a ball, depth-first, sorted

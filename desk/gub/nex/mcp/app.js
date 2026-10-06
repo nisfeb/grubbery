@@ -1,634 +1,137 @@
-// mcp ui: tool registry (left) + the /proc tree (right).
-// Data: GET /grubbery/mcp/api/tools  (JSON-RPC tools/list shape, full registry)
-//       GET /grubbery/mcp/api/proc   ({dirs, files, transport} tree)
-//       GET /grubbery/mcp/api/src?tool=
-//       POST /grubbery/mcp/api/run | run-del | sandbox-add | sandbox-edit | sandbox-del
-
+// mcp ui: a reader over the endpoint's data routes. Running a tool from
+// the page is a plain JSON-RPC tools/call to the endpoint — the same
+// request every MCP client makes.
+// The page is a viewer for ONE tools nexus, the one its URL names:
+// /grubbery/tools                 this endpoint's own tools
+// /grubbery/tools/apps/.../tools  some app's tools
+// Every data route takes ?path=; no registry, no scanning.
+//   GET  /grubbery/tools/api/tools-tree?path=  {path, own, dirs, tools}
+//   GET  /grubbery/tools/api/runs?path=        [{id, tool, step, args, result}]
+//   GET  /grubbery/tools/api/src?path=&tool=   {path, text}
+//   POST /grubbery/tools                       JSON-RPC
+'use strict';
 const $ = (id) => document.getElementById(id);
+const BASE = '/grubbery/tools';
+// the tools nexus this page is about: the URL suffix, or none for our own
+const AT = (() => { const s = location.pathname.replace(/^\/grubbery\/tools\/?/, '').replace(/\/$/, ''); return s ? '/' + s : ''; })();
+const Q = AT ? '?path=' + encodeURIComponent(AT) : '';
+const jget = async (u) => { const r = await fetch(BASE + u + (u.includes('?') ? (AT ? '&path=' + encodeURIComponent(AT) : '') : Q)); if (!r.ok) throw new Error(u + ': ' + r.status + ' ' + await r.text()); return r.json(); };
 
-let tools = [];        // flat, for the run form's tool select
-let toolsTree = { dirs: [], tools: [] }; // location tree, root = lib/mcp
-let proc = { dirs: [], files: [], transport: [] };
-const collapsed = new Set();     // /proc dir paths the user closed
-const toolsCollapsed = new Set(); // registry group paths the user closed
-
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${url}: ${res.status}`);
-  return res.json();
+function spinner(label) {
+  const el = document.createElement('div'); el.className = 'loading';
+  const s = document.createElement('span'); s.className = 'spinner';
+  el.append(s, document.createTextNode(label || 'loading…'));
+  return el;
 }
+function busy(el, label) { el.textContent = ''; el.appendChild(spinner(label)); }
+function spinBtn(b, on) { b.disabled = on; b.classList.toggle('busy', on); }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
 
-async function postJson(url, body) {
-  const res = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`${url}: ${res.status} ${await res.text()}`);
-  return res;
-}
+// ---- tools: the one tools nexus, its files as a tree flattened ----
+let here = { path: '', own: true };
+let allTools = [];
+let filter = '';
 
-// ── tools pane ─────────────────────────────────────────────────────
+function fileOf(name) { const p = name.split('__'); return p[p.length - 1].replace(/_/g, '-') + '.hoon'; }
 
 async function loadTools() {
-  toolsTree = await fetchJson('/grubbery/mcp/api/tools-tree');
-  tools = [];
-  (function flatten(node) {
-    for (const t of node.tools || []) tools.push(t);
-    for (const d of node.dirs || []) flatten(d);
-  })(toolsTree);
-  renderToolsTree();
+  if (!allTools.length) busy($('tools'), 'reading ' + (AT || 'this nexus') + '…');
+  let tree;
+  try { tree = await jget('/api/tools-tree'); } catch (e) { $('tools').textContent = ''; $('tools').innerHTML = '<div class="empty">could not read the tools nexus at ' + (AT || 'this nexus') + ': ' + e.message + '</div>'; return; }
+  here = { path: tree.path || AT, own: !!tree.own };
+  $('at').value = here.path;
+  document.title = 'Tools · ' + here.path;
+  const flat = (node) => [].concat(node.tools || [], ...(node.dirs || []).map(flat));
+  allTools = flat(tree).sort((a, b) => a.name.localeCompare(b.name));
+  renderTools();
 }
 
-function lastSeg(name) {
-  const parts = name.split('__');
-  return parts[parts.length - 1];
-}
-
-function fileOf(name) {
-  return lastSeg(name).replace(/_/g, '-') + '.hoon';
-}
-
-function toolRow(t, depth) {
-  const el = row(depth);
-  el.classList.add('tree-file', 'tool-row');
-  const pad = document.createElement('span');
-  pad.className = 'caret-pad';
-  const name = document.createElement('span');
-  name.className = 'tool-row-name mono';
-  name.textContent = fileOf(t.name);
-  name.title = t.name;
-  const call = document.createElement('span');
-  call.className = 'tool-row-call mono';
-  call.textContent = t.name;
-  call.title = 'callable name';
-  const desc = document.createElement('span');
-  desc.className = 'tool-row-desc';
-  desc.textContent = t.description || '';
-  desc.title = t.description || '';
-  const params = document.createElement('span');
-  params.className = 'tool-params tool-row-params';
-  const props = (t.inputSchema && t.inputSchema.properties) || {};
-  const required = (t.inputSchema && t.inputSchema.required) || [];
-  for (const key of Object.keys(props)) {
-    const chip = document.createElement('span');
-    chip.className = 'chip' + (required.includes(key) ? ' req' : '');
-    chip.textContent = key;
-    chip.title = `${props[key].type || ''} — ${props[key].description || ''}`;
-    params.appendChild(chip);
-  }
-  el.append(pad, name, call, desc, params);
-  el.addEventListener('click', () => showToolModal(t));
-  return el;
-}
-
-function countTools(node) {
-  let n = (node.tools || []).length;
-  for (const d of node.dirs || []) n += countTools(d);
-  return n;
-}
-
-function renderToolsNode(node, path, depth, out) {
-  const el = row(depth);
-  el.classList.add('tree-dir');
-  const caret = document.createElement('button');
-  caret.className = 'caret';
-  caret.textContent = toolsCollapsed.has(path) ? '▸' : '▾';
-  const toggle = () => {
-    if (toolsCollapsed.has(path)) toolsCollapsed.delete(path);
-    else toolsCollapsed.add(path);
-    renderToolsTree();
-  };
-  caret.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
-  const name = document.createElement('span');
-  name.className = 'dir-name mono';
-  name.textContent = node.name + '/';
-  const count = document.createElement('span');
-  count.className = 'sb-count';
-  const n = countTools(node);
-  count.textContent = `${n} tool${n === 1 ? '' : 's'}`;
-  el.append(caret, name, count);
-  el.addEventListener('click', toggle);
-  out.appendChild(el);
-  if (toolsCollapsed.has(path)) return;
-  for (const d of node.dirs || []) {
-    renderToolsNode(d, `${path}/${d.name}`, depth + 1, out);
-  }
-  for (const t of node.tools || []) out.appendChild(toolRow(t, depth + 1));
-}
-
-function renderToolsTree() {
-  const out = $('tools-tree');
-  out.textContent = '';
-  // root is implicit /code/lib/tools: its dirs and tools render at top level
-  for (const d of toolsTree.dirs || []) renderToolsNode(d, d.name, 0, out);
-  for (const t of toolsTree.tools || []) out.appendChild(toolRow(t, 0));
+function renderTools() {
+  const box = $('tools'); box.textContent = '';
+  const q = filter.trim().toLowerCase();
+  const tools = allTools.filter((t) => !q || t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q));
+  if (!allTools.length) box.innerHTML = '<div class="empty">No tools compiled at ' + here.path + '/code/lib/tools.</div>';
+  else if (!tools.length) box.innerHTML = '<div class="empty">nothing matches</div>';
+  tools.forEach((t) => box.appendChild(toolRow(t)));
+  $('tools-count').textContent = q ? tools.length + ' of ' + allTools.length : allTools.length + ' tools';
   updateCounts();
 }
 
-// ── the /proc tree ─────────────────────────────────────────────────
+$('at-form').onsubmit = (e) => {
+  e.preventDefault();
+  const p = $('at').value.trim().replace(/\/$/, '');
+  location.href = BASE + (p && p !== '/' ? p : '');
+};
 
-async function loadProc() {
-  proc = await fetchJson('/grubbery/mcp/api/proc');
-  renderProc();
-}
-
-function countRuns(node) {
-  let n = (node.files || []).length;
-  for (const d of node.dirs || []) n += countRuns(d);
-  return n;
-}
-
-function stepClass(step) {
-  if (step === 'done') return 'step done';
-  if (step === 'start') return 'step start';
-  return 'step running';
-}
-
-function resultSummary(run) {
-  const r = run.result;
-  if (r === null || r === undefined) return { text: '—', cls: 'muted' };
-  if (r.type === 'error') return { text: 'error', cls: 'err' };
-  if (typeof r.text === 'string') {
-    const flat = r.text.replace(/\s+/g, ' ').trim();
-    return { text: flat.slice(0, 60) || '(empty)', cls: '' };
-  }
-  return { text: 'result', cls: '' };
-}
-
-function row(depth) {
-  const el = document.createElement('div');
-  el.className = 'tree-row';
-  el.style.paddingLeft = `${8 + depth * 20}px`;
-  return el;
-}
-
-function dirRow(node, path, depth) {
-  const el = row(depth);
-  el.classList.add('tree-dir');
-
-  const caret = document.createElement('button');
-  caret.className = 'caret';
-  caret.textContent = collapsed.has(path) ? '▸' : '▾';
-  caret.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (collapsed.has(path)) collapsed.delete(path);
-    else collapsed.add(path);
-    renderProc();
-  });
-
-  const name = document.createElement('span');
-  name.className = 'dir-name mono';
-  name.textContent = node.name + '/';
-
-  const rules = document.createElement('span');
-  rules.className = 'sb-count';
-  if (node.rules === null || node.rules === undefined) {
-    rules.textContent = 'open';
-    rules.title = 'no weir: nothing filtered';
-  } else if (!node.rules.length) {
-    rules.textContent = 'closed';
-    rules.title = 'empty weir: reaches nothing';
-  } else {
-    rules.textContent = `${node.rules.length} rule${node.rules.length === 1 ? '' : 's'}`;
-    rules.title = node.rules.map((r) => `${r.kind} ${r.road}`).join('\n');
-  }
-
-  const spacer = document.createElement('span');
-  spacer.className = 'sb-spacer';
-
-  const add = document.createElement('button');
-  add.className = 'small';
-  add.textContent = '+';
-  add.title = `New run or sandbox inside ${path}`;
-  add.addEventListener('click', (e) => { e.stopPropagation(); openChooser(path + '/'); });
-
-  const edit = document.createElement('button');
-  edit.className = 'small';
-  edit.textContent = 'edit';
-  edit.title = 'Edit this sandbox’s weir';
-  edit.addEventListener('click', (e) => { e.stopPropagation(); openEditor(path, node.rules); });
-
-  const del = document.createElement('button');
-  del.className = 'small danger';
-  del.textContent = '×';
-  del.title = 'Delete this sandbox and everything inside it';
-  del.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!confirm(`Delete sandbox "${path}" and everything inside it?`)) return;
-    try {
-      await postJson('/grubbery/mcp/api/sandbox-del', { path });
-      await loadProc();
-    } catch (err) { alert(err.message); }
-  });
-
-  el.append(caret, name, rules, spacer, add, edit, del);
-  el.addEventListener('click', () => openEditor(path, node.rules));
-  return el;
-}
-
-function fileRow(run, dirPath, depth, transport) {
-  const el = row(depth);
-  el.classList.add('tree-file');
-
-  const pad = document.createElement('span');
-  pad.className = 'caret-pad';
-
-  const id = document.createElement('span');
-  id.className = 'file-id mono';
-  id.textContent = run.id;
-
-  const tool = document.createElement('span');
-  tool.className = 'file-tool';
-  tool.textContent = run.tool;
-
-  const step = document.createElement('span');
-  step.className = stepClass(run.step);
-  step.textContent = run.step;
-
-  const sum = resultSummary(run);
-  const result = document.createElement('span');
-  result.className = 'file-result ' + sum.cls;
-  result.textContent = sum.text;
-
-  const spacer = document.createElement('span');
-  spacer.className = 'sb-spacer';
-
-  el.append(pad, id, tool, step, result, spacer);
-
-  if (!transport) {
-    const del = document.createElement('button');
-    del.className = 'small danger';
-    del.textContent = '×';
-    del.title = 'Delete this run';
-    del.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const path = dirPath ? `${dirPath}/${run.id}` : run.id;
-      if (!confirm(`Delete run "${path}"? Its result and history go with it.`)) return;
-      try {
-        await postJson('/grubbery/mcp/api/run-del', { path });
-        await loadProc();
-      } catch (err) { alert(err.message); }
-    });
-    el.appendChild(del);
-  }
-
-  el.addEventListener('click', () =>
-    showModal(`${run.tool} · ${dirPath ? dirPath + '/' : ''}${run.id}`,
-      JSON.stringify(run, null, 2)));
-  return el;
-}
-
-function renderNode(node, path, depth, out) {
-  out.appendChild(dirRow(node, path, depth));
-  if (collapsed.has(path)) return;
-  const dirs = node.dirs || [];
-  const files = node.files || [];
-  if (!dirs.length && !files.length) {
-    const el = row(depth + 1);
-    el.classList.add('tree-empty');
-    const pad = document.createElement('span');
-    pad.className = 'caret-pad';
-    const msg = document.createElement('span');
-    msg.className = 'muted';
-    msg.textContent = 'no running processes';
-    el.append(pad, msg);
-    out.appendChild(el);
-    return;
-  }
-  for (const d of dirs) {
-    renderNode(d, path ? `${path}/${d.name}` : d.name, depth + 1, out);
-  }
-  for (const f of files) {
-    out.appendChild(fileRow(f, path, depth + 1, false));
-  }
-}
-
-function renderProc() {
-  const out = $('proc-tree');
-  out.textContent = '';
-  for (const d of proc.dirs || []) renderNode(d, d.name, 0, out);
-  for (const f of proc.files || []) out.appendChild(fileRow(f, '', 0, false));
-
-  const transport = proc.transport || [];
-  if (transport.length) {
-    const hdr = row(0);
-    hdr.classList.add('tree-dir', 'transport');
-    const pad = document.createElement('span');
-    pad.className = 'caret-pad';
-    const name = document.createElement('span');
-    name.className = 'dir-name mono';
-    name.textContent = 'tools/ (transport, in flight)';
-    hdr.append(pad, name);
-    out.appendChild(hdr);
-    for (const f of transport) out.appendChild(fileRow(f, null, 1, true));
-  }
-
-  $('proc-empty').hidden =
-    (proc.dirs || []).length !== 0 ||
-    (proc.files || []).length !== 0 ||
-    transport.length !== 0;
-  updateCounts();
-}
-
-function updateCounts() {
-  $('counts').textContent =
-    `${tools.length} tools · ${countRuns(proc)} runs`;
-}
-
-// ── creation: chooser -> run form / sandbox editor ─────────────────
-
-let chooserPrefix = '';
-
-function openChooser(prefix) {
-  chooserPrefix = prefix || '';
-  $('new-modal-title').textContent =
-    chooserPrefix ? `New in ${chooserPrefix}` : 'New';
-  $('new-modal').hidden = false;
-}
-
-$('new-run').addEventListener('click', () => {
-  $('new-modal').hidden = true;
-  showRunModal(chooserPrefix);
-});
-$('new-sandbox').addEventListener('click', () => {
-  $('new-modal').hidden = true;
-  openEditor(null, null, chooserPrefix);
-});
-$('new-modal-close').addEventListener('click', () => { $('new-modal').hidden = true; });
-$('proc-new').addEventListener('click', () => openChooser(''));
-
-function selectPane(pane) {
-  $('tab-tools').classList.toggle('active', pane === 'tools');
-  $('tab-instances').classList.toggle('active', pane === 'instances');
-  $('tab-reference').classList.toggle('active', pane === 'reference');
-  $('tools-view').hidden = pane !== 'tools';
-  $('instances-view').hidden = pane !== 'instances';
-  $('reference-view').hidden = pane !== 'reference';
-  if (pane === 'reference') renderReference();
-}
-$('tab-tools').addEventListener('click', () => selectPane('tools'));
-$('tab-instances').addEventListener('click', () => selectPane('instances'));
-$('tab-reference').addEventListener('click', () => selectPane('reference'));
-
-// ── reference: a docs-style reading surface over the registry ──────
-// Sidebar of tool names grouped by directory; main panel stacks every
-// tool as a readable section: description as markdown, plus a
-// Schema | Source toggle. Source lazy-loads from /api/src.
-
-let refRendered = false;
-
-function refGroups() {
-  const groups = [];
-  (function walk(node, prefix) {
-    const here = prefix || 'lib/mcp';
-    if ((node.tools || []).length) groups.push({ dir: here, tools: node.tools });
-    for (const d of node.dirs || []) walk(d, `${here}/${d.name}`);
-  })(toolsTree, '');
-  return groups;
-}
-
-function md(text) {
-  const el = document.createElement('div');
-  el.className = 'ref-md';
-  el.innerHTML = marked.parse(text || '', { async: false });
-  return el;
-}
-
-function refSchemaTable(t) {
+function toolRow(t) {
+  const row = el('div', 'tool-row');
+  const name = el('span', 'tool-name mono', t.name); name.title = fileOf(t.name);
+  const desc = el('span', 'tool-desc', t.description || ''); desc.title = t.description || '';
+  const params = el('span', 'tool-params');
   const props = (t.inputSchema && t.inputSchema.properties) || {};
-  const required = (t.inputSchema && t.inputSchema.required) || [];
-  const table = document.createElement('table');
-  table.className = 'ref-schema';
-  const head = table.insertRow();
-  for (const h of ['parameter', 'type', 'required', 'description']) {
-    const th = document.createElement('th');
-    th.textContent = h;
-    head.appendChild(th);
-  }
-  for (const key of Object.keys(props)) {
-    const row = table.insertRow();
-    row.insertCell().appendChild(Object.assign(document.createElement('code'), { textContent: key }));
-    row.insertCell().textContent = props[key].type || '';
-    const reqCell = row.insertCell();
-    if (required.includes(key)) {
-      reqCell.textContent = 'yes';
-      reqCell.className = 'ref-req';
-    }
-    row.insertCell().textContent = props[key].description || '';
-  }
+  const req = (t.inputSchema && t.inputSchema.required) || [];
+  Object.keys(props).forEach((k) => { const c = el('span', 'chip' + (req.includes(k) ? ' req' : ''), k); c.title = (props[k].type || '') + (props[k].description ? ' — ' + props[k].description : ''); params.appendChild(c); });
+  row.append(name, desc, params);
+  row.onclick = () => openTool(t);
+  return row;
+}
+
+$('tools-filter').addEventListener('input', () => { filter = $('tools-filter').value; renderTools(); });
+
+// ---- one tool: Schema | Source | Run, in a modal ----
+// The Schema tab leads with the description (collapsible, open by default)
+// and the schema table sits below it — one place for "what is this and what
+// does it take", read top to bottom.
+function openTool(t) {
+  const body = $('tool-modal-body'); body.textContent = '';
+  const head = el('div', 'tool-head');
+  head.append(el('h4', 'mono', t.name), el('span', 'muted mono', fileOf(t.name)), el('span', 'muted', 'in ' + here.path));
+  body.appendChild(head);
+  const tabs = document.createElement('tab-group'); tabs.setAttribute('persist', 'mcp-tool-tab');
+  const schema = el('section'); schema.setAttribute('tab-label', 'Schema');
+  const about = el('details', 'about'); about.open = true;
+  const sum = el('summary'); sum.append(el('span', 'about-label', 'Description'));
+  about.append(sum, el('p', 'desc', t.description || '(no description)'));
+  schema.append(about, schemaTable(t));
+  const source = el('section'); source.setAttribute('tab-label', 'Source');
+  busy(source, 'reading the source…');
+  jget('/api/src?tool=' + encodeURIComponent(t.name)).then((res) => {
+    source.textContent = '';
+    source.append(el('div', 'src-path mono', res.path), highlightHoon(res.text));
+  }).catch((e) => { source.textContent = ''; source.appendChild(el('div', 'empty tight', 'no source: ' + e.message)); });
+  const run = el('section'); run.setAttribute('tab-label', 'Run');
+  run.appendChild(runForm(t));
+  tabs.append(schema, source, run);
+  body.appendChild(tabs);
+  $('tool-modal').show();
+}
+
+function schemaTable(t) {
+  const props = (t.inputSchema && t.inputSchema.properties) || {};
+  const req = (t.inputSchema && t.inputSchema.required) || [];
+  const keys = Object.keys(props);
+  if (!keys.length) return el('div', 'empty tight', 'No parameters.');
+  const table = el('table', 'schema');
+  const hr = table.insertRow();
+  ['parameter', 'type', '', 'description'].forEach((h) => { const th = document.createElement('th'); th.textContent = h; hr.appendChild(th); });
+  keys.forEach((k) => {
+    const tr = table.insertRow();
+    tr.insertCell().appendChild(el('code', '', k));
+    tr.insertCell().appendChild(el('span', 'type', props[k].type || ''));
+    tr.insertCell().appendChild(el('span', 'req', req.includes(k) ? 'required' : ''));
+    tr.insertCell().textContent = props[k].description || '';
+  });
   return table;
 }
 
-function refSection(t) {
-  // shell only: header + placeholder. Body (markdown, schema, source
-  // toggle) fills lazily when the section nears the viewport.
-  const sec = document.createElement('section');
-  sec.className = 'ref-tool';
-  sec.id = `ref-${t.name}`;
-  sec.style.minHeight = '120px';
-
-  const h = document.createElement('h2');
-  h.textContent = fileOf(t.name).replace(/\.hoon$/, '');
-  const call = document.createElement('code');
-  call.className = 'ref-call';
-  call.textContent = t.name;
-  h.appendChild(call);
-  sec.appendChild(h);
-
-  let filled = false;
-  sec.refFill = () => {
-    if (filled) return;
-    filled = true;
-    sec.style.minHeight = '';
-
-    sec.appendChild(md(t.description || ''));
-
-    const toggle = document.createElement('div');
-    toggle.className = 'seg-group ref-toggle';
-    const bSchema = Object.assign(document.createElement('button'), { textContent: 'Schema', className: 'seg active' });
-    const bSource = Object.assign(document.createElement('button'), { textContent: 'Source', className: 'seg' });
-    toggle.append(bSchema, bSource);
-    sec.appendChild(toggle);
-
-    const schemaPane = refSchemaTable(t);
-    const sourcePane = document.createElement('div');
-    sourcePane.className = 'ref-source-wrap';
-    sourcePane.hidden = true;
-    let sourceLoaded = false;
-    sec.append(schemaPane, sourcePane);
-
-    bSchema.addEventListener('click', () => {
-      bSchema.classList.add('active'); bSource.classList.remove('active');
-      schemaPane.hidden = false; sourcePane.hidden = true;
-    });
-    bSource.addEventListener('click', async () => {
-      bSource.classList.add('active'); bSchema.classList.remove('active');
-      schemaPane.hidden = true; sourcePane.hidden = false;
-      if (sourceLoaded) return;
-      sourceLoaded = true;
-      try {
-        const r = await fetchJson(`/grubbery/mcp/api/src?tool=${encodeURIComponent(t.name)}`);
-        sourcePane.textContent = '';
-        sourcePane.appendChild(highlightHoon(r.text));
-      } catch (e) { sourcePane.textContent = `could not load source: ${e.message}`; }
-    });
-  };
-  refObserver.observe(sec);
-  return sec;
-}
-
-const refObserver = new IntersectionObserver((entries) => {
-  for (const e of entries) {
-    if (e.isIntersecting && e.target.refFill) {
-      e.target.refFill();
-      refObserver.unobserve(e.target);
-    }
-  }
-}, { root: null, rootMargin: '600px' });
-
-function renderReference() {
-  if (refRendered) return;
-  refRendered = true;
-  const side = $('ref-sidebar');
-  const main = $('ref-main');
-  side.textContent = '';
-  main.textContent = '';
-  for (const g of refGroups()) {
-    const dirH = document.createElement('div');
-    dirH.className = 'ref-side-dir';
-    dirH.textContent = g.dir + '/';
-    side.appendChild(dirH);
-    const mainDirH = document.createElement('h1');
-    mainDirH.className = 'ref-dir-head';
-    mainDirH.textContent = g.dir + '/';
-    main.appendChild(mainDirH);
-    for (const t of g.tools) {
-      const link = document.createElement('a');
-      link.className = 'ref-side-link';
-      link.textContent = fileOf(t.name).replace(/\.hoon$/, '');
-      link.href = `#ref-${t.name}`;
-      link.addEventListener('click', (e) => {
-        e.preventDefault();
-        const target = document.getElementById(`ref-${t.name}`);
-        if (!target) return;
-        if (target.refFill) target.refFill();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-      side.appendChild(link);
-      main.appendChild(refSection(t));
-    }
-  }
-}
-
-// ── sandbox editor ─────────────────────────────────────────────────
-
-const KINDS = ['poke', 'peek', 'make'];
-
-// Every tool needs these two boundary crossings just to run. Pre-filled,
-// not hidden — delete them and the sandbox can't run anything, which is
-// a legitimate choice.
-const BASELINE_RULES = [
-  { kind: 'poke', road: '/sys/bowl.sig' },  // fiber runtime: time, identity, entropy
-  { kind: 'peek', road: '/code/' },         // load tool code (app tools also need /apps/)
-];
-
-function ruleRow(rule) {
-  const rowEl = document.createElement('div');
-  rowEl.className = 'sb-rule-row';
-  const kind = document.createElement('select');
-  for (const k of KINDS) {
-    const opt = document.createElement('option');
-    opt.value = k;
-    opt.textContent = k;
-    if (rule && rule.kind === k) opt.selected = true;
-    kind.appendChild(opt);
-  }
-  const road = document.createElement('input');
-  road.type = 'text';
-  road.placeholder = '/sys/eyre/  (trailing / = subtree)';
-  road.spellcheck = false;
-  road.value = rule ? rule.road : '';
-  const rm = document.createElement('button');
-  rm.className = 'small danger';
-  rm.textContent = '×';
-  rm.addEventListener('click', () => rowEl.remove());
-  rowEl.append(kind, road, rm);
-  return rowEl;
-}
-
-// editPath = existing sandbox path (edit mode); prefix = for new nested
-function openEditor(editPath, rules, prefix) {
-  $('sb-modal-title').textContent = editPath ? `Edit sandbox: ${editPath}` : 'New sandbox';
-  $('sb-name').value = editPath ? editPath : (prefix || '');
-  $('sb-name').disabled = !!editPath;
-  setWeirMode(editPath ? (rules === null || rules === undefined) : false);
-  $('sb-rules').textContent = '';
-  for (const r of (editPath ? (rules || []) : BASELINE_RULES)) {
-    $('sb-rules').appendChild(ruleRow(r));
-  }
-  $('sb-modal').hidden = false;
-}
-
-let weirOpen = false;
-function setWeirMode(open) {
-  weirOpen = open;
-  $('sb-mode-rules').classList.toggle('active', !open);
-  $('sb-mode-open').classList.toggle('active', open);
-  $('sb-rules').style.display = open ? 'none' : '';
-  $('sb-add-rule').disabled = open;
-}
-$('sb-mode-rules').addEventListener('click', () => setWeirMode(false));
-$('sb-mode-open').addEventListener('click', () => setWeirMode(true));
-
-function readEditor() {
-  const path = $('sb-name').value.trim().replace(/^\/+|\/+$/g, '');
-  if (!path || !/^[a-z0-9-]+(\/[a-z0-9-]+)*$/.test(path)) {
-    throw new Error('path must be segments of lowercase, digits, hyphens');
-  }
-  if (weirOpen) return { path, rules: null };
-  const rules = [];
-  for (const rowEl of $('sb-rules').children) {
-    const [kind, road] = rowEl.children;
-    if (!road.value.trim()) continue;
-    if (!road.value.startsWith('/')) throw new Error(`road must start with /: ${road.value}`);
-    rules.push({ kind: kind.value, road: road.value.trim() });
-  }
-  return { path, rules };
-}
-
-$('sb-add-rule').addEventListener('click', () => $('sb-rules').appendChild(ruleRow()));
-$('sb-cancel').addEventListener('click', () => { $('sb-modal').hidden = true; });
-$('sb-modal-close').addEventListener('click', () => { $('sb-modal').hidden = true; });
-$('sb-save').addEventListener('click', async () => {
-  let body;
-  try { body = readEditor(); } catch (err) { alert(err.message); return; }
-  const isEdit = $('sb-name').disabled;
-  try {
-    await postJson(`/grubbery/mcp/api/sandbox-${isEdit ? 'edit' : 'add'}`, body);
-    $('sb-modal').hidden = true;
-    await loadProc();
-  } catch (err) { alert(err.message); }
-});
-
-// ── modals: raw view, tool detail, run form ────────────────────────
-
-function showModal(title, text) {
-  $('modal-title').textContent = title;
-  const pre = document.createElement('pre');
-  pre.textContent = text;
-  $('modal-body').replaceChildren(pre);
-  $('modal').hidden = false;
-}
-
-// Compact hoon highlighter: comments, strings, %terms, rune digraphs.
+// comments, strings, %terms, rune digraphs — enough to read by
 function highlightHoon(src) {
-  const pre = document.createElement('pre');
-  pre.className = 'hoon';
+  const pre = el('pre', 'hoon');
   const re = /(::[^\n]*)|('[^'\n]*'|"[^"\n]*")|(%[a-z][a-z0-9-]*)|([|$%:.^~;=?!_+][|$%:.^~;=?!_+*@&<>#-])/g;
-  let last = 0;
-  let m;
+  let last = 0, m;
   while ((m = re.exec(src)) !== null) {
     if (m.index > last) pre.append(src.slice(last, m.index));
-    const span = document.createElement('span');
-    span.className = m[1] ? 'hl-com' : m[2] ? 'hl-str' : m[3] ? 'hl-term' : 'hl-rune';
-    span.textContent = m[0];
+    const span = el('span', m[1] ? 'hl-com' : m[2] ? 'hl-str' : m[3] ? 'hl-term' : 'hl-rune', m[0]);
     pre.appendChild(span);
     last = m.index + m[0].length;
   }
@@ -636,276 +139,91 @@ function highlightHoon(src) {
   return pre;
 }
 
-function showToolModal(t) {
-  $('modal-title').textContent = t.name;
-
-  const tabs = document.createElement('div');
-  tabs.className = 'tabs';
-  const schemaTab = document.createElement('button');
-  schemaTab.className = 'tab active';
-  schemaTab.textContent = 'Schema';
-  const sourceTab = document.createElement('button');
-  sourceTab.className = 'tab';
-  sourceTab.textContent = 'Source';
-  const runTab = document.createElement('button');
-  runTab.className = 'tab';
-  runTab.textContent = 'Run';
-  tabs.append(schemaTab, sourceTab, runTab);
-
-  const panel = document.createElement('div');
-  panel.className = 'tab-panel';
-  let sourceEl = null;
-
-  function select(tab) {
-    schemaTab.classList.toggle('active', tab === 'schema');
-    sourceTab.classList.toggle('active', tab === 'source');
-    runTab.classList.toggle('active', tab === 'run');
-    if (tab === 'schema') {
-      panel.replaceChildren(schemaDetail(t));
-      return;
-    }
-    if (tab === 'run') {
-      panel.replaceChildren(runForm(t, ''));
-      return;
-    }
-    if (sourceEl) { panel.replaceChildren(sourceEl); return; }
-    const loading = document.createElement('p');
-    loading.className = 'muted pad';
-    loading.textContent = 'Loading source…';
-    panel.replaceChildren(loading);
-    fetchJson(`/grubbery/mcp/api/src?tool=${encodeURIComponent(t.name)}`)
-      .then((res) => {
-        sourceEl = document.createElement('div');
-        const path = document.createElement('div');
-        path.className = 'src-path mono';
-        path.textContent = res.path;
-        sourceEl.append(path, highlightHoon(res.text));
-        if (sourceTab.classList.contains('active'))
-          panel.replaceChildren(sourceEl);
-      })
-      .catch((err) => { loading.textContent = String(err); });
-  }
-  schemaTab.addEventListener('click', () => select('schema'));
-  sourceTab.addEventListener('click', () => select('source'));
-  runTab.addEventListener('click', () => select('run'));
-
-  select('schema');
-  $('modal-body').replaceChildren(tabs, panel);
-  $('modal').hidden = false;
+// the Run tab is an MCP client: a JSON-RPC tools/call to the endpoint,
+// the same request Claude makes, so a run here is exactly a run there
+let rpcId = 0;
+async function callTool(name, args) {
+  const res = await fetch(BASE, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } }) });
+  if (!res.ok) throw new Error('tools/call: ' + res.status + ' ' + await res.text());
+  return res.json();
 }
 
-function showRunModal(prefix) {
-  $('modal-title').textContent = 'New run';
-  const wrap = document.createElement('div');
-  const picker = document.createElement('label');
-  picker.className = 'sb-field run-field pad-top';
-  const pickName = document.createElement('span');
-  pickName.textContent = 'tool';
-  const sel = document.createElement('select');
-  const blank = document.createElement('option');
-  blank.value = '';
-  blank.textContent = 'select a tool…';
-  sel.appendChild(blank);
-  for (const t of tools) {
-    const opt = document.createElement('option');
-    opt.value = t.name;
-    opt.textContent = t.name;
-    sel.appendChild(opt);
-  }
-  picker.append(pickName, sel);
-  const formSlot = document.createElement('div');
-  sel.addEventListener('change', () => {
-    const t = tools.find((x) => x.name === sel.value);
-    formSlot.replaceChildren();
-    if (t) formSlot.appendChild(runForm(t, prefix || ''));
-  });
-  wrap.append(picker, formSlot);
-  $('modal-body').replaceChildren(wrap);
-  $('modal').hidden = false;
-}
-
-function runForm(t, prefix) {
-  const body = document.createElement('div');
-  body.className = 'sb-form';
-
+function runForm(t) {
+  const form = el('form', 'form run-form');
   const props = (t.inputSchema && t.inputSchema.properties) || {};
-  const required = (t.inputSchema && t.inputSchema.required) || [];
+  const req = (t.inputSchema && t.inputSchema.required) || [];
   const fields = [];
-  for (const key of Object.keys(props)) {
-    const def = props[key];
-    const field = document.createElement('label');
-    field.className = 'sb-field run-field';
-    const name = document.createElement('span');
-    name.textContent = key + (required.includes(key) ? ' *' : '');
-    name.title = def.description || '';
+  Object.keys(props).forEach((k) => {
+    const def = props[k];
+    const label = el('label'); label.append(document.createTextNode(k + (req.includes(k) ? ' *' : '') + ' '));
     let input;
-    if (def.type === 'boolean') {
-      input = document.createElement('input');
-      input.type = 'checkbox';
-    } else if (def.type === 'object' || def.type === 'array') {
-      input = document.createElement('textarea');
-      input.rows = 3;
-      input.placeholder = def.type === 'array' ? '[...]' : '{...}';
-    } else {
-      input = document.createElement('input');
-      input.type = 'text';
-      input.placeholder = def.description || def.type || '';
-      input.spellcheck = false;
-    }
-    fields.push({ key, def, input });
-    field.append(name, input);
-    body.appendChild(field);
-  }
-  if (!fields.length) {
-    const none = document.createElement('p');
-    none.className = 'muted';
-    none.textContent = 'No parameters.';
-    body.appendChild(none);
-  }
-
-  const place = document.createElement('label');
-  place.className = 'sb-field run-field';
-  const placeName = document.createElement('span');
-  placeName.textContent = 'path';
-  placeName.title = 'Where under /proc this run lives. Blank = auto id at /proc root.';
-  const placeInput = document.createElement('input');
-  placeInput.type = 'text';
-  placeInput.placeholder = 'sandbox/run-name — blank for auto';
-  placeInput.spellcheck = false;
-  placeInput.value = prefix || '';
-  place.append(placeName, placeInput);
-  body.appendChild(place);
-
-  const status = document.createElement('p');
-  status.className = 'sb-note';
-  const actions = document.createElement('div');
-  actions.className = 'sb-actions';
-  const runBtn = document.createElement('button');
-  runBtn.className = 'small primary';
-  runBtn.textContent = 'Run';
-  runBtn.addEventListener('click', async () => {
+    if (def.type === 'boolean') { input = document.createElement('input'); input.type = 'checkbox'; label.classList.add('check'); }
+    else if (def.type === 'object' || def.type === 'array') { input = document.createElement('textarea'); input.rows = 3; input.placeholder = def.type === 'array' ? '[…]' : '{…}'; input.className = 'mono'; }
+    else { input = document.createElement('input'); input.type = 'text'; input.placeholder = def.description || def.type || ''; input.spellcheck = false; }
+    label.title = def.description || '';
+    label.appendChild(input); form.appendChild(label);
+    fields.push({ k, def, input });
+  });
+  if (!fields.length) form.appendChild(el('p', 'muted', 'No parameters.'));
+  // another nexus's tool is called through its path, like a client would
+  if (!here.own) form.appendChild(el('p', 'muted', 'called as call_tool with path=' + here.path));
+  const row = el('div', 'row');
+  const btn = el('button', 'small primary', 'Run'); btn.type = 'submit';
+  const msg = el('span', 'muted');
+  row.append(btn, msg); form.appendChild(row);
+  const out = el('pre', 'run-result'); out.hidden = true; form.appendChild(out);
+  form.onsubmit = async (e) => {
+    e.preventDefault();
     const args = {};
     try {
-      for (const { key, def, input } of fields) {
-        if (def.type === 'boolean') {
-          if (input.checked) args[key] = true;
-          continue;
-        }
+      fields.forEach(({ k, def, input }) => {
+        if (def.type === 'boolean') { if (input.checked) args[k] = true; return; }
         const raw = input.value.trim();
-        if (!raw) {
-          if (required.includes(key)) throw new Error(`${key} is required`);
-          continue;
-        }
-        if (def.type === 'number') {
-          const n = Number(raw);
-          if (Number.isNaN(n)) throw new Error(`${key} must be a number`);
-          args[key] = n;
-        } else if (def.type === 'object' || def.type === 'array') {
-          args[key] = JSON.parse(raw);
-        } else {
-          args[key] = raw;
-        }
-      }
-    } catch (err) {
-      status.textContent = String(err.message || err);
-      return;
-    }
-    const req = { tool: t.name, args };
-    const pathVal = placeInput.value.trim().replace(/^\/+|\/+$/g, '');
-    if (pathVal) req.path = pathVal;
-    runBtn.disabled = true;
-    status.textContent = 'Starting…';
+        if (!raw) { if (req.includes(k)) throw new Error(k + ' is required'); return; }
+        if (def.type === 'number') { const n = Number(raw); if (Number.isNaN(n)) throw new Error(k + ' must be a number'); args[k] = n; }
+        else if (def.type === 'object' || def.type === 'array') args[k] = JSON.parse(raw);
+        else args[k] = raw;
+      });
+    } catch (err) { msg.textContent = err.message; return; }
+    spinBtn(btn, true); msg.textContent = ''; msg.appendChild(spinner('running…')); out.hidden = true;
+    loadRuns().catch(() => {});
     try {
-      await postJson('/grubbery/mcp/api/run', req);
-      $('modal').hidden = true;
-      selectPane('instances');
-      await loadProc();
-    } catch (err) {
-      status.textContent = String(err.message || err);
-    } finally {
-      runBtn.disabled = false;
-    }
+      const rpc = !here.own
+        ? await callTool('call_tool', { tool_name: t.name, path: here.path, tool_args: args })
+        : await callTool(t.name, args);
+      msg.textContent = rpc.error ? 'error' : 'done';
+      const text = rpc.error ? rpc.error.message : ((rpc.result && rpc.result.content) || []).map((c) => c.text !== undefined ? c.text : JSON.stringify(c)).join('\n');
+      out.textContent = text || JSON.stringify(rpc, null, 2); out.hidden = false;
+    } catch (err) { msg.textContent = err.message; }
+    finally { spinBtn(btn, false); loadRuns().catch(() => {}); }
+  };
+  return form;
+}
+
+// ---- runs: run grubs in the tools child ----
+let runs = [];
+async function loadRuns() {
+  try { runs = await jget('/api/runs'); } catch (e) { runs = []; }
+  renderRuns();
+}
+function renderRuns() {
+  const box = $('runs'); box.textContent = '';
+  $('runs-count').textContent = runs.length ? runs.length + ' in flight' : '';
+  if (!runs.length) { box.innerHTML = '<div class="empty">No runs in flight.</div>'; updateCounts(); return; }
+  runs.forEach((r) => {
+    const row = el('div', 'run-row');
+    const sum = r.result === null || r.result === undefined ? '—' : r.result.type === 'error' ? 'error' : typeof r.result.text === 'string' ? r.result.text.replace(/\s+/g, ' ').trim().slice(0, 80) : 'result';
+    row.append(el('span', 'mono muted', r.id), el('span', 'tool-name mono', r.tool), el('span', 'step ' + (r.step || ''), r.step), el('span', 'run-sum' + (r.result && r.result.type === 'error' ? ' err' : ''), sum));
+    row.onclick = () => { const b = $('run-modal-body'); b.textContent = ''; b.append(el('h4', 'mono', r.tool + ' · ' + r.id), el('pre', 'json', JSON.stringify(r, null, 2))); $('run-modal').show(); };
+    box.appendChild(row);
   });
-  actions.appendChild(runBtn);
-  body.append(status, actions);
-  return body;
+  updateCounts();
 }
 
-function schemaDetail(t) {
-  const body = document.createElement('div');
-  body.className = 'tool-detail';
+function updateCounts() { $('counts').textContent = allTools.length + ' tools · ' + runs.length + ' runs'; }
 
-  const desc = document.createElement('p');
-  desc.className = 'detail-desc';
-  desc.textContent = t.description || '(no description)';
-  body.appendChild(desc);
-
-  const props = (t.inputSchema && t.inputSchema.properties) || {};
-  const required = (t.inputSchema && t.inputSchema.required) || [];
-  const keys = Object.keys(props);
-  if (keys.length) {
-    const table = document.createElement('table');
-    table.className = 'param-table';
-    const thead = document.createElement('thead');
-    const hr = document.createElement('tr');
-    for (const h of ['parameter', 'type', '', 'description']) {
-      const th = document.createElement('th');
-      th.textContent = h;
-      hr.appendChild(th);
-    }
-    thead.appendChild(hr);
-    const tbody = document.createElement('tbody');
-    for (const key of keys) {
-      const tr = document.createElement('tr');
-      const name = document.createElement('td');
-      name.className = 'mono';
-      name.textContent = key;
-      const type = document.createElement('td');
-      type.className = 'param-type';
-      type.textContent = props[key].type || '';
-      const req = document.createElement('td');
-      req.className = 'param-req';
-      req.textContent = required.includes(key) ? 'required' : '';
-      const pdesc = document.createElement('td');
-      pdesc.className = 'param-desc';
-      pdesc.textContent = props[key].description || '';
-      tr.append(name, type, req, pdesc);
-      tbody.appendChild(tr);
-    }
-    table.append(thead, tbody);
-    body.appendChild(table);
-  } else {
-    const none = document.createElement('p');
-    none.className = 'muted';
-    none.textContent = 'No parameters.';
-    body.appendChild(none);
-  }
-
-  return body;
-}
-
-$('modal-close').addEventListener('click', () => { $('modal').hidden = true; });
-$('modal').addEventListener('click', (e) => {
-  if (e.target === $('modal')) $('modal').hidden = true;
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    $('modal').hidden = true;
-    $('sb-modal').hidden = true;
-    $('new-modal').hidden = true;
-  }
-});
-
-// ── boot ───────────────────────────────────────────────────────────
-
-async function refresh() {
-  try {
-    await Promise.all([loadTools(), loadProc()]);
-  } catch (err) {
-    $('counts').textContent = String(err);
-  }
-}
-
-$('refresh').addEventListener('click', refresh);
+async function refresh() { await Promise.all([loadTools(), loadRuns()]); }
+$('refresh').onclick = refresh;
 refresh();
-setInterval(loadProc, 10000);
+setInterval(() => loadRuns().catch(() => {}), 10000);
