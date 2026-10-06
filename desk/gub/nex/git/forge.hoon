@@ -12,6 +12,8 @@
 ::    GET  /api/list /api/detail?repo= /api/src
 ::    POST /api/add /api/delete /api/action /api/config /api/src
 ::  /repos/      the repo instances
+::  /ci/         CI (git/ci): watched repos, jobs and runners, served at
+::               /grubbery/forge/ci
 ::
 /<  git-act  /lib/git/action.hoon
 /&  icon        forge/icon.svg
@@ -63,6 +65,9 @@
           [%fall %& [/ %'main.sig'] [[/ %sig] ~]]
           [%fall %| /requests empty-dir:loader]
           [%fall %| /repos empty-dir:loader]
+          ::  CI: watched repos, the job queue and external runners. Its
+          ::  own nexus, mounted here so Forge's weir is its sandbox.
+          [%fall %| /ci [`[`[/git %ci] ~ %.n ~] ~]]
           ::  forge-level defaults: identity + account stamped into each new
           ::  repo on create (per-repo config still overrides). Forge's own
           ::  config — the one thing not scoped to a selected repo.
