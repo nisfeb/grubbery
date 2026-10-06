@@ -55,7 +55,8 @@
 /=  t-  /tests/loader
 |%
 +$  versioned-state
-  $%  state-4:migrations
+  $%  state-5:migrations
+      state-4:migrations
       state-3:migrations
       state-2:migrations
       state-1:migrations
@@ -135,6 +136,13 @@
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-state)
   ?-    -.old
+      %5
+    ~>  %slog.[0 leaf+"grubbery: migrating state %5 -> %4"]
+    =.  state  (state-5-to-4:migrations old)
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::
       %4
     =.  state  old
     =^  start-cards  state

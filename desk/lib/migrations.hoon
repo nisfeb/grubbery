@@ -169,8 +169,36 @@
       ::  live: which eyre binding is serving each open eyre-id
       conns=(map @ta binding:eyre)
   ==
+::  state-5: what release/perf-requests (821e91b) writes: %4 plus the
+::  eyre conns. Here only so a ship that ran that release can come back
+::  down to %4. Its born was swept, which this kernel reads as is.
+::
++$  state-5
+  $:  %5
+      =born:nexus
+      =silo:nexus
+      =subs:nexus
+      =pool:nexus
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      =remo:nexus
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
 ::
 +|  %migrations
+::
+::  the way down from release/perf-requests: drop conns, keep the rest
+::
+++  state-5-to-4
+  |=  old=state-5
+  ^-  state-4
+  :*  %4
+      born.old  silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old
+  ==
 ::
 ::  the way down from the perf lineage: drop conns, keep the rest
 ::
