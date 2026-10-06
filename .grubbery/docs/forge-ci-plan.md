@@ -232,9 +232,9 @@ Keys are checked in the app, not by eyre. Requests under `/grubbery/forge/ci/run
 | --- | --- | --- |
 | `runner/hello` | protocol, labels, os, arch, version | poll interval in seconds, or 426 for a protocol Forge does not speak |
 | `runner/poll` | nothing | a job and its lease, or 204 |
-| `runner/source` | job, lease | mirrored repos: a git pack of the job's commit |
+| `runner/source` | job, lease | mirrored repos: a git pack of the job's commit (501 until phase 4) |
 | `runner/log` | job, lease, seq, text | `{"cancel": bool}` |
-| `runner/upload` | job, lease, name, size, sha256 | a presigned PUT URL |
+| `runner/upload` | job, lease, name, size, sha256 | a presigned PUT URL (501 until phase 2) |
 | `runner/done` | job, lease, status, artifacts | 200 |
 
 **Claiming.** `poll` lists `queue/` and takes the oldest marker whose labels the runner holds and whose repo the runner may serve. It pokes that job with a claim carrying the runner id and a fresh random lease. The job fiber accepts only while the job is still queued, then culls the marker. The route reads the job back and returns it only if this runner now holds it, otherwise it tries the next marker. Later calls must carry the lease, like orrery's action claims, which other clients cannot touch while held. A job carries its repo (`owner/repo`), commit, branch, steps, timeout and run ids.
