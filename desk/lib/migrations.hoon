@@ -169,6 +169,29 @@
       ::  live: which eyre binding is serving each open eyre-id
       conns=(map @ta binding:eyre)
   ==
+::  state-5: the born sweep and conns in agent state (gwbtc/grubbery
+::  974cb5d, #48/#49), ported onto this line. Same fields as %4 plus
+::  conns, the eyre-id to binding map. It is the same move %2 made on
+::  the perf lineage, which this line came back down from: conns is
+::  per-request bookkeeping with no meaning across a reload, and holding
+::  it in the server-state grub made every inbound HTTP request a full
+::  grub write. bindings are truth and stay in the namespace.
+::
++$  state-5
+  $:  %5
+      =born:nexus
+      =silo:nexus
+      =subs:nexus
+      =pool:nexus
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      =remo:nexus
+      =upki:nexus
+      =last:nexus
+      ::  live: which eyre binding is serving each open eyre-id
+      conns=(map @ta binding:eyre)
+  ==
 ::
 +|  %migrations
 ::
@@ -197,6 +220,58 @@
       born.old  silo.old  subs.old  pool.old  code.old
       bins.old  vale.old  remo.old  upki.old  last.old
   ==
+::  state-4 -> state-5: conns moves into agent state (starts empty), and a
+::  one-time sweep of born. Until now a culled grub left its record behind,
+::  so a ship that had served traffic carried one dead record per request
+::  ever made. Both the tree walk and the born diff scan those records on
+::  every later write in the same directory. New ones stop appearing at
+::  the source (+delete drops an un-gained grub's record), and this clears
+::  what already piled up.
+::
+++  state-4-to-5
+  |=  old=state-4
+  ^-  state-5
+  :*  %5
+      (prune-dead-born born.old)
+      silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old
+      ~
+  ==
+::  +prune-dead-born: drop file records with nothing left to read.
+::
+::    A record survives if any revision still points at a ject. A gained
+::    grub keeps its revisions, so it survives a delete and keeps ordering
+::    its future re-creations. An un-gained one has had its revisions
+::    tombed already, so nothing here is reachable and nothing references
+::    the silo. Dropping it releases no refcounts because it holds none.
+::
+++  prune-dead-born
+  |=  bon=born:nexus
+  ^-  born:nexus
+  =?  fil.bon  ?=(^ fil.bon)
+    :-  ~
+    %=    u.fil.bon
+        file
+      %-  ~(rep by file.u.fil.bon)
+      |=  [[nom=@ta sk=hist:nexus] out=(map @ta hist:nexus)]
+      ?.  (hist-readable sk)  out
+      (~(put by out) nom sk)
+    ==
+  %=    bon
+      dir
+    %-  ~(run by dir.bon)
+    |=(kid=born:nexus ^$(bon kid))
+  ==
+::  +hist-readable: does any revision of this file still point at a ject?
+::
+++  hist-readable
+  |=  sk=hist:nexus
+  ^-  ?
+  %+  lien  (tap:hon:hist:nexus sk)
+  |=  [key=cass:clay val=entry:hist:nexus]
+  ?:  ?=(%tomb -.pace.val)  %.n
+  ?=(^ p.pace.val)
+::
 ++  state-2-to-1
   |=  old=state-2
   ^-  state-1
