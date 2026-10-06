@@ -253,7 +253,7 @@ For a watched repo, the runner clones from GitHub at the job's commit: `git init
 
 ### The runner program
 
-- Go, standard library only. One source cross-compiles to Linux, Windows and macOS binaries. It lives in its own repo, `forge-runner`, because Forge will not always ship inside a grubbery install.
+- Go, standard library only. One source cross-compiles to Linux, Windows and macOS binaries. It lives in its own repo, `nisfeb/forge-runner` (offered to gwbtc by PR), because Forge will not always ship inside a grubbery install.
 - Config file `forge-runner.json`: `ship`, `key`, `name`, `labels`, `workdir`, `env_file`.
 - One job at a time. Each job gets a fresh directory under `workdir`, deleted afterwards. The service runs as a dedicated unprivileged OS user.
 - `run` steps go through `bash -eo pipefail -c` or `pwsh -NoProfile -Command`. The environment carries `CI=true`, `FORGE_REPO`, `FORGE_SHA`, `FORGE_BRANCH`, `FORGE_RUN` and `FORGE_JOB`, plus the variables in `env_file`.
@@ -347,7 +347,7 @@ Owner routes under `/grubbery/forge/ci/api/`, behind the owner's cookie:
 
 ## Implementation phases
 
-Six phases, each a PR to `gwbtc/grubbery`. The runner gets its own repo, `forge-runner`. Phase 0 is a gate: no code until the maintainer agrees on the layout. External builds come first, because orchestrating them is the hard part, and Hoon on the ship comes last. Every phase is built and checked on a dev ship before it reaches a production ship.
+Six phases, each a PR to `gwbtc/grubbery`. The runner gets its own repo, `nisfeb/forge-runner`. Phase 0 is a gate: no code until the maintainer agrees on the layout. External builds come first, because orchestrating them is the hard part, and Hoon on the ship comes last. Every phase is built and checked on a dev ship before it reaches a production ship.
 
 | Phase | Delivers | Done when (on a dev ship) |
 | --- | --- | --- |
@@ -383,7 +383,7 @@ Questions for the maintainer, the first three answered on 2026-10-05:
 
 1. Is `.grubbery/workflows/` the right home, next to `.grubbery/docs`? **Answered: yes.**
 2. Should CI be a child nexus of Forge at `/ci`, or an app of its own? **Answered: inside Forge.** The tools pattern agrees: CI is an engine Forge mounts, as it mounts `/tools`, and Forge serves the UI.
-3. Should the runner's source live in `gwbtc/grubbery` or in a repo of its own? **Answered: its own repo, `forge-runner`.** Forge will not always ship inside a grubbery install, so the runner must not live in grubbery's repo. The two share only the versioned runner protocol.
+3. Should the runner's source live in `gwbtc/grubbery` or in a repo of its own? **Answered: its own repo, `forge-runner`.** Forge will not always ship inside a grubbery install, so the runner must not live in grubbery's repo. It starts at `nisfeb/forge-runner` and goes to gwbtc by PR, like the grubbery changes. The two share only the versioned runner protocol.
 4. Should `ci_test` also run hoon-test-kit suites in the ship, or is a Linux runner the long-term home for them?
 5. Pull overwrites local branch heads with the remote tips. With in-ship commits driving CI, that drops unpushed commits from the watched branch. Is that intended, or a bug to fix on its own?
 6. Does writing identical content bump a grub's version? CI compares hashes either way, but the answer decides how noisy the `/repos` watch is.
