@@ -141,13 +141,6 @@
 ::  yielding its outcome. Verbs are wired incrementally; unwired ones
 ::  report an error rather than silently no-op.
 ::
-::  +dbg: the traces below print only when this is yes. They were on
-::  unconditionally - a few lines per sync tick, per commit, per request -
-::  and in production they bury the warnings. ~? costs nothing when it is
-::  |; flip to & and recompile to see them again. Warnings (>> and >>>)
-::  are not behind it.
-::
-++  dbg  ^-(? |)
 ++  run-command
   |=  cmd=git-command:git-act
   =/  m  (fiber:fiber:nexus ,outcome:git-act)

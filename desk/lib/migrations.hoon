@@ -463,6 +463,13 @@
 ++  dist-to-1
   |=  old=$%(dist-state-2 dist-state-3 dist-state-4 dist-state-5)
   ^-  state-1
+  ::  one arm per layout: %4 ends at last, the others carry conns after
+  ::  it, so a face read across all four is not one place
+  ?:  ?=(%4 -.old)
+    :*  %1
+        born.old  silo.old  subs.old  pool.old  code.old
+        bins.old  vale.old  remo.old  upki.old  last.old
+    ==
   :*  %1
       born.old  silo.old  subs.old  pool.old  code.old
       bins.old  vale.old  remo.old  upki.old  last.old

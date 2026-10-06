@@ -541,12 +541,6 @@
   (pure:m ~)
 ::  Handle POST requests (delete actions)
 ::
-::  +dbg: the per-request traces below print only when this is yes. They
-::  were on unconditionally, which is a line or four on the console for
-::  every explorer request in production. Flip to & and recompile to see
-::  them again; ~? costs nothing when it is |.
-::
-++  dbg  ^-(? |)
 ++  handle-post
   |=  [eyre-id=@ta tree-path=path dir-weir=(unit weir:nexus) root=ball:tarball req=inbound-request:eyre]
   =/  m  (fiber:fiber:nexus ,~)
