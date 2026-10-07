@@ -7489,9 +7489,21 @@
   =/  [=dock =page]  !<([dock page] vaz)
   ::  Remote pokes: wrap noun as-is, remote gall validates on arrival
   ::  Local pokes: clam through code nexus marc
-  =/  =vase
+  ::
+  ::  A local poke this kernel cannot clam (no marc for its mark, a marc
+  ::  that failed to build, or a noun the marc rejects) is answered with
+  ::  a nacking poke-ack, as an agent's own refusal is in +take-gall-poke,
+  ::  instead of a crash. The crash failed the whole event, and an app
+  ::  poking from its timer lost the wake with it: its fiber then sat
+  ::  until a reload (calendar's reminders, 2026-10-07).
+  =/  clam=(each vase tang)
     ?.  =(our.bowl p.dock)
-      !>(`*`q.page)
+      [%& !>(`*`q.page)]
+    ::  The %gd below blocks for an agent not running here, and +mule does
+    ::  not catch a blocked scry; %gu is answered by gall itself.
+    ?.  .^(? %gu /(scot %p p.dock)/[q.dock]/(scot %da now.bowl)/$)
+      [%| ~[leaf+"no agent {<q.dock>} running here"]]
+    %-  mule  |.
     ::  Split mark on hyphens (like Clay +segments) to find matching file
     =/  dek=desk
       .^(desk %gd /(scot %p p.dock)/[q.dock]/(scot %da now.bowl)/$)
@@ -7517,12 +7529,15 @@
         ~|([%marc-failed p.page dek] !!)
       !<(marc:tarball vase.u.marc-res)
     (vale:marc q.page)
+  ?:  ?=(%| -.clam)
+    =/  =from:fiber:nexus  (relativize-from:nexus sender [/sys/gall %'main.sig'])
+    (enqu-take sender ~ ~ %poke from [[/ %poke-ack] [wire `p.clam]])
   ::  Encode sender in wire: /gall-poke/{path-len}/{path...}/{name}/{wire...}
   =/  gall-wire=path
     :-  %gall-poke
     :-  (scot %ud (lent path.sender))
     (weld path.sender [name.sender wire])
-  (emit-card [%pass gall-wire %agent dock %poke p.page vase])
+  (emit-card [%pass gall-wire %agent dock %poke p.page p.clam])
 ::
 ++  take-gall-poke
   |=  [segs=wire =sign:agent:gall]
