@@ -370,13 +370,6 @@
   }
 
   // ---- rendering ----
-  function renderMarkdown(md) {
-    if (window.marked) { try { return window.marked.parse(md); } catch (e) { /* fall through */ } }
-    var pre = document.createElement('pre');
-    pre.textContent = md;
-    return pre.outerHTML;
-  }
-
   function traceEl(trace) {
     var box = el('div', 'da-trace');
     trace.forEach(function (s) {
@@ -408,7 +401,11 @@
       } else {
         var b = el('div', 'da-msg da-bot');
         if (m.trace && m.trace.length) b.appendChild(traceEl(m.trace));
-        b.appendChild(el('div', 'da-bubble', renderMarkdown(m.content)));
+        var bub = el('div', 'da-bubble');
+        // model replies are remote text: FilePreview.markdown drops raw html and unsafe links
+        if (window.marked && window.FilePreview && FilePreview.markdown) FilePreview.markdown(bub, m.content);
+        else bub.textContent = m.content;
+        b.appendChild(bub);
         log.appendChild(b);
       }
     });

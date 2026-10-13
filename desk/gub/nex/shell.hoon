@@ -29,6 +29,7 @@
 ::  window-manager.js publishes window.floatwm and MUST load before float-window.
 /&  windowmgr-js   /lib/ui/window-manager.js
 /&  floatwin-js    /lib/ui/float-window.js
+/&  filepreview-js  /lib/ui/file-preview.js
 =<  ^-  nexus:nexus
     |%
     ++  on-load
@@ -825,6 +826,10 @@
         ?:  ?=([%docs %'chat.js' ~] suffix)
           ;<  ~  bind:m
             (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.chat-js])
+          (pure:m ~)
+        ?:  ?=([%docs %'file-preview.js' ~] suffix)
+          ;<  ~  bind:m
+            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.filepreview-js])
           (pure:m ~)
         ?:  ?=([%docs %'chat.css' ~] suffix)
           ;<  ~  bind:m

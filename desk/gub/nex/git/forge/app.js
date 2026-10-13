@@ -12,10 +12,11 @@ var tabsBy = { files: [] };   // per-mode open tabs [{file, text, dirty}]
 var focusBy = { files: null };  // per-mode focused file
 var panel = 'status';      // active bottom pane (files mode)
 
+// quotes too: the result also goes into attribute values
 function esc(s) {
   var d = document.createElement('div');
   d.textContent = (s == null) ? '' : String(s);
-  return d.innerHTML;
+  return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 // ── request loading indicator ──
 // every request goes through get()/post(); we count in-flight requests and
