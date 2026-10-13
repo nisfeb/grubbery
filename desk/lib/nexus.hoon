@@ -975,14 +975,18 @@
       $(fil-entries t.fil-entries)
     ==
   ::  Set bang on an existing ject.  Stores the tang as a noun,
-  ::  builds a new ject with bang=`tang-lobe, drops the old ject,
-  ::  and returns the new ject lobe.
+  ::  builds a new ject with bang=`tang-lobe, and returns the new
+  ::  ject lobe with the hist the new pace goes into.  The pace at
+  ::  .cas is replaced the way +record replaces one (+tomb-temp): a
+  ::  %temp pace is tombed with its ref dropped, a %firm one stays history
+  ::  and keeps its ref.  Dropping the ref and keeping the pace left a
+  ::  pace naming a ject nothing owned.
   ::
   ++  set-bang
-    |=  [old-lobe=jobe err=tang]
-    ^-  [jobe ^silo]
+    |=  [=hist cas=cass:clay old-lobe=jobe err=tang]
+    ^-  [jobe ^silo ^hist]
     =/  got  (~(get by jects.silo) old-lobe)
-    ?~  got  [old-lobe silo]
+    ?~  got  [old-lobe silo hist]
     ::  store tang noun in silo
     =/  [tang-lobe=nobe mid-silo=^silo]  (~(put si silo) err)
     ::  build new ject with bang set
@@ -993,16 +997,16 @@
       ==
     =/  [new-jobe=jobe fin-silo=^silo]
       (~(put-ject si mid-silo) new-ject)
-    ::  drop old ject ref
-    =.  fin-silo  (~(drop-ject si fin-silo) old-lobe)
-    [new-jobe fin-silo]
-  ::  Clear bang on an existing ject.  Builds a new ject with bang=~,
-  ::  drops the old ject and the old bang noun ref.
+    =/  [out-silo=^silo out-hist=^hist]
+      (~(tomb-temp si fin-silo) hist cas)
+    [new-jobe out-silo out-hist]
+  ::  Clear bang on an existing ject.  Builds a new ject with bang=~
+  ::  and replaces the pace at .cas as +set-bang does.
   ::  Returns ~ if ject has no bang or doesn't exist.
   ::
   ++  clear-bang
-    |=  old-lobe=jobe
-    ^-  (unit [lobe=jobe =^silo])
+    |=  [=hist cas=cass:clay old-lobe=jobe]
+    ^-  (unit [lobe=jobe =^silo =^hist])
     =/  got  (~(get by jects.silo) old-lobe)
     ?~  got  ~
     =/  old-bang=(unit nobe)
@@ -1019,9 +1023,9 @@
       ==
     =/  [new-jobe=jobe mid-silo=^silo]
       (~(put-ject si silo) new-ject)
-    ::  drop old ject ref (cascades to drop old bang noun ref)
-    =.  mid-silo  (~(drop-ject si mid-silo) old-lobe)
-    `[new-jobe mid-silo]
+    =/  [out-silo=^silo out-hist=^hist]
+      (~(tomb-temp si mid-silo) hist cas)
+    `[new-jobe out-silo out-hist]
   ::  Tombstone previous %temp entry in hist, dropping silo refs.
   ::  %firm entries are left untouched.
   ::
