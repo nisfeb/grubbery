@@ -1975,6 +1975,9 @@
       (published our 'auspex' 'nisfeb/auspex' 'master')
       ::  the calendar: caldav and google sync are coming; v3 has the model.
       (published our 'calendar' 'nisfeb/calendar' 'main')
+      ::  armillary and orrery, the same way as the rest.
+      (published our 'armillary' 'nisfeb/armillary' 'main')
+      (published our 'orrery' 'nisfeb/orrery' 'main')
   ==
 ::  +published: the stock entry for an app WE publish, which differs on the one
 ::  ship that cannot follow itself.
