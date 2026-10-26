@@ -6909,19 +6909,8 @@
       ==
     =/  serve-mime
       |=  =mime  ^-  (unit (list card:agent:gall))
-      ::  content-type as a cord (a path literal can't hold the '+' in
-      ::  svg+xml / xhtml+xml)
-      =/  ct=@t  (spat `path`p.mime)
-      =/  runnable=?
-        ?|  =('/text/html' ct)         =('/application/javascript' ct)
-            =('/text/javascript' ct)   =('/application/ecmascript' ct)
-            =('/image/svg+xml' ct)     =('/application/wasm' ct)
-            =('/application/xhtml+xml' ct)
-        ==
-      ?:  |(eyre-privileged !runnable)  (ok-mime mime)
-      %-  ok-payload
-      :-  [200 ~[['content-type' 'text/plain'] ['x-content-type-options' 'nosniff']]]
-      `q.mime
+      ?:  |(eyre-privileged !(runnable-mime:http-utils p.mime))  (ok-mime mime)
+      (ok-payload (inert-response:http-utils q.mime))
     ?:  =([/ %mime] p.cs)
       (serve-mime !<(mime q.cs))
     =/  mres=(each vase tang)
