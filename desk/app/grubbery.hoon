@@ -361,7 +361,8 @@
   ^-  (quip card _this)
   ?+    path  (on-watch:def path)
       [%http-response *]
-    ?>  =(src our):bowl
+    ::  not limited to our ship: eyre watches as the request's identity,
+    ::  which for a request with no session is a guest's
     [~ this]
       ::  iris subscribing to pull outbound frames: this IS the accept
       ::  signal for a websocket we opened (the %accept sign is not
