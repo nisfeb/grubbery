@@ -7289,6 +7289,9 @@
       %dill
     ?.  =([/ %dill-belt] p.sage)  ~
     =/  [session=@tas =belt:dill]  !<([@tas belt:dill] q.sage)
+    ::  the default session is the owner's own dojo; no grub types there
+    ?:  =(%$ session)
+      `(enqu-take here ~ ~ %pack wir `~[leaf+"the default dill session takes no belts from grubs"])
     =.  this  (emit-card [%pass /dill/belt %arvo %d %shot session %belt belt])
     `(enqu-take here ~ ~ %pack wir ~)
   ::
