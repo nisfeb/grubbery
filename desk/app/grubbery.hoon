@@ -5246,28 +5246,15 @@
     ::  replaces it, and is audited below.
     =/  kid-weir=(unit weir:nexus)
       =/  kid-bol=(unit bole:tarball)  (~(get by dir.bol) name)
-      =/  named=(unit weir:nexus)
-        ?~  kid-bol  ~
-        ?~  fil.u.kid-bol  ~
-        weir.u.fil.u.kid-bol
-      ?^  named  named
-      (peek-weir (snoc here name))
+      ?~  kid-bol  ~
+      ?~  fil.u.kid-bol  ~
+      weir.u.fil.u.kid-bol
     (~(put by out) name [u.p.u.got kid-weir])
   =/  tree-gain=?  ?~(fil.bol %.n gain.u.fil.bol)
   =/  =tree:nexus  [nek tree-gain ~ fil dir-map]
-  ::  children whose weir this write changes, read before the tree is
-  ::  replaced; their watchers are audited as +set-weir would
-  =/  replaced=(list @ta)
-    %+  murn  ~(tap by dir-map)
-    |=  [name=@ta * weir=(unit weir:nexus)]
-    ?:(=(weir (peek-weir (snoc here name))) ~ `name)
   =/  [changed=? new-born=born:nexus new-silo=silo:nexus]
     (put-tree:nexus born silo now.bowl here settled-node tree)
-  =.  this  this(born new-born, silo new-silo)
-  |-
-  ?~  replaced  this
-  =.  this  (audit-weir (snoc here i.replaced))
-  $(replaced t.replaced)
+  this(born new-born, silo new-silo)
 ::  Mirror Clay desks to /sys/clay/desks/[desk]/
 ::
 ++  sync-clay
