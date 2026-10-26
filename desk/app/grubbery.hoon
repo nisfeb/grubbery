@@ -7976,8 +7976,9 @@
 ::  The caller names the scry. A scry that fails takes the kernel's whole
 ::  event down: +mule hands a scry through to the event's own, so no mole
 ::  and no fiber trap catches it, and the caller is left waiting for good.
-::  Clay and gall answer whether a thing exists without ever failing, so a
-::  miss there is caught first and goes back as a failed pack, the same
+::  Clay answers whether a file exists, and gall whether an agent runs,
+::  without ever failing, so a miss there is caught first and goes back as
+::  a failed pack, the same
 ::  take a refused poke gives. A scry of another vane, or of a path a
 ::  running agent does not answer, still fails the event; only scoping
 ::  what a caller may scry closes that.
@@ -7993,7 +7994,9 @@
   ?.  ?=([@ @ *] pat)  (fail "scry needs a care and a desk")
   =/  at=path  [(scot %p our.bowl) i.t.pat (scot %da now.bowl) t.t.pat]
   =/  vane=@t  (end 3 i.pat)
-  ?:  &(=('c' vane) !=(%cu i.pat) !.^(? %cu at))
+  ::  %cu is file existence, so it guards only the file read; a %cy or %cs
+  ::  of a directory has no file and goes through as asked
+  ?:  &(=(%cx i.pat) !.^(? %cu at))
     (fail "no such file")
   ?:  &(=('g' vane) !=(%gu i.pat) !.^(? %gu /(scot %p our.bowl)/[i.t.pat]/(scot %da now.bowl)/$))
     (fail "no such agent")
