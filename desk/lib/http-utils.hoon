@@ -291,12 +291,18 @@
       =('/application/xslt+xml' ct)
   ==
 ::  +inert-response: content as text/plain, never sniffed into anything
-::  a browser would run.
+::  a browser would run, and marked as served inert so a reader can tell
+::  "sandboxed" from "missing" or "broken".
 ::
 ++  inert-response
   |=  =octs
   ^-  simple-payload:http
-  [[200 ~[['content-type' 'text/plain'] ['x-content-type-options' 'nosniff']]] `octs]
+  :_  `octs
+  :-  200
+  :~  ['content-type' 'text/plain']
+      ['x-content-type-options' 'nosniff']
+      ['x-grubbery-serve' 'sandboxed']
+  ==
 ::
 ++  cross-origin-forbidden
   |=  [mode=(unit @t) site=(unit @t)]

@@ -6761,8 +6761,8 @@
 ::  nothing. Sec-Fetch-Site same-origin or none passes. With no
 ::  Sec-Fetch-Site, an Origin naming our own host passes, and so does
 ::  no Origin at all: browsers send one on every cross-site write, so
-::  that is a native client. A moz-extension:// origin is the
-::  Thunderbird add-on. The host is compared without the scheme, since
+::  that is a native client. A moz-extension:// origin is an add-on the
+::  owner installed. The host is compared without the scheme, since
 ::  a ship behind a TLS proxy sees plain http.
 ::
 ++  cross-site-write
@@ -6874,6 +6874,9 @@
     =/  serve-mime
       |=  =mime  ^-  (unit (list card:agent:gall))
       ?:  |(eyre-privileged !(runnable-mime:http-utils p.mime))  (ok-mime mime)
+      ::  and say so: a reader (the explorer, loading a declared pane's
+      ::  script) can then tell "sandboxed, served inert" from "missing"
+      ::  or "broken", which look the same from the browser's side
       (ok-payload (inert-response:http-utils q.mime))
     ?:  =([/ %mime] p.cs)
       (serve-mime !<(mime q.cs))
