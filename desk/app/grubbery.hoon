@@ -1326,24 +1326,6 @@
 ::  its store (kind-directed; a pinned lobe gone missing is a books error worth
 ::  hearing about), then release the snap and cancel its timer.
 ::
-::  +refs-present: is every lobe .ject names in .s? A leaf names its
-::  content noun and its bang, a tree its bang and its children.
-::
-++  refs-present
-  |=  [=ject:nexus s=silo:nexus]
-  ^-  ?
-  ?-    -.ject
-      %leaf
-    ?&  (~(has by nouns.s) lobe.leaf.ject)
-        ?~(bang.leaf.ject & (~(has by nouns.s) u.bang.leaf.ject))
-    ==
-      %tree
-    ?&  ?~(bang.tree.ject & (~(has by nouns.s) u.bang.tree.ject))
-        (levy ~(val by fil.tree.ject) |=(j=jobe:nexus (~(has by jects.s) j)))
-        (levy ~(val by dir.tree.ject) |=([j=jobe:nexus *] (~(has by jects.s) j)))
-    ==
-  ==
-::
 ++  process-want
   |=  req=transfer:remo:nexus
   ^+  this
@@ -1406,39 +1388,39 @@
     ?~  existing
       s(nouns (~(put by nouns.s) nobe [1 noun]))
     s(nouns (~(put by nouns.s) nobe u.existing(refs +(refs.u.existing))))
-  ::  Jects must insert bottom-up: +put-ject counts a reference only to
-  ::  a lobe that is present. A ject goes in once it is already stored
-  ::  or every lobe it names is (+refs-present). Whatever is still
-  ::  waiting when nothing more can go in names lobes that are in
-  ::  neither the silo nor this transfer, and it stays out: stored, it
-  ::  would hold refs it never counted, and its later drop would free
-  ::  another holder's content. A peek it belongs to stays undischarged,
-  ::  as if that part of the transfer had not come.
-  =^  inserted=(set jobe:nexus)  silo
+  ::  Jects must insert bottom-up: put-ject bumps a new ject's
+  ::  children only if they are already present. Topologically
+  ::  insert — a tree waits until its child jects are in the silo.
+  =.  silo
     =/  pending=(list [=jobe:nexus =ject:nexus])  good-jects
-    =|  ins=(set jobe:nexus)
-    |-  ^-  [(set jobe:nexus) silo:nexus]
-    ?:  =(~ pending)  [ins silo]
+    |-
+    ?:  =(~ pending)  silo
     =/  ready=(list [=jobe:nexus =ject:nexus])
-      %+  skim  pending
+      %+  skim  `(list [=jobe:nexus =ject:nexus])`pending
       |=  [=jobe:nexus =ject:nexus]
-      |((~(has by jects.silo) jobe) (refs-present ject silo))
-    ?~  ready
-      ~&  >>  [%data-merge-unresolved-dropped (lent pending)]
-      [ins silo]
+      ?.  ?=(%tree -.ject)  %.y
+      =/  kids=(list jobe:nexus)
+        %+  weld
+          (turn ~(val by fil.tree.ject) |=(j=jobe:nexus j))
+        (turn ~(val by dir.tree.ject) |=([j=jobe:nexus *] j))
+      %+  levy  kids
+      |=(j=jobe:nexus (~(has by jects.silo) j))
+    ::  Nothing ready but work remains: refs point outside this
+    ::  transfer and are absent — insert anyway rather than loop.
+    =/  batch=(list [=jobe:nexus =ject:nexus])
+      ?~(ready pending ready)
+    ~?  >>  =(~ ready)  [%data-merge-unresolved-children (lent pending)]
     =.  silo
-      %+  roll  `(list [=jobe:nexus =ject:nexus])`ready
+      %+  roll  batch
       |=  [[=jobe:nexus =ject:nexus] s=_silo]
       +:(~(put-ject si:nexus s) ject)
-    =/  done=(set jobe:nexus)  (sy (turn `(list [=jobe:nexus =ject:nexus])`ready |=([j=jobe:nexus *] j)))
+    =/  done=(set jobe:nexus)  (sy (turn batch |=([j=jobe:nexus *] j)))
     %=  $
       pending  (skip pending |=([j=jobe:nexus *] (~(has in done) j)))
-      ins  (~(uni in ins) done)
     ==
-  ~?  dbg  [%peek-data-received nouns=(lent good-nouns) jects=~(wyt in inserted)]
-  ::  only what went in is released: a ject left out never took a ref
+  ~?  dbg  [%peek-data-received nouns=(lent good-nouns) jects=(lent good-jects)]
   =/  merged=lobes:nexus
-    :-  inserted
+    :-  (sy (turn good-jects |=([=jobe:nexus *] jobe)))
     (sy (turn good-nouns |=([=nobe:nexus *] nobe)))
   =.  this  discharge-peeks
   =.  silo  (release-snap-refs merged)
@@ -5239,11 +5221,6 @@
     ?~  got  out
     ?:  ?=(%tomb -.u.got)  out
     ?~  p.u.got  out
-    ::  the bole names a child's weir only when its pulp carries one. No
-    ::  pulp, or a pulp with no weir (+put:bo's default), keeps the weir
-    ::  this directory's tree already records for the child: a bulk
-    ::  write is no way to open a sandbox. A weir the bole does carry
-    ::  replaces it, and is audited below.
     =/  kid-weir=(unit weir:nexus)
       =/  kid-bol=(unit bole:tarball)  (~(get by dir.bol) name)
       ?~  kid-bol  ~
