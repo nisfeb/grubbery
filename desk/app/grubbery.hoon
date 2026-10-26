@@ -1326,24 +1326,6 @@
 ::  its store (kind-directed; a pinned lobe gone missing is a books error worth
 ::  hearing about), then release the snap and cancel its timer.
 ::
-::  +refs-present: is every lobe .ject names in .s? A leaf names its
-::  content noun and its bang, a tree its bang and its children.
-::
-++  refs-present
-  |=  [=ject:nexus s=silo:nexus]
-  ^-  ?
-  ?-    -.ject
-      %leaf
-    ?&  (~(has by nouns.s) lobe.leaf.ject)
-        ?~(bang.leaf.ject & (~(has by nouns.s) u.bang.leaf.ject))
-    ==
-      %tree
-    ?&  ?~(bang.tree.ject & (~(has by nouns.s) u.bang.tree.ject))
-        (levy ~(val by fil.tree.ject) |=(j=jobe:nexus (~(has by jects.s) j)))
-        (levy ~(val by dir.tree.ject) |=([j=jobe:nexus *] (~(has by jects.s) j)))
-    ==
-  ==
-::
 ++  process-want
   |=  req=transfer:remo:nexus
   ^+  this
@@ -1406,39 +1388,39 @@
     ?~  existing
       s(nouns (~(put by nouns.s) nobe [1 noun]))
     s(nouns (~(put by nouns.s) nobe u.existing(refs +(refs.u.existing))))
-  ::  Jects must insert bottom-up: +put-ject counts a reference only to
-  ::  a lobe that is present. A ject goes in once it is already stored
-  ::  or every lobe it names is (+refs-present). Whatever is still
-  ::  waiting when nothing more can go in names lobes that are in
-  ::  neither the silo nor this transfer, and it stays out: stored, it
-  ::  would hold refs it never counted, and its later drop would free
-  ::  another holder's content. A peek it belongs to stays undischarged,
-  ::  as if that part of the transfer had not come.
-  =^  inserted=(set jobe:nexus)  silo
+  ::  Jects must insert bottom-up: put-ject bumps a new ject's
+  ::  children only if they are already present. Topologically
+  ::  insert — a tree waits until its child jects are in the silo.
+  =.  silo
     =/  pending=(list [=jobe:nexus =ject:nexus])  good-jects
-    =|  ins=(set jobe:nexus)
-    |-  ^-  [(set jobe:nexus) silo:nexus]
-    ?:  =(~ pending)  [ins silo]
+    |-
+    ?:  =(~ pending)  silo
     =/  ready=(list [=jobe:nexus =ject:nexus])
-      %+  skim  pending
+      %+  skim  `(list [=jobe:nexus =ject:nexus])`pending
       |=  [=jobe:nexus =ject:nexus]
-      |((~(has by jects.silo) jobe) (refs-present ject silo))
-    ?~  ready
-      ~&  >>  [%data-merge-unresolved-dropped (lent pending)]
-      [ins silo]
+      ?.  ?=(%tree -.ject)  %.y
+      =/  kids=(list jobe:nexus)
+        %+  weld
+          (turn ~(val by fil.tree.ject) |=(j=jobe:nexus j))
+        (turn ~(val by dir.tree.ject) |=([j=jobe:nexus *] j))
+      %+  levy  kids
+      |=(j=jobe:nexus (~(has by jects.silo) j))
+    ::  Nothing ready but work remains: refs point outside this
+    ::  transfer and are absent — insert anyway rather than loop.
+    =/  batch=(list [=jobe:nexus =ject:nexus])
+      ?~(ready pending ready)
+    ~?  >>  =(~ ready)  [%data-merge-unresolved-children (lent pending)]
     =.  silo
-      %+  roll  `(list [=jobe:nexus =ject:nexus])`ready
+      %+  roll  batch
       |=  [[=jobe:nexus =ject:nexus] s=_silo]
       +:(~(put-ject si:nexus s) ject)
-    =/  done=(set jobe:nexus)  (sy (turn `(list [=jobe:nexus =ject:nexus])`ready |=([j=jobe:nexus *] j)))
+    =/  done=(set jobe:nexus)  (sy (turn batch |=([j=jobe:nexus *] j)))
     %=  $
       pending  (skip pending |=([j=jobe:nexus *] (~(has in done) j)))
-      ins  (~(uni in ins) done)
     ==
-  ~?  dbg  [%peek-data-received nouns=(lent good-nouns) jects=~(wyt in inserted)]
-  ::  only what went in is released: a ject left out never took a ref
+  ~?  dbg  [%peek-data-received nouns=(lent good-nouns) jects=(lent good-jects)]
   =/  merged=lobes:nexus
-    :-  inserted
+    :-  (sy (turn good-jects |=([=jobe:nexus *] jobe)))
     (sy (turn good-nouns |=([=nobe:nexus *] nobe)))
   =.  this  discharge-peeks
   =.  silo  (release-snap-refs merged)
@@ -5239,35 +5221,17 @@
     ?~  got  out
     ?:  ?=(%tomb -.u.got)  out
     ?~  p.u.got  out
-    ::  the bole names a child's weir only when its pulp carries one. No
-    ::  pulp, or a pulp with no weir (+put:bo's default), keeps the weir
-    ::  this directory's tree already records for the child: a bulk
-    ::  write is no way to open a sandbox. A weir the bole does carry
-    ::  replaces it, and is audited below.
     =/  kid-weir=(unit weir:nexus)
       =/  kid-bol=(unit bole:tarball)  (~(get by dir.bol) name)
-      =/  named=(unit weir:nexus)
-        ?~  kid-bol  ~
-        ?~  fil.u.kid-bol  ~
-        weir.u.fil.u.kid-bol
-      ?^  named  named
-      (peek-weir (snoc here name))
+      ?~  kid-bol  ~
+      ?~  fil.u.kid-bol  ~
+      weir.u.fil.u.kid-bol
     (~(put by out) name [u.p.u.got kid-weir])
   =/  tree-gain=?  ?~(fil.bol %.n gain.u.fil.bol)
   =/  =tree:nexus  [nek tree-gain ~ fil dir-map]
-  ::  children whose weir this write changes, read before the tree is
-  ::  replaced; their watchers are audited as +set-weir would
-  =/  replaced=(list @ta)
-    %+  murn  ~(tap by dir-map)
-    |=  [name=@ta * weir=(unit weir:nexus)]
-    ?:(=(weir (peek-weir (snoc here name))) ~ `name)
   =/  [changed=? new-born=born:nexus new-silo=silo:nexus]
     (put-tree:nexus born silo now.bowl here settled-node tree)
-  =.  this  this(born new-born, silo new-silo)
-  |-
-  ?~  replaced  this
-  =.  this  (audit-weir (snoc here i.replaced))
-  $(replaced t.replaced)
+  this(born new-born, silo new-silo)
 ::  Mirror Clay desks to /sys/clay/desks/[desk]/
 ::
 ++  sync-clay
@@ -8039,8 +8003,9 @@
 ::  The caller names the scry. A scry that fails takes the kernel's whole
 ::  event down: +mule hands a scry through to the event's own, so no mole
 ::  and no fiber trap catches it, and the caller is left waiting for good.
-::  Clay and gall answer whether a thing exists without ever failing, so a
-::  miss there is caught first and goes back as a failed pack, the same
+::  Clay answers whether a file exists, and gall whether an agent runs,
+::  without ever failing, so a miss there is caught first and goes back as
+::  a failed pack, the same
 ::  take a refused poke gives. A scry of another vane, or of a path a
 ::  running agent does not answer, still fails the event; only scoping
 ::  what a caller may scry closes that.
@@ -8056,7 +8021,9 @@
   ?.  ?=([@ @ *] pat)  (fail "scry needs a care and a desk")
   =/  at=path  [(scot %p our.bowl) i.t.pat (scot %da now.bowl) t.t.pat]
   =/  vane=@t  (end 3 i.pat)
-  ?:  &(=('c' vane) !=(%cu i.pat) !.^(? %cu at))
+  ::  %cu is file existence, so it guards only the file read; a %cy or %cs
+  ::  of a directory has no file and goes through as asked
+  ?:  &(=(%cx i.pat) !.^(? %cu at))
     (fail "no such file")
   ?:  &(=('g' vane) !=(%gu i.pat) !.^(? %gu /(scot %p our.bowl)/[i.t.pat]/(scot %da now.bowl)/$))
     (fail "no such agent")
