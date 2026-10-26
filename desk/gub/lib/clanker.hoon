@@ -183,13 +183,21 @@
   ::  +run-loop: poke the proxy; if the model asks for tools, run them
   ::  and loop; else return the final text plus trace and ordered parts.
   ::
+  ::  +max-turns: model round-trips one chat turn may take. Each is a
+  ::  metered call, and a model that keeps asking for tools would
+  ::  otherwise loop as long as it liked.
+  ::
+  ++  max-turns  25
   ++  run-loop
     |=  [=rail:tarball msgs=(list json) sys=@t model=@t max-toks=@ud]
     =/  m  (fiber:fiber:nexus ,[reply=@t trace=(list json) parts=(list json)])
     ^-  form:m
     =|  trace=(list json)
     =|  parts=(list json)
+    =|  turns=@ud
     |-  ^-  form:m
+    ?:  (gte turns max-turns)
+      (pure:m [(crip "[stopped: {<max-turns>} tool rounds without an answer]") (flop trace) parts])
     =/  body=json
       %-  pairs:enjs:format
       :~  ['model' s+model]
@@ -261,7 +269,7 @@
       `[%o (~(put by p.t) 'type' s+'tool')]
     =/  asst=json  (pairs:enjs:format ~[['role' s+'assistant'] ['content' [%a content-arr]]])
     =/  usr=json   (pairs:enjs:format ~[['role' s+'user'] ['content' [%a results]]])
-    $(msgs (weld msgs ~[asst usr]))
+    $(msgs (weld msgs ~[asst usr]), turns +(turns))
   ::  +call-anthropic: one metered round-trip through the proxy —
   ::  subscribe to the call grub, poke {id, body}, await done, drop.
   ::  ~ on interrupt.
