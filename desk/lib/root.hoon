@@ -110,6 +110,21 @@
         ::  the forge looked complete and then failed at run time with "no
         ::  process at /apps/github.github/main.sig". Upstream's row.
         [%fall %| /apps/'github.github' [`[`[/ %github] ~ %.n ~] ~]]
+        ::  /sys/link built-in names, seeded next to the apps that claim
+        ::  them, so @forge and the rest resolve the moment the tree
+        ::  loads. Without these a fresh ship had an empty /sys/link: the
+        ::  shell builds it only on a sweep, nothing sweeps until a desk
+        ::  installs, and no desk installs without @forge. %fall also
+        ::  seeds a ship that installed before this. Upstream's rows
+        ::  (gwbtc/grubbery aed5506), at this branch's app paths.
+        [%fall %| /sys/link/explorer [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/explorer %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/'explorer.explorer']]]]
+        [%fall %| /sys/link/mcp [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/mcp %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/'mcp.mcp']]]]
+        [%fall %| /sys/link/forge [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/forge %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/'forge.git_forge']]]]
+        [%fall %| /sys/link/github [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/github %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/'github.github']]]]
     ==
 ::
 ++  on-file

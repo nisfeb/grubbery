@@ -101,8 +101,8 @@
           ::  /sync: one pure-follower grub per app, mirroring /apps. Each
           ::  follows its app's files by subscription and pings the scanner
           ::  to reconcile — so /sys/link (and the asks) stay current without a
-          ::  poll. /sync/main.sig is the coordinator: it watches /apps
-          ::  membership and spawns/keeps the followers.
+          ::  poll. +spawn-followers makes them, run by sweep.sig on a poke
+          ::  and by POST /permits/refresh; there is no /sync/main.sig.
           [%fall %| /sync empty-dir:loader]
           ::  /desks: installed remote code (desk nexus instances). Lives
           ::  under the shell, not /apps — desks need permission management,
