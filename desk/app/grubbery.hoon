@@ -9,6 +9,9 @@
     multipart, web-push,
     cram, pretty-file, zlib, bytestream,
     wasm-lia
+::  the date formatter the listing uses. Imported by path with a face
+::  of its own: `/+ iso-8601` does not bind one here.
+/=  iso  /lib/iso-8601
 ::  These marks and tests are imported only so they compile when the
 ::  agent builds. A broken mark or test then fails the commit. The
 ::  m- and t- faces are never referenced.
@@ -23,6 +26,7 @@
 /=  m-  /mar/kids
 /=  m-  /mar/tree
 /=  m-  /mar/born
+/=  m-  /mar/peak
 /=  m-  /mar/bill
 /=  m-  /mar/grubbery-intake
 /=  m-  /mar/grubbery-load
@@ -55,11 +59,20 @@
 /=  t-  /tests/loader
 |%
 +$  versioned-state
-  $%  state-7:migrations
-      dist-state-5:migrations
-      dist-state-4:migrations
-      dist-state-3:migrations
-      dist-state-2:migrations
+  $%  state-15:migrations
+      state-14:migrations
+      state-13:migrations
+      state-12:migrations
+      state-11:migrations
+      state-10:migrations
+      state-9:migrations
+      state-8:migrations
+      state-7:migrations
+      state-6:migrations
+      state-5:migrations
+      state-4:migrations
+      state-3:migrations
+      state-2:migrations
       state-1:migrations
       state-0:migrations
   ==
@@ -78,6 +91,39 @@
 ::  warning, error.
 ::
 ++  dbg  ^-(? |)
+::  +mem: the loom gauge. Flip to & and recompile to make +gage print
+::  vere's memory report at each instrumented step -- INSIDE the event,
+::  which is the only place it helps: an install is one event, so |mass
+::  (a card to vere) cannot be delivered until it is over, and a boot
+::  that bails %meme is never over.
+::
+::  Off by default. Each probe is several lines of output.
+::
+++  mem  ^-(? |)
+::  +tak: the take queue's own traces -- what +abet suspended, resumed
+::  and owed. Flip to & and recompile to watch a cascade get cut into
+::  events. Separate from +dbg because it is loud in a different way:
+::  +dbg follows the build, this follows the drain.
+::
+++  tak  ^-(? |)
+::  +take-budget: how many takes one event drains before it stops and
+::  resumes in the next. A deep cascade -- a take that queues takes that
+::  queue takes -- spends one event's loom with nothing reclaimed until
+::  it returns, and a long enough chain exhausts the loom and bails
+::  %meme. Stopping hands the rest to a fresh event with a fresh loom.
+::
+::  The floor is 1: a budget of one take per event is the slowest legal
+::  setting, not a way to switch the budget off. +abet clamps, so a 0
+::  here still drains one take at a time rather than draining forever.
+::
+::  Handling ONE take is atomic, so this is the finest cut available --
+::  a single take too big for the loom is not helped by any budget.
+::
+++  take-budget  ^-(@ud 50)
+::  +take-pause: how long to wait before the next batch. Not a throttle:
+::  the wait is how you get another event at all. Keep it small.
+::
+++  take-pause  ^-(@dr (div ~s1 1.000))
 ::  +took: time a computation on the console, but only under +dbg. A bare
 ::  %bout hint prints on every event, whatever priority it is given.
 ::
@@ -85,6 +131,15 @@
   |*  [lab=@tas tap=(trap)]
   ?.  dbg  $:tap
   ~>(%bout.[1 lab] $:tap)
+::  +gage: print the loom's state on the way INTO a computation, under
+::  +mem. The %meme hint is read before the formula runs (hint_fore), so
+::  a label reads as "entering lab" -- the free space it reports is what
+::  lab had to work with. Bracket a step with two gages to see its cost.
+::
+++  gage
+  |*  [lab=@tas tap=(trap)]
+  ?.  mem  $:tap
+  ~>(%meme.[1 leaf+(trip lab)] $:tap)
 :: The subject all code gets compiled against (/nex, /mar or /lib)
 ::
 ++  sut
@@ -116,7 +171,7 @@
 ::  reference, and it only changes with the agent itself.
 ::
 =/  sut-hash=@uv  (sham q:sut)
-=|  state-7:migrations
+=|  state-15:migrations
 =*  state  -
 ::
 =<
@@ -135,40 +190,113 @@
   ::  without carrying continuations across the upgrade
   ::
   =.  pool  (bang-pool:hc pool %.y)
+  ::  parked takes do not cross an upgrade either. $take holds a $dart,
+  ::  so keeping them would make `owed` a SECOND place loads persist and
+  ::  put it in the freeze chain load -> dart -> pend -> take. Dropping
+  ::  them here keeps that chain where migrations.hoon says it is, and
+  ::  costs nothing: before `owed` existed a cascade either finished in
+  ::  its event or bailed and rolled back, so in-flight takes never
+  ::  survived an upgrade anyway. Emptied at save, `owed` is always ~ on
+  ::  load, so its live type never molds an older shape.
+  =.  owed  ~
   !>(state)
 ::
 ++  on-load
   |=  old-state=vase
   ^-  (quip card _this)
   =/  old  !<(versioned-state old-state)
-  ?:  ?=(%7 -.old)
+  ?:  ?=(%15 -.old)
     =.  state  old
     =^  start-cards  state
       abet:cold-start:hc
     [start-cards this]
-  ::  below %7, from this line's own versions: down to develop's %1 (a
-  ::  dist ship's %2..%5 are develop's %1 field for field, see
-  ::  +dist-to-1:migrations), then up develop's chain. The one-time
-  ::  skip-queue correction (+fsr-pool, #80) bumps ject refs, so it must
-  ::  not run twice: a %4 or %5 ship had it when it became %4.
-  =/  as-1=state-1:migrations
-    ?-  -.old
-      %0  (state-0-to-1:migrations old)
-      %1  old
-      ?(%2 %3 %4 %5)  (dist-to-1:migrations old)
-    ==
-  =/  corrected=?  ?=(?(%4 %5) -.old)
-  ~>  %slog.[0 leaf+"grubbery: migrating state {<-.old>} -> %7"]
-  =/  six=state-6:migrations
-    %-  state-5-to-6:migrations
-    %-  state-4-to-5:migrations
-    %-  state-3-to-4:migrations
-    %-  state-2-to-3:migrations
-    (state-1-to-2:migrations as-1)
-  =?  six  !corrected
-    =/  fsr=[pool:nexus silo:nexus]  (fsr-pool:hc pool.six silo.six)
-    six(pool -.fsr, silo +.fsr)
-  =.  state  (state-6-to-7:migrations six)
+  ::  %14 -> %15: no tomb pace; a dropped version is absent.
+  ?:  ?=(%14 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %14 -> %15"]
+    =.  state  (state-14-to-15:migrations old)
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  %13 -> %14: the take queue gets a place to wait between events.
+  ?:  ?=(%13 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %13 -> %14 -> %15"]
+    =.  state  (state-14-to-15:migrations (state-13-to-14:migrations old))
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  %12 -> %13: a version always references content. Every null
+  ::  reference goes, and a rail left with no versions goes with them --
+  ::  peak still holds its number.
+  ?:  ?=(%12 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %12 -> %13 -> %14 -> %15"]
+    =.  state  (state-14-to-15:migrations (state-13-to-14:migrations (state-12-to-13:migrations old)))
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  %11 -> %12: the %firm load carries the labels to set on the
+  ::  version it promotes. A queued %firm carried none, so it gets none.
+  ?:  ?=(%11 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %11 -> %12 -> %13 -> %14 -> %15"]
+    =.  state  (state-14-to-15:migrations (state-13-to-14:migrations (state-12-to-13:migrations (state-11-to-12:migrations old))))
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  %10 -> %11: a %file cite carries the grub's position. A queued
+  ::  peek is given its reader's, where its mark resolved from before.
+  ?:  ?=(%10 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %10 -> %11 -> %12 -> %13 -> %14 -> %15"]
+    =.  state  (state-14-to-15:migrations (state-13-to-14:migrations (state-12-to-13:migrations (state-11-to-12:migrations (state-10-to-11:migrations old)))))
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  %9 -> %10: view gained a bang. No stored view changes (pend is cold),
+  ::  but a suspended process is typed by it, so +proc-9-to-proc-10 replaces
+  ::  live continuations with a crash tang and the reload rebuilds them.
+  ?:  ?=(%9 -.old)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %9 -> %10 -> %11 -> %12 -> %13 -> %14 -> %15"]
+    =.  state  (state-14-to-15:migrations (state-13-to-14:migrations (state-12-to-13:migrations (state-11-to-12:migrations (state-10-to-11:migrations (state-9-to-10:migrations old))))))
+    =^  start-cards  state
+      abet:cold-start:hc
+    [start-cards this]
+  ::  below %9: funnel up to a %7 value (the skip-queue correction,
+  ::  +fsr-pool #80, where %6 is crossed; conns into agent state and the
+  ::  born sweep at %7), then %8 (peak, born's shadow), then %9 (the
+  ::  dead-entry sweep and peak seeded from born).
+  =/  as-8=state-8:migrations
+    ?:  ?=(%8 -.old)  old
+    =/  as-7=state-7:migrations
+      ?:  ?=(%7 -.old)  old
+      =/  as-6=state-6:migrations
+        ?:  ?=(%6 -.old)  old
+        =/  to-4=(unit state-4:migrations)
+          ?-  -.old
+            %0  `(state-3-to-4:migrations (state-2-to-3:migrations (state-1-to-2:migrations (state-0-to-1:migrations old))))
+            %1  `(state-3-to-4:migrations (state-2-to-3:migrations (state-1-to-2:migrations old)))
+            %2  `(state-3-to-4:migrations (state-2-to-3:migrations old))
+            %3  `(state-3-to-4:migrations old)
+            %4  `old
+            %5  ~
+          ==
+        =/  as-5=state-5:migrations
+          ?~  to-4  ?>(?=(%5 -.old) old)
+          ~>  %slog.[0 leaf+"grubbery: migrating state {<-.old>} -> %5"]
+          (state-4-to-5:migrations u.to-4)
+        =/  six=state-6:migrations
+          ~>  %slog.[0 leaf+"grubbery: migrating state %5 -> %6"]
+          (state-5-to-6:migrations as-5)
+        =/  fsr=[pool-10:migrations silo:nexus]  (fsr-pool:hc pool.six silo.six)
+        six(pool -.fsr, silo +.fsr)
+      ~>  %slog.[0 leaf+"grubbery: migrating state %6 -> %7"]
+      (state-6-to-7:migrations as-6)
+    ~>  %slog.[0 leaf+"grubbery: migrating state %7 -> %8"]
+    (state-7-to-8:migrations as-7)
+  ~>  %slog.[0 leaf+"grubbery: migrating state %8 -> %9 -> %10 -> %11 -> %12 -> %13 -> %14 -> %15"]
+  =.  state
+    %-  state-14-to-15:migrations
+    %-  state-13-to-14:migrations
+    %-  state-12-to-13:migrations
+    %-  state-11-to-12:migrations
+    (state-10-to-11:migrations (state-9-to-10:migrations (state-8-to-9:migrations as-8)))
   =^  start-cards  state
     abet:cold-start:hc
   [start-cards this]
@@ -441,6 +569,12 @@
     ::  Born (version tracking) subtree
     ``born+!>((~(dip of born) t.t.t.path))
     ::
+      [%x %peek %peak *]
+    ::  Peak: the high-water cass of every rail ever written here. Read
+    ::  WITH born: a peak standing above born's top is a path that no
+    ::  longer exists, and its date is when it stopped.
+    ``peak+!>((~(dip of peak) t.t.t.path))
+    ::
       [%x %peek %silo %lobe @ ~]
     ::  Look up noun in silo by lobe hash
     =/  =nobe:nexus  (slav %uv i.t.t.t.t.path)
@@ -549,6 +683,15 @@
       abet:(expire-snap:hc t.t.wire error.sign)
     [cards this]
     ::
+      [%behn %drain ~]
+    ?>  ?=([%behn %wake *] sign)
+    ::  resume a cascade the budget cut short (see +abet). The wake only
+    ::  moves `owed` back into the live queue; +abet drains it, and parks
+    ::  whatever is still left for the next wake.
+    =^  cards  state
+      abet:resume-owed:hc
+    [cards this]
+    ::
       [%behn %timer @ *]
     ?>  ?=([%behn %wake *] sign)
     ::  profiling, under +dbg: how long this wake's whole event took
@@ -623,12 +766,6 @@
 ::
 =|  cards=(list card)
 =|  takes=(qeu take:nexus)
-::  was: the pool as it stood before this event first cleared any bangs.
-::  A reload clears every bang under a nexus and re-bangs what still
-::  fails; this is how +bang-nexus knows a fault is old news. Transient,
-::  like cards and takes.
-::
-=|  was=pool:nexus
 |_  =bowl:gall
 +*  this  .
 ::  +carry-behn-state: one-time rename of the behn service grub from
@@ -660,58 +797,46 @@
     [%0 (~(uni by timers.u.old-st) timers.new-st)]
   =.  this  (save-file new-rail [[/ %behn-state] merged])
   (cull-if-exists %& old-rail)
-::  +fsr-pool/procs/queue/take: the one-time skip-queue correction for
-::  #80, run from +on-load on the first load of the cite-drop fix. A take
-::  left in a skip queue by the old kernel had its %file/%ball/%peep ref
-::  dropped at +hydrate, which this kernel no longer does; restore the
-::  claim the old kernel spent (bump a present jobe) or neutralise a cite
-::  whose jobe is already gone ([%none ~]), so a later consume cannot
-::  over-drop a leaf that recurred. Only skip queues: a live proc's next
-::  is drained at rest. Errs safe: a never-spent re-bump is a leak, not a
-::  loss, and a held-ref take's jobe is never absent.
 ++  fsr-pool
-  |=  [pol=pool:nexus sil=silo:nexus]
-  ^-  [pool:nexus silo:nexus]
+  |=  [pol=pool-10:migrations sil=silo:nexus]
+  ^-  [pool-10:migrations silo:nexus]
   =^  nfil  sil
     ?~  fil.pol  [fil.pol sil]
     =^  procs  sil  (fsr-procs proc.u.fil.pol sil)
     [`u.fil.pol(proc procs) sil]
   =^  ndir  sil
-    =/  kids=(list [p=@ta q=pool:nexus])  ~(tap by dir.pol)
-    =|  acc=(map @ta pool:nexus)
-    |-  ^-  [(map @ta pool:nexus) silo:nexus]
+    =/  kids=(list [p=@ta q=pool-10:migrations])  ~(tap by dir.pol)
+    =|  acc=(map @ta pool-10:migrations)
+    |-  ^-  [(map @ta pool-10:migrations) silo:nexus]
     ?~  kids  [acc sil]
     =^  sub  sil  (fsr-pool q.i.kids sil)
     $(kids t.kids, acc (~(put by acc) p.i.kids sub))
   [[nfil ndir] sil]
 ++  fsr-procs
-  |=  [ps=(map @ta proc:fiber:nexus) sil=silo:nexus]
-  ^-  [(map @ta proc:fiber:nexus) silo:nexus]
-  =/  items=(list [p=@ta q=proc:fiber:nexus])  ~(tap by ps)
-  =|  acc=(map @ta proc:fiber:nexus)
-  |-  ^-  [(map @ta proc:fiber:nexus) silo:nexus]
+  |=  [ps=(map @ta proc-10:migrations) sil=silo:nexus]
+  ^-  [(map @ta proc-10:migrations) silo:nexus]
+  =/  items=(list [p=@ta q=proc-10:migrations])  ~(tap by ps)
+  =|  acc=(map @ta proc-10:migrations)
+  |-  ^-  [(map @ta proc-10:migrations) silo:nexus]
   ?~  items  [acc sil]
   =^  sk  sil  (fsr-queue skip.q.i.items sil)
   $(items t.items, acc (~(put by acc) p.i.items q.i.items(skip sk)))
 ++  fsr-queue
-  |=  [q=(qeu take:fiber:nexus) sil=silo:nexus]
-  ^-  [(qeu take:fiber:nexus) silo:nexus]
-  =/  items=(list take:fiber:nexus)  ~(tap to q)
-  =|  acc=(list take:fiber:nexus)
-  |-  ^-  [(qeu take:fiber:nexus) silo:nexus]
-  ?~  items  [(~(gas to *(qeu take:fiber:nexus)) (flop acc)) sil]
+  |=  [q=(qeu take-10:migrations) sil=silo:nexus]
+  ^-  [(qeu take-10:migrations) silo:nexus]
+  =/  items=(list take-10:migrations)  ~(tap to q)
+  =|  acc=(list take-10:migrations)
+  |-  ^-  [(qeu take-10:migrations) silo:nexus]
+  ?~  items  [(~(gas to *(qeu take-10:migrations)) (flop acc)) sil]
   =^  tk  sil  (fsr-take i.items sil)
   $(items t.items, acc [tk acc])
 ++  fsr-take
-  |=  [tk=take:fiber:nexus sil=silo:nexus]
-  ^-  [take:fiber:nexus silo:nexus]
+  |=  [tk=take-10:migrations sil=silo:nexus]
+  ^-  [take-10:migrations silo:nexus]
   ?~  in.tk  [tk sil]
   ?+    -.u.in.tk  [tk sil]
       %peep
     ?.  ?=(%& -.res.u.in.tk)  [tk sil]
-    ::  keep only the hits whose jobe is present, bump those, and put the
-    ::  trimmed list back, so a later consume cannot over-drop an absent
-    ::  jobe that recurs (the %peek [%none ~] rewrite below, per hit).
     =/  present=(list [=cass:clay lobe=jobe:nexus])
       (skim p.res.u.in.tk |=([* lobe=jobe:nexus] (~(has by jects.sil) lobe)))
     =.  sil
@@ -729,26 +854,137 @@
       [tk(in `[%peek wire.u.in.tk [%none ~]]) sil]
     ==
   ==
+::  +migrate-shell: the shell lives at /apps/shell. A ship that still
+::  holds it at /apps/shell.shell (the old spelling; nexus extensions are
+::  being retired) gets it moved, once, before the root rows run: the
+::  subtree is landed at the new place (content-addressed, so no bytes
+::  copy), the old one culled, every /sys/link lane and every json grub
+::  inside it that spelled the old path rewritten, and every grant.json
+::  dropped so the shell re-sands its apps from its approvals at the new
+::  place. Only a real shell moves: the old directory's neck must be
+::  [/ %shell], and /apps/shell must hold no shell of its own (no desks/)
+::  -- the name is taken by a shell, never squatted on.
+::
+++  migrate-shell
+  ^+  this
+  =/  old=path  /apps/'shell.shell'
+  =/  new=path  /apps/shell
+  =/  ob=ball:tarball  (peek-ball-now old)
+  ?~  fil.ob  this
+  ?.  =(`[/ %shell] neck.u.fil.ob)  this
+  =/  nb=ball:tarball  (peek-ball-now new)
+  ?:  (~(has by dir.nb) %desks)
+    ~>  %slog.[0 leaf+"grubbery: /apps/shell is a shell already; /apps/shell.shell left as it is"]
+    this
+  ~>  %slog.[0 leaf+"grubbery: the shell moves from /apps/shell.shell to /apps/shell"]
+  =/  from=tape  (spud old)
+  =/  to=tape    (spud new)
+  =.  this  (load-ball-changes new (ball-to-bole:tarball ob) %.n)
+  =.  this  (cull [%| old])
+  =.  this  (respell-json new from to)
+  (respell-lanes /sys/link from to)
+::  +respell-json: every json grub under `at` whose text spells `from`
+::  is rewritten with `to`; every grant.json under it is dropped (the
+::  shell grants again at the new place). Walks the tree as it stands.
+::
+++  respell-json
+  |=  [at=path from=tape to=tape]
+  ^+  this
+  =/  b=ball:tarball  (peek-ball-now at)
+  =.  this
+    ?~  fil.b  this
+    =/  files=(list [name=@ta =sang:tarball gain=? bang=(unit tang)])
+      ~(tap by contents.u.fil.b)
+    |-  ^+  this
+    ?~  files  this
+    =/  name=@ta  name.i.files
+    ?:  =(%'grant.json' name)
+      $(files t.files, this (delete at name))
+    ?.  =([/ %json] p.sang.i.files)  $(files t.files)
+    =/  jon=(unit json)  (mole |.(;;(json (sang-noun:tarball sang.i.files))))
+    ?~  jon  $(files t.files)
+    =/  txt=tape  (trip (en:json:html u.jon))
+    ?~  (find from txt)  $(files t.files)
+    =/  new=(unit json)  (de:json:html (crip (respell txt from to)))
+    ?~  new  $(files t.files)
+    $(files t.files, this (save-file [at name] [[/ %json] u.new]))
+  =/  kids=(list @ta)  ~(tap in ~(key by dir.b))
+  |-  ^+  this
+  ?~  kids  this
+  $(kids t.kids, this (respell-json (snoc at i.kids) from to))
+::  +respell-lanes: every dest.lanes under `at`, at any depth (a /sys/link
+::  name may nest), with a lane under `from` is rewritten to point under `to`.
+::
+++  respell-lanes
+  |=  [at=path from=tape to=tape]
+  ^+  this
+  =/  b=ball:tarball  (peek-ball-now at)
+  =/  old=path  (stab (crip from))
+  =/  new=path  (stab (crip to))
+  =/  kids=(list @ta)  ~(tap in ~(key by dir.b))
+  |-  ^+  this
+  ?~  kids  this
+  =/  here=path  (snoc at i.kids)
+  =/  kb=ball:tarball  (peek-ball-now here)
+  =/  got=(unit [=sang:tarball gain=? bang=(unit tang)])
+    ?~  fil.kb  ~
+    (~(get by contents.u.fil.kb) %'dest.lanes')
+  ::  a name may nest (@chat/v1): the walk goes on below either way
+  ?~  got  $(kids t.kids, this (respell-lanes here from to))
+  ?.  =([/ %lanes] p.sang.u.got)  $(kids t.kids, this (respell-lanes here from to))
+  =/  lanes=(unit (list lane:tarball))
+    (mole |.(;;((list lane:tarball) (sang-noun:tarball sang.u.got))))
+  ?~  lanes  $(kids t.kids, this (respell-lanes here from to))
+  =/  moved=(list lane:tarball)
+    %+  turn  u.lanes
+    |=  l=lane:tarball
+    ?-  -.l
+      %|  ?.(=(old (scag (lent old) p.l)) l [%| (weld new (slag (lent old) p.l))])
+      %&  ?.(=(old (scag (lent old) path.p.l)) l [%& (weld new (slag (lent old) path.p.l)) name.p.l])
+    ==
+  =.  this
+    ?:  =(moved u.lanes)  this
+    (save-file [here %'dest.lanes'] [[/ %lanes] moved])
+  $(kids t.kids, this (respell-lanes here from to))
+::  +respell: every occurrence of `from` in a tape replaced with `to`
+::
+++  respell
+  |=  [txt=tape from=tape to=tape]
+  ^-  tape
+  =/  n=@ud  (lent from)
+  |^  (go txt)
+  ++  go
+    |=  r=tape
+    ^-  tape
+    ?~  r  ~
+    ?:  =(from (scag n `tape`r))  (weld to (go (slag n `tape`r)))
+    [i.r (go t.r)]
+  --
 ++  cold-start
   ^-  _this
-  =.  this  bootstrap-marcs
+  ::  every step is gauged: under +mem each prints the loom on the way in,
+  ::  so the last line before a %meme names what could not finish.
+  =.  this  (gage %bootstrap-marcs |.(bootstrap-marcs))
   ::  /code source is mirrored and built here without a reload cascade;
   ::  the single reload from root below makes every other code
   ::  namespace fresh on the way down (reload-child-nexuses), before
   ::  anything it governs is touched
-  =.  this  (sync-gub %.n)
-  =.  this  carry-behn-state
-  =.  this  (reload-nexus-at / root)
-  =.  this  (spawn-all-files / (peek-bole-now /))
-  =.  this  sync-dill
-  =.  this  sync-clay
-  =.  this  sync-jael
-  =.  this  sync-bowl
-  =.  this  sync-peer
-  =.  this  sync-gall
-  =.  this  sync-lick
-  =.  this  sync-eyre
-  sync-push
+  =.  this  (gage %sync-gub |.((sync-gub %.n)))
+  =.  this  (gage %carry-behn-state |.(carry-behn-state))
+  ::  the shell's spelling: a ship still holding it at /apps/shell.shell
+  ::  has it moved to /apps/shell before the root rows run
+  =.  this  (gage %migrate-shell |.(migrate-shell))
+  =.  this  (gage %reload-nexus-at-root |.((reload-nexus-at / root)))
+  =.  this  (gage %spawn-all-files |.((spawn-all-files / (peek-bole-now /))))
+  =.  this  (gage %sync-dill |.(sync-dill))
+  =.  this  (gage %sync-clay |.(sync-clay))
+  =.  this  (gage %sync-jael |.(sync-jael))
+  =.  this  (gage %sync-bowl |.(sync-bowl))
+  =.  this  (gage %sync-peer |.(sync-peer))
+  =.  this  (gage %sync-gall |.(sync-gall))
+  =.  this  (gage %sync-lick |.(sync-lick))
+  =.  this  (gage %sync-eyre |.(sync-eyre))
+  (gage %sync-push |.(sync-push))
 ::  +put-pace: write a pace into a born tree at the given dest lane.
 ::  Used to record remote peek results.
 ::
@@ -829,9 +1065,7 @@
   |-  ^+  hits
   ?~  entries  ^$(jobs t.jobs)
   =/  [key=cass:clay val=entry:hist:nexus]  i.entries
-  ?:  ?=(%tomb -.pace.val)  $(entries t.entries)
-  ?~  p.pace.val  $(entries t.entries)
-  =/  root=jobe:nexus  u.p.pace.val
+  =/  root=jobe:nexus  lobe.pace.val
   =/  absent=?  !(~(has by jects.silo) root)
   ?.  |(absent (~(has in broken) root))
     $(entries t.entries)
@@ -878,8 +1112,8 @@
   =/  ver=tape  (a-co:co ud.cass.h)
   =/  lob=tape  (scow %uv lobe.h)
   (crip "{fil}  v{ver}{?:(latest.h "  LATEST" "")}  %{(trip kind.h)}  {lob}")
-::  +repair-silo: tomb every audit-damaged version in place. The
-::  content is gone; the tomb makes the books say so instead of
+::  +repair-silo: drop every audit-damaged version. The content is
+::  gone; dropping the version makes the books say so instead of
 ::  booming readers. Latest versions are never touched. Explicitly
 ::  triggered only (%silo-repair poke) — never automatic.
 ::
@@ -910,17 +1144,18 @@
   =.  this
     |-
     ?~  todo  this
-    =.  this  (tomb-version [pax name cass]:i.todo)
+    =.  this  (drop-version [pax name cass]:i.todo)
     $(todo t.todo)
   ?:  =(born.before born)
     ~?  dbg  [%silo-repair-remaining-latest-guarded (lent dmg)]
     this
   $(rounds +(rounds))
-::  +tomb-version: rewrite one hist entry's pace to %tomb, releasing
-::  the ref the pace held (cascade prints for already-absent lobes
-::  are expected and tolerated — that's the corpse being buried)
+::  +drop-version: remove one hist entry whose content is gone,
+::  releasing the ref the pace held (cascade prints for already-absent
+::  lobes are expected and tolerated — that's the corpse being buried).
+::  A dropped version is simply absent; its number lives on in $peak.
 ::
-++  tomb-version
+++  drop-version
   |=  [pax=path name=(unit @ta) =cass:clay]
   ^+  this
   =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
@@ -934,12 +1169,10 @@
     this
   =/  ent=(unit entry:hist:nexus)  (get:hon:hist:nexus sk cass)
   ?~  ent  this
-  ?:  ?=(%tomb -.pace.u.ent)  this
-  ~?  dbg  [%silo-tombed pax name ud=ud.cass]
-  =?  silo  ?=(^ p.pace.u.ent)
-    (~(drop-ject si:nexus silo) u.p.pace.u.ent)
-  =/  new-hist=hist:nexus
-    (put:hon:hist:nexus sk cass u.ent(pace [%tomb ~]))
+  ~?  dbg  [%silo-dropped pax name ud=ud.cass]
+  =?  silo  %.y
+    (~(drop-ject si:nexus silo) lobe.pace.u.ent)
+  =/  new-hist=hist:nexus  +:(del:hon:hist:nexus sk cass)
   =.  born
     ?~  name  (~(put of born) pax u.node(fold new-hist))
     (~(put of born) pax u.node(file (~(put by file.u.node) u.name new-hist)))
@@ -973,11 +1206,13 @@
   ::  send %peek intake to the requesting fiber.
   ~?  dbg  [%peek-discharged ship.pk dest.pk key=key peeks-remaining=~(wyt by peeks.remo)]
   =/  =cite:nexus
-    ?:  ?=(%tomb -.pace.u.snap.pk)  [%none ~]
-    ?~  p.pace.u.snap.pk  [%none ~]
     ?-  -.dest.pk
-      %|  [%ball *wave:nexus u.p.pace.u.snap.pk deep.pk]
-      %&  [%file cass.u.snap.pk u.p.pace.u.snap.pk blot.pk]
+      %|  [%ball *wave:nexus lobe.pace.u.snap.pk deep.pk]
+        %&
+      ::  the grub's position here is its stand-in under /sys/ames
+      :*  %file  cass.u.snap.pk  lobe.pace.u.snap.pk  blot.pk
+          (weld /sys/ames/ships/[(scot %p ship.pk)]/root path.p.dest.pk)
+      ==
     ==
   ::  Bump silo ref for data-carrying cites — %file and %ball both
   ::  carry a lobe that +hydrate drops after reading, so both must
@@ -1232,18 +1467,20 @@
       ==
     ?~  cas-pace  ~
     =/  refs=lobes:nexus
-      ?:  ?=(%tomb -.pace.u.cas-pace)  [~ ~]
-      ?~  p.pace.u.cas-pace  [~ ~]
       ?:  deep.req
-        (~(reachable si:nexus silo) u.p.pace.u.cas-pace)
-      (~(reachable-shallow si:nexus silo) u.p.pace.u.cas-pace)
+        (~(reachable si:nexus silo) lobe.pace.u.cas-pace)
+      (~(reachable-shallow si:nexus silo) lobe.pace.u.cas-pace)
     `[cass.u.cas-pace pace.u.cas-pace refs]
+  ::  nothing there, and the caller is allowed here: the snap is empty
+  ::  and says so. Existence is not a third thing to hide — the weir
+  ::  already drew the line, and one side of it answers truthfully.
+  ?~  snap
+    (respond-transfer %peek [wire.req %snap dest-lane `@uvJ`0 ~ ~])
   =/  snap-id=@uvJ  `@uvJ`(shaz eny.bowl)
   ::  Inline the payload when it's cheaper to send than to negotiate:
   ::  the subset rides in the snap, the receiver skips want/data, and
   ::  no pin is needed since no %want will ever come.
   =/  inline=(unit silo:nexus)
-    ?~  snap  ~
     =/  n-refs=@ud
       (add ~(wyt in jects.refs.u.snap) ~(wyt in nouns.refs.u.snap))
     ?:  (gth n-refs max-inline-refs)  ~
@@ -1255,8 +1492,8 @@
     =.  size  (add size (mul 128 ~(wyt by jects.send)))
     ?:  (gth size max-inline-bytes)  ~
     `send
-  =/  pinned=?  &(?=(^ snap) ?=(~ inline))
-  =?  silo  &(?=(^ snap) pinned)
+  =/  pinned=?  ?=(~ inline)
+  =?  silo  pinned
     =.  silo
       %+  roll  ~(tap in jects.refs.u.snap)
       |=  [=jobe:nexus s=_silo]
@@ -1265,9 +1502,9 @@
     |=  [=nobe:nexus s=_silo]
     (~(bump-ref si:nexus s) nobe)
   =/  expiry=@da  (add now.bowl ~m5)
-  =?  snaps.remo  &(?=(^ snap) pinned)
+  =?  snaps.remo  pinned
     (~(put by snaps.remo) [snap-id src.bowl] [dest-lane refs.u.snap expiry])
-  =?  cards  &(?=(^ snap) pinned)
+  =?  cards  pinned
     :_  cards
     [%pass /behn/snap-pin/[(scot %uv snap-id)]/[(scot %p src.bowl)] %arvo %b %wait expiry]
   (respond-transfer %peek [wire.req %snap dest-lane snap-id snap inline])
@@ -1357,15 +1594,8 @@
 ::  handler's bumps. Shared by %data transfers and inline snaps.
 ::
 ++  merge-transfer-data
-  |=  [got=silo:nexus want=lobes:nexus]
+  |=  got=silo:nexus
   ^+  this
-  ::  only lobes a staged snap names are hashed and merged. A ship
-  ::  could otherwise send any amount of content we never asked for
-  ::  and have this event hash and sort all of it.
-  =.  got
-    ^-  silo:nexus
-    :-  (malt (skim ~(tap by nouns.got) |=([k=nobe:nexus *] (~(has in nouns.want) k))))
-    (malt (skim ~(tap by jects.got) |=([k=jobe:nexus *] (~(has in jects.want) k))))
   =/  good-nouns=(list [=nobe:nexus =noun])
     %+  murn  ~(tap by nouns.got)
     |=  [=nobe:nexus refs=@ud =noun]
@@ -1535,7 +1765,7 @@
     ::  the want/data legs are skipped entirely.
     ?:  ?=(^ data.resp)
       ~?  dbg  [%snap-inline-from src]
-      (merge-transfer-data u.data.resp refs.u.snap.resp)
+      (merge-transfer-data u.data.resp)
     =/  missing=lobes:nexus
       :-  (~(dif in jects.refs.u.snap.resp) ~(key by jects.silo))
       (~(dif in nouns.refs.u.snap.resp) ~(key by nouns.silo))
@@ -1561,18 +1791,7 @@
     ::
       %data
     ~?  dbg  [%data-received-from src]
-    ::  a %want went out only for a snap staged on a peek to this ship:
-    ::  what those snaps name is all the data we asked this ship for
-    =/  want=lobes:nexus
-      %+  roll  ~(val by peeks.remo)
-      |=  [pk=peek:remo:nexus acc=lobes:nexus]
-      ?.  &(=(ship.pk src) ?=(^ snap.pk))  acc
-      :-  (~(uni in jects.acc) jects.refs.u.snap.pk)
-      (~(uni in nouns.acc) nouns.refs.u.snap.pk)
-    ?:  &(=(~ jects.want) =(~ nouns.want))
-      ~?  dbg  [%data-unsolicited src]
-      this
-    (merge-transfer-data silo.resp want)
+    (merge-transfer-data silo.resp)
     ::
       %veto
     ::  Remote peek was blocked by weir. Discharge matching peeks.
@@ -1638,48 +1857,60 @@
 ::  +abet: run the take queue dry, then return cards and state
 ::
 ++  abet
-  ::  restart-cap: how many times one fiber may (re)start within a single
-  ::  drain before it is parked. A fiber that fails on start is restarted
-  ::  at once with a fresh start take (both fields null), drained in this
-  ::  same loop; a deterministic failure - a dart the weir refused on an
-  ::  unapproved app, poison state, a poison timer - then loops forever
-  ::  inside one gall event, pegging the ship and answering nothing. The
-  ::  cap turns that infinite loop into a parked fiber and a finished
-  ::  event. 32 is far above any legitimate per-event restart count.
-  ::  A well-behaved fiber avoids the loop itself with +rise-wait /
-  ::  +rise-later (wait for a poke after a crash instead of re-running);
-  ::  this is the runtime backstop for one that does not, or gets it
-  ::  wrong. The permanent case - a crash on a refused dart - is parked
-  ::  on the first failure, in +process-do-next below.
-  =/  restart-cap=@ud  32
-  =|  spins=(map rail:tarball @ud)
+  ::  Drain the take queue. No restart cap: nothing re-enqueues a fiber's
+  ::  own start take any more, so the loop this used to contain cannot
+  ::  form. A crash or a %fail bangs the grub (see +process-do-next), and
+  ::  it is rebuilt only when a later take needs it.
+  ::
+  ::  +take-budget takes at most, then stop: the rest go to `owed`, and a
+  ::  behn wake drains them in their own event with their own loom. A
+  ::  cascade -- a take that queues takes that queue takes -- otherwise
+  ::  spends one event's loom with nothing reclaimed until it returns.
+  ::  The cut is only ever BETWEEN takes, since handling one is atomic.
+  =|  done=@ud
   |-
   ?:  =(~ takes)
+    ?:  =(~ owed)
+      ::  one line per EVENT, not per batch: every poke, request, sign and
+      ::  wake ends here. Under +dbg, where per-event traces belong.
+      ~?  tak  "abet: 0 takes left, stopping until next input"
+      [(flop cards) state]
+    ::  owed work and nothing live: make sure a wake is coming for it, so
+    ::  parked takes can never be stranded by an event that ends quiet.
+    ~?  tak  "abet: {<(lent ~(tap to owed))>} takes owed, waking to drain"
+    =.  cards
+      :_  cards
+      [%pass /behn/drain %arvo %b %wait (add now.bowl take-pause)]
+    [(flop cards) state]
+  ?:  =(done (max 1 take-budget))
+    ::  budget spent with takes still queued: park them and ask behn for
+    ::  another event. Every completed operation is already in the
+    ::  namespace, so stopping here leaves consistent state.
+    =/  left=@ud  (lent ~(tap to takes))
+    ~?  tak  "abet: suspending with {<left>} takes left"
+    =.  owed  (~(gas to owed) ~(tap to takes))
+    =.  cards
+      :_  cards
+      [%pass /behn/drain %arvo %b %wait (add now.bowl take-pause)]
     [(flop cards) state]
   =^  [here=rail:tarball =take:fiber:nexus]  takes  ~(get to takes)
-  =/  is-start=?  &(?=(~ give.take) ?=(~ in.take))
-  ::  a fiber that has already (re)started restart-cap times this event is
-  ::  looping: park it (bang) instead of running it again, and drop this
-  ::  start take. A reload revives it - after its permits are granted, if
-  ::  a refused dart was the cause.
-  ?:  &(is-start (gte (~(gut by spins) here 0) restart-cap))
-    =.  this
-      %+  bang-file  here
-      :~  leaf+"fiber parked: restarted over {(scow %ud restart-cap)} times in one event"
-          leaf+"reload to retry (grant this app's permits first if a dart was refused)"
-      ==
-    $
   =.  this  (process-take here take)
-  =?  spins  is-start
-    (~(put by spins) here +((~(gut by spins) here 0)))
-  $
-::  Drop hist entries matching a lose spec, decrementing silo refs
+  $(done +(done))
+::  Drop hist entries matching a lose spec: the entries are DELETED and
+::  their silo refs released. Absence at a cass is the terminal state; a
+::  dropped top gets a fresh absence above it so the file reads as gone
+::  at a new number. (A tomb that carries the hash of what was dropped,
+::  the way remote scry's does, is a later addition; see roadmap.)
 ::
 ++  drop-hist
   |=  [here=rail:tarball =lose:nexus]
   ^+  this
-  =/  old-born=born:nexus  born
-  =/  sk=hist:nexus  (need (get-born here))
+  ::  no history at this rail: nothing to drop. A +need here crashed the
+  ::  whole dart, which banged the fiber that sent it -- a caller naming
+  ::  the wrong rail took out the grub that asked.
+  =/  got=(unit hist:nexus)  (get-born here)
+  ?~  got  this
+  =/  sk=hist:nexus  u.got
   =/  entries=(list [key=cass:clay val=entry:hist:nexus])
     (tap:hon:hist:nexus sk)
   =/  kept=(list [key=cass:clay val=entry:hist:nexus])  ~
@@ -1690,13 +1921,9 @@
       |-
       ?~  kept  new-hist
       $(kept t.kept, new-hist (put:hon:hist:nexus new-hist key.i.kept val.i.kept))
-    =.  born  (~(put bo:nexus now.bowl born) here new-hist)
+    =.  this  (put-born here new-hist)
     =.  vale  (gc-vale-cache vale bins)
-    ::  a dropped top changes what the file reads as, so the trees roll
-    ::  up and watchers hear of it like any write. Dropping only older
-    ::  entries changes nothing anyone reads.
-    ?:  =((top:hist:nexus sk) (top:hist:nexus new-hist))  this
-    (propagate old-born here)
+    this
   =/  drop=?
     ?-    -.lose
         %pick
@@ -1710,25 +1937,21 @@
           (fall (bind to.lose |=(n=@ud (lte ud.key.i.entries n))) %.y)
       ==
     ==
-  ?:  drop
+  ::  THE LIVE TOP IS NEVER DROPPED. %lose prunes history; deleting
+  ::  the thing is +cull's job. A fold already refuses this and the two
+  ::  must not diverge -- that divergence is what made +delete and
+  ::  +settle disagree in the first place.
+  ?:  &(drop !=(key.i.entries (fall (top:hist:nexus sk) key.i.entries)))
     =.  silo
       =/  pv=pace:hist:nexus  pace.val.i.entries
-      ?:  ?=(%tomb -.pv)  silo
-      ?~  p.pv  silo
-      (~(drop-ject si:nexus silo) u.p.pv)
-    ::  if tombstoning the top, append a new [%temp ~] wavefront
-    =/  new-kept  [[key.i.entries [[%tomb ~] ~]] kept]
-    ?.  =(key.i.entries (need (top:hist:nexus sk)))
-      $(entries t.entries, kept new-kept)
-    =/  new-cass=cass:clay
-      (~(next-cass bo:nexus now.bowl born) key.i.entries)
-    $(entries t.entries, kept [[new-cass [[%temp ~] ~]] new-kept])
+      (~(drop-ject si:nexus silo) lobe.pv)
+    $(entries t.entries)
   $(entries t.entries, kept [i.entries kept])
-::  Drop fold hist entries matching a lose spec: tombstone them and
-::  clear their tags, decrementing silo refs (which frees the entry's
-::  merkle tree if nothing else owns it). The live top entry is never
-::  tombstoned — the current tree must survive — but a matched top is
-::  DEMOTED: pace back to %temp, tags cleared, lobe and refs intact.
+::  Drop fold hist entries matching a lose spec: the entries are DELETED,
+::  their silo refs released (which frees the entry's merkle tree if
+::  nothing else owns it). The live top entry is never deleted — the
+::  current tree must survive — but a matched top is DEMOTED: pace back
+::  to %temp, tags cleared, lobe and refs intact.
 ::  Metadata + silo only: the current pace lobe is untouched, so no
 ::  rollup — write the node back directly.
 ::
@@ -1772,71 +1995,62 @@
     ::  matched top: demote to %temp and clear tags, keep the tree
     =/  pv=pace:hist:nexus  pace.val.i.entries
     =/  demoted=pace:hist:nexus
-      ?:  ?=(%tomb -.pv)  pv
-      [%temp p.pv]
+      [%temp lobe.pv]
     $(entries t.entries, kept [[key.i.entries [demoted ~]] kept])
   =.  silo
     =/  pv=pace:hist:nexus  pace.val.i.entries
-    ?:  ?=(%tomb -.pv)  silo
-    ?~  p.pv  silo
-    (~(drop-ject si:nexus silo) u.p.pv)
-  $(entries t.entries, kept [[key.i.entries [[%tomb ~] ~]] kept])
+    (~(drop-ject si:nexus silo) lobe.pv)
+  $(entries t.entries)
 ::  Set gain flag on a lane: single file or recursive on directory.
-::  Rewrites each file's leaf ject with the new gain flag, then rolls
-::  the trees up and notifies, as any write does. Without the rollup a
-::  parent tree kept naming the old leaf, so the file and its directory
-::  disagreed and nobody watching heard of it. The trees roll up once
-::  per directory, deepest first, not once per file.
+::  For files, rewrites the leaf ject with the new gain flag.
+::  For directories, recurses into all descendant files.
 ::
 ++  set-gain-lane
   |=  [=lane:tarball flag=?]
   ^+  this
-  =/  rails=(list rail:tarball)
-    ?:  ?=(%& -.lane)  ~[p.lane]
-    %+  turn  ~(tap ba:tarball (peek-ball-now p.lane))
-    |=([=rail:tarball *] [(weld p.lane path.rail) name.rail])
-  =|  done=(list rail:tarball)
-  |-
-  ?^  rails
-    =/  nex=(unit _this)  (set-gain-leaf i.rails flag)
-    ?~  nex  $(rails t.rails)
-    =.  this  u.nex
-    $(rails t.rails, done [i.rails done])
-  =/  dirs=(list path)
-    %+  sort  ~(tap in (silt (turn done |=(r=rail:tarball path.r))))
-    |=([a=path b=path] (gth (lent a) (lent b)))
-  =|  bumped=(set lane:tarball)
-  |-
-  ?^  dirs
-    =^  bum=(set lane:tarball)  this  (record-trees-lanes i.dirs)
-    $(dirs t.dirs, bumped (~(uni in bumped) bum))
-  (notify-lanes (~(gas in bumped) (turn done |=(r=rail:tarball &+r))))
-::  +set-gain-leaf: rewrite one file's leaf ject with a gain flag, in
-::  place in its hist. ~ when there is nothing to change.
-::
-++  set-gain-leaf
-  |=  [here=rail:tarball flag=?]
-  ^-  (unit _this)
-  =/  fh=(unit hist:nexus)  (get-born here)
-  ?~  fh  ~
-  =/  got=(unit [key=cass:clay val=entry:hist:nexus])
-    (ram:hon:hist:nexus u.fh)
-  ?~  got  ~
-  ?:  ?=(%tomb -.pace.val.u.got)  ~
-  ?~  p.pace.val.u.got  ~
-  =/  jot  (~(get by jects.silo) u.p.pace.val.u.got)
-  ?~  jot  ~
-  ?.  ?=(%leaf -.ject.u.jot)  ~
-  ?:  =(gain.leaf.ject.u.jot flag)  ~
-  ::  the new leaf goes in before the old ref is dropped: dropping
-  ::  first takes the content noun with a leaf nothing else holds
-  =^  new-jobe=jobe:nexus  silo
-    (~(put-ject si:nexus silo) [%leaf leaf.ject.u.jot(gain flag)])
-  =.  silo  (~(drop-ject si:nexus silo) u.p.pace.val.u.got)
-  =/  =pace:hist:nexus  ?:(flag [%firm `new-jobe] [%temp `new-jobe])
-  =.  born
-    (~(put bo:nexus now.bowl born) here (put-pace:hist:nexus u.fh key.u.got pace))
-  `this
+  ?-    -.lane
+      %&
+    ::  File: set gain on the leaf ject at this rail
+    =/  here=rail:tarball  p.lane
+    =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
+      (~(get of born) path.here)
+    ?~  node  this
+    =/  fh=(unit hist:nexus)  (~(get by file.u.node) name.here)
+    ?~  fh  this
+    =/  got=(unit [key=cass:clay val=entry:hist:nexus])
+      (ram:hon:hist:nexus u.fh)
+    ?~  got  this
+    =/  jot  (~(get by jects.silo) lobe.pace.val.u.got)
+    ?~  jot  this
+    ?.  ?=(%leaf -.ject.u.jot)  this
+    ?:  =(gain.leaf.ject.u.jot flag)  this
+    ::  Rewrite leaf ject with new gain flag
+    =/  new-leaf=leaf:nexus  leaf.ject.u.jot(gain flag)
+    =.  silo  (~(drop-ject si:nexus silo) lobe.pace.val.u.got)
+    =/  [new-jobe=jobe:nexus new-silo=silo:nexus]
+      (~(put-ject si:nexus silo) [%leaf new-leaf])
+    =.  silo  new-silo
+    ::  Update hist to point to new ject lobe
+    =/  =pace:hist:nexus  ?:(flag [%firm new-jobe] [%temp new-jobe])
+    =/  new-hist=hist:nexus
+      (put-pace:hist:nexus u.fh key.u.got pace)
+    =.  this  (put-born here new-hist)
+    this
+      %|
+    ::  Directory: set the DIRECTORY'S OWN gain -- that is the policy
+    ::  new files inherit (+fold-gain reads it) -- then sweep what is
+    ::  already inside, so existing files match the new policy too.
+    =.  this  (set-fold-gain p.lane flag)
+    =/  sub-ball=ball:tarball  (peek-ball-now p.lane)
+    =/  entries=(list [pax=path lp=lump:tarball])  ~(tap of sub-ball)
+    |-
+    ?~  entries  this
+    =/  files=(list @ta)  ~(tap in ~(key by contents.lp.i.entries))
+    |-
+    ?~  files  ^$(entries t.entries)
+    =.  this  (set-gain-lane &+[(weld p.lane pax.i.entries) i.files] flag)
+    $(files t.files)
+  ==
 ::  Promote current hist entry to %firm at a rail, with optional tags.
 ::
 ++  firm-hist
@@ -1851,17 +2065,16 @@
     (ram:hon:hist:nexus u.fh)
   ?~  got  this
   ?-    -.pace.val.u.got
-      %tomb  this
       %firm
     ?:  =(tags tags.val.u.got)  this
     =/  new-hist=hist:nexus
       (put:hon:hist:nexus u.fh key.u.got val.u.got(tags (~(uni in tags.val.u.got) tags)))
-    =.  born  (~(put bo:nexus now.bowl born) here new-hist)
+    =.  this  (put-born here new-hist)
     this
       %temp
     =/  new-hist=hist:nexus
-      (put:hon:hist:nexus u.fh key.u.got [[%firm p.pace.val.u.got] tags])
-    =.  born  (~(put bo:nexus now.bowl born) here new-hist)
+      (put:hon:hist:nexus u.fh key.u.got [[%firm lobe.pace.val.u.got] tags])
+    =.  this  (put-born here new-hist)
     this
   ==
 ::  Promote current fold hist entry to %firm at a path.
@@ -1878,7 +2091,6 @@
     (ram:hon:hist:nexus fold.u.node)
   ?~  got  this
   ?-    -.pace.val.u.got
-      %tomb  this
       %firm
     ?:  =(tags tags.val.u.got)  this
     =/  new-hist=hist:nexus
@@ -1887,7 +2099,7 @@
     this
       %temp
     =/  new-hist=hist:nexus
-      (put:hon:hist:nexus fold.u.node key.u.got [[%firm p.pace.val.u.got] tags])
+      (put:hon:hist:nexus fold.u.node key.u.got [[%firm lobe.pace.val.u.got] tags])
     =.  born  (~(put of born) pax u.node(fold new-hist))
     this
   ==
@@ -1923,7 +2135,7 @@
     ?~(cp ~ `cass.u.cp)
   ?~  target  this
   =/  new-hist=hist:nexus  (tag:hist:nexus u.fh u.target tags)
-  =.  born  (~(put bo:nexus now.bowl born) here new-hist)
+  =.  this  (put-born here new-hist)
   this
 ::  Find all [rail cass] pairs in a subtree whose hist contains a lobe
 ::
@@ -1970,9 +2182,7 @@
   ^-  (list [=rail:tarball =cass:clay])
   %+  murn  (tap:hon:hist:nexus hist)
   |=  [key=cass:clay val=entry:hist:nexus]
-  ?:  ?=(%tomb -.pace.val)  ~
-  ?~  p.pace.val  ~
-  =/  jot  (~(get by jects.silo) u.p.pace.val)
+  =/  jot  (~(get by jects.silo) lobe.pace.val)
   ?~  jot  ~
   =/  jt=ject:nexus  ject.u.jot
   ?.  ?=(%leaf -.jt)  ~
@@ -1986,6 +2196,20 @@
 ++  emit-cards
   |=  cadz=(list card)
   this(cards (welp (flop cadz) cards))
+::
+::  +resume-owed: move the parked takes back into the live queue. +abet
+::  does the draining, so this is the whole of it.
+::
+++  resume-owed
+  ^+  this
+  ?:  =(~ owed)  this
+  =/  back=(list take:nexus)  ~(tap to owed)
+  ~?  tak  "abet: resuming with {<(lent back)>} takes left"
+  =.  owed  ~
+  |-  ^+  this
+  ?~  back  this
+  ::  a $take is [here [give in]], which is +enqu-take's sample exactly
+  $(back t.back, this (enqu-take i.back))
 ::
 ++  enqu-take
   |=  [here=rail:tarball give=(unit give:nexus) in=(unit pend:fiber:nexus)]
@@ -2037,6 +2261,16 @@
   =/  entry=(unit [refs=@ud =built:nexus])  (~(get by bins) u.ckey)
   ?~  entry  ~
   `[i.cands src u.ckey built.u.entry]
+::
+::  +mark-position: where a grub's mark resolves from. Its own
+::  position when a marc is reachable there (a desk-local mark reads
+::  from anywhere), else the reader's.
+::
+++  mark-position
+  |=  [reader=path at=path =blot:tarball]
+  ^-  path
+  ?~  (resolve-built at %mar blot)  reader
+  at
 ::
 ++  get-built
   |=  [pax=path kind=?(%mar %nex) addr=rail:tarball]
@@ -2208,9 +2442,7 @@
   =/  got=(unit [key=cass:clay val=entry:hist:nexus])
     (ram:hon:hist:nexus u.fh)
   ?~  got  %.n
-  ?:  ?=(%tomb -.pace.val.u.got)  %.n
-  ?~  p.pace.val.u.got  %.n
-  =/  jot  (~(get by jects.silo) u.p.pace.val.u.got)
+  =/  jot  (~(get by jects.silo) lobe.pace.val.u.got)
   ?~  jot  %.n
   ?.  ?=(%leaf -.ject.u.jot)  %.n
   gain.leaf.ject.u.jot
@@ -2354,9 +2586,7 @@
     (ram:hon:hist:nexus fold.u.node)
   ?~  got  *bole:tarball
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  *bole:tarball
-  ?~  p.pace  *bole:tarball
-  (peek-bole u.p.pace)
+  (peek-bole lobe.pace)
 ::  Shallow peek: resolve files at this level, subdirs as empty balls.
 ::  No recursion — O(files at this level) instead of O(all files).
 ::
@@ -2421,8 +2651,7 @@
     (ram:hon:hist:nexus u.sok)
   ?~  got  %.n
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  %.n
-  ?=(^ p.pace)
+  %.y
 ::
 ++  peek-grub-now
   |=  =rail:tarball
@@ -2436,9 +2665,7 @@
     (ram:hon:hist:nexus u.sok)
   ?~  got  ~
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  ~
-  ?~  p.pace  ~
-  (peek-grub u.p.pace)
+  (peek-grub lobe.pace)
 ::  Peek the current ball at a fold (born lookup + peek-ball).
 ::
 ++  peek-ball-now
@@ -2451,9 +2678,7 @@
     (ram:hon:hist:nexus fold.u.node)
   ?~  got  *ball:tarball
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  *ball:tarball
-  ?~  p.pace  *ball:tarball
-  (peek-ball u.p.pace)
+  (peek-ball lobe.pace)
 ::  Look up a directory's weir from its parent's tree ject.
 ::
 ++  get-weir-for
@@ -2469,9 +2694,7 @@
     (ram:hon:hist:nexus fold.u.parent-node)
   ?~  parent-got  ~
   =/  =pace:hist:nexus  pace.val.u.parent-got
-  ?:  ?=(%tomb -.pace)  ~
-  ?~  p.pace  ~
-  =/  jot  (~(get by jects.silo) u.p.pace)
+  =/  jot  (~(get by jects.silo) lobe.pace)
   ?~  jot  ~
   ?.  ?=(%tree -.ject.u.jot)  ~
   =/  entry  (~(get by dir.tree.ject.u.jot) name)
@@ -2491,9 +2714,7 @@
     (ram:hon:hist:nexus fold.u.node)
   ?~  got  ~
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  ~
-  ?~  p.pace  ~
-  =/  jot  (~(get by jects.silo) u.p.pace)
+  =/  jot  (~(get by jects.silo) lobe.pace)
   ?~  jot  ~
   ?.  ?=(%tree -.ject.u.jot)  ~
   (bind nek.tree.ject.u.jot |=([=neck:tarball *] neck))
@@ -2509,9 +2730,7 @@
     (ram:hon:hist:nexus fold.u.node)
   ?~  got  *ball:tarball
   =/  =pace:hist:nexus  pace.val.u.got
-  ?:  ?=(%tomb -.pace)  *ball:tarball
-  ?~  p.pace  *ball:tarball
-  (peek-ball-shallow u.p.pace)
+  (peek-ball-shallow lobe.pace)
 ::  List file names at a directory (from born).
 ::
 ++  lis-born
@@ -2646,17 +2865,9 @@
 ++  bang-nexus
   |=  [dest=fold:tarball err=tang]
   ^+  this
-  =/  old=pipe:nexus  (fall (~(get of pool) dest) *pipe:nexus)
-  ::  said when the fault begins, not each time a reload finds it still
-  ::  there: a nexus banged with this same error, now or before this
-  ::  event's reload cleared it (+was), prints nothing. The bang on the
-  ::  pipe is the record either way.
-  =/  before=(unit tang)  bang:(fall (~(get of was) dest) *pipe:nexus)
-  =.  this
-    ?:  |(=(bang.old `err) =(before `err))  this
-    %-  (slog [leaf+"BANG nexus {(spud dest)}" err])
-    this
+  %-  (slog [leaf+"BANG nexus {(spud dest)}" err])
   ::  Set bang on the pipe at dest
+  =/  old=pipe:nexus  (fall (~(get of pool) dest) *pipe:nexus)
   =.  pool  (~(put of pool) dest old(bang `err))
   ::  Persist bang to fold ject in silo
   =.  this  (bang-fold dest err)
@@ -2700,15 +2911,18 @@
   ?~  cas  this
   =/  pv=(unit pace:hist:nexus)  (get-pace:hist:nexus u.sok u.cas)
   ?~  pv  this
-  ?:  ?=(%tomb -.u.pv)  this
-  ?~  p.u.pv  this
-  =/  [new-jobe=jobe:nexus new-silo=silo:nexus kept=hist:nexus]
-    (~(set-bang si:nexus silo) u.sok u.cas u.p.u.pv err)
+  =/  [new-jobe=jobe:nexus new-silo=silo:nexus]
+    (~(set-bang si:nexus silo) lobe.u.pv err)
   =/  new-cass=cass:clay  (~(next-cass bo:nexus now.bowl born) u.cas)
-  =/  new-sok=hist:nexus
-    (put-pace:hist:nexus kept new-cass [%temp `new-jobe])
   =.  silo  new-silo
-  =.  born  (~(put bo:nexus now.bowl born) here new-sok)
+  ::  the version this one follows goes by the ordinary rule: %temp is
+  ::  deleted and its ject released together, %firm keeps both
+  =^  dropped=hist:nexus  silo
+    =/  res  (~(drop-temp si:nexus silo) u.sok u.cas)
+    [+.res -.res]
+  =/  new-sok=hist:nexus
+    (put-pace:hist:nexus dropped new-cass [%temp new-jobe])
+  =.  this  (put-born here new-sok)
   =/  old-born=born:nexus  born
   =.  this  (record-trees path.here)
   (notify old-born)
@@ -2725,14 +2939,15 @@
   ?~  cas  this
   =/  pv=(unit pace:hist:nexus)  (get-pace:hist:nexus fold.u.node u.cas)
   ?~  pv  this
-  ?:  ?=(%tomb -.u.pv)  this
-  ?~  p.u.pv  this
-  =/  [new-jobe=jobe:nexus new-silo=silo:nexus kept=hist:nexus]
-    (~(set-bang si:nexus silo) fold.u.node u.cas u.p.u.pv err)
+  =/  [new-jobe=jobe:nexus new-silo=silo:nexus]
+    (~(set-bang si:nexus silo) lobe.u.pv err)
   =/  new-cass=cass:clay  (~(next-cass bo:nexus now.bowl born) u.cas)
-  =/  new-fold=hist:nexus
-    (put-pace:hist:nexus kept new-cass [%temp `new-jobe])
   =.  silo  new-silo
+  =^  dropped=hist:nexus  silo
+    =/  res  (~(drop-temp si:nexus silo) fold.u.node u.cas)
+    [+.res -.res]
+  =/  new-fold=hist:nexus
+    (put-pace:hist:nexus dropped new-cass [%temp new-jobe])
   =.  born  (~(put of born) dest u.node(fold new-fold))
   =/  old-born=born:nexus  born
   =.  this  (record-trees dest)
@@ -2770,7 +2985,6 @@
 ++  clear-bangs-under
   |=  dest=fold:tarball
   ^+  this
-  =?  was  =(*pool:nexus was)  pool
   =.  pool  (clear-pool-bangs-at pool dest)
   (clear-ject-bangs-under dest)
 ::
@@ -2809,14 +3023,15 @@
     ?~  fold-cas  this
     =/  pv=(unit pace:hist:nexus)  (get-pace:hist:nexus fold.u.fil.bor u.fold-cas)
     ?~  pv  this
-    ?:  ?=(%tomb -.u.pv)  this
-    ?~  p.u.pv  this
-    =/  cleared  (~(clear-bang si:nexus silo) fold.u.fil.bor u.fold-cas u.p.u.pv)
+    =/  cleared  (~(clear-bang si:nexus silo) lobe.u.pv)
     ?~  cleared  this
     =/  new-cass=cass:clay  (~(next-cass bo:nexus now.bowl born) u.fold-cas)
-    =/  new-fold=hist:nexus
-      (put-pace:hist:nexus hist.u.cleared new-cass [%temp `lobe.u.cleared])
     =.  silo  silo.u.cleared
+    =^  dropped=hist:nexus  silo
+      =/  res  (~(drop-temp si:nexus silo) fold.u.fil.bor u.fold-cas)
+      [+.res -.res]
+    =/  new-fold=hist:nexus
+      (put-pace:hist:nexus dropped new-cass [%temp lobe.u.cleared])
     =.  born
       =/  node  (fall (~(get of born) pax) *[fold=hist:nexus file=(map @ta hist:nexus)])
       (~(put of born) pax node(fold new-fold))
@@ -2832,16 +3047,17 @@
     ?~  cas  $(files t.files)
     =/  pv=(unit pace:hist:nexus)  (get-pace:hist:nexus sok u.cas)
     ?~  pv  $(files t.files)
-    ?:  ?=(%tomb -.u.pv)  $(files t.files)
-    ?~  p.u.pv  $(files t.files)
-    =/  cleared  (~(clear-bang si:nexus silo) sok u.cas u.p.u.pv)
+    =/  cleared  (~(clear-bang si:nexus silo) lobe.u.pv)
     ?~  cleared  $(files t.files)
     =/  here=rail:tarball  [pax name]
     =/  new-cass=cass:clay  (~(next-cass bo:nexus now.bowl born) u.cas)
-    =/  new-sok=hist:nexus
-      (put-pace:hist:nexus hist.u.cleared new-cass [%temp `lobe.u.cleared])
     =.  silo  silo.u.cleared
-    =.  born  (~(put bo:nexus now.bowl born) here new-sok)
+    =^  dropped=hist:nexus  silo
+      =/  res  (~(drop-temp si:nexus silo) sok u.cas)
+      [+.res -.res]
+    =/  new-sok=hist:nexus
+      (put-pace:hist:nexus dropped new-cass [%temp lobe.u.cleared])
+    =.  this  (put-born here new-sok)
     $(files t.files)
   ::  Recurse into subdirectories
   =/  kids=(list [name=@ta kid=born:nexus])  ~(tap by dir.bor)
@@ -2860,53 +3076,89 @@
   ?:  ?=(^ bang.pip)  &
   ?~  pax  |
   $(pax (snip `path`pax))
-::  Delete a file from pool and ball (NOT born - it's a high-water mark)
+::  Delete a file from pool, ball and born. History is for things that
+::  exist: the record goes with the grub, and only its number remains,
+::  in peak, where every write already put it. A later grub at this
+::  rail numbers after it. Gain governs what a hist retains in life
+::  (firm vs temp), not what survives death: nothing does.
+::
+::  +drop-grub: the path stops holding anything.
+::
+::    A PATH is what carries versions, not the grub at it. So deletion
+::    is an event on that timeline, the same shape as creation: +init
+::    opens every path with a version holding nothing, and this closes
+::    it with one. A path deleted and remade has one history, with the
+::    gap visible in it, rather than two orphans.
+::
+::    Both ways a grub can go come through here -- an explicit delete,
+::    and a settle that finds it gone from the tree -- so they cannot
+::    drift apart. They had: +delete destroyed the timeline instead.
+::
+::    The replaced version follows the ordinary retention rule, exactly
+::    as a write does: %temp goes, %firm stays. Without that a nexus's
+::    requests dir, which makes and culls a grub per HTTP request, would
+::    keep every one of them forever.
+::
+++  drop-grub
+  |=  [dir=path name=@ta]
+  ^+  this
+  =/  here=rail:tarball  [dir name]
+  =.  this  (sub-wipe here)
+  =.  this
+    =/  sok=(unit hist:nexus)  (get-born here)
+    ?~  sok  this
+    =/  cas=(unit cass:clay)  (top:hist:nexus u.sok)
+    ?~  cas  this
+    ::  THE DEATH IS A NUMBER, NOT A VERSION. peak rises above born's
+    ::  top and nothing is stored: a version always references content,
+    ::  so "gone" cannot be a version. A path whose peak stands above
+    ::  its top is a path that no longer exists, and peak's date is when
+    ::  it stopped -- the absence is read from the pair.
+    =/  death=cass:clay  (~(next-cass bo:nexus now.bowl born) u.cas)
+    =.  peak  (~(put-file pk:nexus peak) here death)
+    ::  what it held goes by the ordinary retention rule: a %temp top is
+    ::  released with its entry, a %firm one is kept history
+    =/  prev-leaf=(unit leaf:nexus)  (hist-leaf u.sok u.cas)
+    =^  dropped=hist:nexus  silo
+      =/  res  (~(drop-temp si:nexus silo) u.sok u.cas)
+      [+.res -.res]
+    =?  vale  ?=(~ (get-pace:hist:nexus dropped u.cas))  (gc-vale-prev prev-leaf)
+    ::  NOTHING WAS KEPT, SO NOTHING REMAINS. An un-gained rail is one
+    ::  nobody asked to remember, and a short-lived one costs its
+    ::  directory a record per life -- a record every later reader of
+    ::  that directory walks past. Its number lives on in peak, which is
+    ::  what a later grub at this rail numbers after.
+    ?:  =(~ (tap:hon:hist:nexus dropped))
+      =.  born  (~(del bo:nexus now.bowl born) here)
+      this
+    ::  put-born raises peak to the hist top, which is now BELOW the
+    ::  death; put-file only ever rises, so the death stands.
+    (put-born here dropped)
+  ::  queued inputs are answered, not dropped on the floor
+  =/  old-proc=(unit proc:fiber:nexus)
+    =/  pip=pipe:nexus  (fall (~(get of pool) dir) *pipe:nexus)
+    (~(get by proc.pip) name)
+  =?  this  ?=(^ old-proc)
+    =.  this  (nack-poke-takes here next.u.old-proc ~[leaf+"deleted"])
+    (nack-poke-takes here skip.u.old-proc ~[leaf+"deleted"])
+  =/  pip=pipe:nexus  (fall (~(get of pool) dir) *pipe:nexus)
+  this(pool (~(put of pool) dir pip(proc (~(del by proc.pip) name))))
 ::
 ++  delete
   |=  [dir=path name=@ta]
   ^+  this
-  =/  del-check  (peek-grub-now [dir name])
   ::  deleting what is already gone is a no-op, not a fault
-  ~?  &(dbg ?=(~ del-check))
+  ~?  &(dbg ?=(~ (peek-grub-now [dir name])))
     "no grub at {(spud (weld dir /[name]))}"
-  ::  Clean up outgoing subscriptions from this file
-  =.  this  (sub-wipe [dir name])
-  ::  Snapshot before mutations
   =/  old-born=born:nexus  born
-  ::  Tomb previous %temp entry, then append [%temp ~ ~] for deletion
-  =/  sok=(unit hist:nexus)  (get-born [dir name])
-  =.  this
-    ?.  ?=(^ sok)  this
-    =/  file-cass=cass:clay  (need (top:hist:nexus u.sok))
-    ::  Capture the leaf being tombed so its vale entry can follow it
-    =/  prev-leaf=(unit leaf:nexus)  (hist-leaf u.sok file-cass)
-    ::  an un-gained grub leaves nothing behind. one HTTP request makes
-    ::  and culls a grub under the nexus's requests dir, so a record kept
-    ::  here is a record every later request in that dir walks past.
-    ?.  (lookup-gain [dir name])
-      =.  silo  (~(drop-hist si:nexus silo) u.sok)
-      =.  born  (~(del bo:nexus now.bowl born) [dir name])
-      =.  vale  (gc-vale-prev prev-leaf)
-      this
-    =/  [tombed-silo=silo:nexus tombed-hist=hist:nexus]
-      (~(tomb-temp si:nexus silo) u.sok file-cass)
-    =/  new-cass=cass:clay  (~(next-cass bo:nexus now.bowl born) file-cass)
-    =/  new-sok=hist:nexus  (put-pace:hist:nexus tombed-hist new-cass [%temp ~])
-    =.  silo  tombed-silo
-    =.  born  (~(put bo:nexus now.bowl born) [dir name] new-sok)
-    =.  vale  (gc-vale-prev prev-leaf)
-    this
+  =.  this  (drop-grub dir name)
   =.  this  (propagate old-born [dir name])
-  =/  old=pipe:nexus  (fall (~(get of pool) dir) *pipe:nexus)
-  =/  =pipe:nexus  old(proc (~(del by proc.old) name))
-  =.  pool  (~(put of pool) dir pipe)
   ::  Rebuild if deletion is inside a code nexus
   =/  cod=(unit path)
     (owner-code dir)
   ?~  cod  this
   ~?  dbg  "delete: triggering build-code from {(spud dir)}"
-  =.  this  (build-code u.cod `(sy `(list rail:tarball)`~[[dir name]]))
-  this
+  (build-code u.cod `(sy `(list rail:tarball)`~[[dir name]]))
 ::  Send ack/nack back to poke source
 ::  - Internal (%&): enqueue %pack intake to source path
 ::  - External (%|): emit gall card
@@ -3336,6 +3588,9 @@
   |=  changed=(set lane:tarball)
   ^+  this
   ?:  =(~ changed)  this
+  ::  a group's files changed, by whatever write: the ship weirs derived
+  ::  from them are recomputed in the same event
+  =?  this  (lien ~(tap in changed) usergroups-lane)  recompute-all-weirs
   ::  If the upki file changed, give udiffs to gall subscribers
   =.  this  (maybe-give-jael changed)
   ::  For each watched lane, find subscribers and send news
@@ -3372,10 +3627,6 @@
   =.  this
     %-  ~(rep by watchers)
     |=  [[watcher=rail:tarball =wire blot=(unit blot:tarball)] acc=_this]
-    ::  the registry watches its registrants; it has no fiber, so its
-    ::  news is handled synchronously
-    ?:  =([/sys/ames %'registry'] watcher)
-      (registry-news:acc target)
     ::  self-heal: a watcher whose grub no longer exists is a leaked
     ::  subscription; drop it instead of delivering
     ?~  (peek-grub-now watcher)
@@ -3571,18 +3822,34 @@
   ?:  ?=(%here -.dart)
     (handle-dart here dart ~ ~)
   =/  [=jump:nexus dest=(unit lane:tarball)]  (dart-to-dest here dart)
-  =?  dest  ?=(^ dest)  `(loopback-lane u.dest)
-  ::  %node dart with an unresolvable road — drop at admission.
-  ::  Past this point a %node dart always carries a resolved dest.
+  ::  a road into the peer tree under OUR OWN ship names nothing. We are
+  ::  not our own peer (+ensure-peer-ship refuses to make us one), so the
+  ::  road resolves to no place and the dart dies here. It is not
+  ::  rewritten to the local lane it looks like it means: a caller that
+  ::  addressed us as a peer has a bug, and quietly rerouting it would
+  ::  hide the bug and hand the dart a path its own weir never granted.
+  ::  Sent on to ames instead, it came back from our own ship and was
+  ::  admitted as our unweired ship.sig — the whole ball, to any grub
+  ::  that could reach /sys/ames/ships/.
+  =?  dest  ?=(^ dest)  ?:((self-peer-lane u.dest) ~ dest)
+  ::  %node dart with an unresolvable road — refused at admission, and
+  ::  the caller is TOLD. It gets the same %veto intake a blocked dart
+  ::  gets: from where the caller stands a road that names nothing and a
+  ::  road it may not take are the same answer, and either way its fiber
+  ::  has to move. Dropping in silence left the fiber waiting forever —
+  ::  an HTTP request on the other end of it hung with no response.
   ?:  &(?=(%node -.dart) ?=(~ dest))
     ~&  >>  [%node-bad-road here road.dart]
-    this
+    ?:  ?=([%sys %ames %ships @ ~] path.here)
+      ~|  [%peer-bad-road name.here road.dart]
+      !!
+    (enqu-take here ~ ~ %veto dart)
   =/  =filt:nexus  (allowed jump here dest)
   ?+    filt  (handle-dart here dart filt dest)
       [~ %|]
     ::  Vetoed — crash for foreign ship darts (gall nacks the sender),
     ::  send %veto intake back to source for internal darts.
-    ~?  dbg  [%process-dart-vetoed jump=jump here=(snoc path.here name.here) dest=dest dart-type=-.dart]
+    ~&  >>>  [%process-dart-vetoed jump=jump here=here dest=dest filt=filt dart-type=-.dart]
     ?:  ?=([%sys %ames %ships @ ~] path.here)
       ~|  [%peer-vetoed name.here dest]
       !!
@@ -3615,20 +3882,17 @@
     ==
   ==
 ::
-::  +loopback-lane: a lane under /sys/ames/ships/<our>/root names our
-::  own ball. It is rewritten to the local lane before the weir check,
-::  so the dart is judged by the sender's own roads. Sent out through
-::  ames instead, it came back from our own ship and was admitted as
-::  our unweired ship.sig.
+::  +self-peer-lane: does this lane address US in the peer tree? The
+::  peer tree is the inbound face — one directory per ship whose darts
+::  arrive here — and we never arrive at ourselves, so such a lane
+::  names no place at all.
 ::
-++  loopback-lane
+++  self-peer-lane
   |=  =lane:tarball
-  ^-  lane:tarball
+  ^-  ?
   =/  remote=(unit [@p lane:tarball])  (resolve-remote lane)
-  ?~  remote  lane
-  ?.  =(our.bowl -.u.remote)  lane
-  +.u.remote
-::
+  ?~  remote  %.n
+  =(our.bowl -.u.remote)
 ::  +resolve-remote: check if a lane is under /sys/ames/ships/ and
 ::  extract the target ship and real (non-ames) dest lane.
 ::
@@ -3787,12 +4051,12 @@
         ==
       ?~  sk
         (enqu-take here ~ ~ %born wire.dart |+~[leaf+"no history at dest"])
-      =/  entries=(list [=cass:clay tags=(set @t) tomb=?])
+      =/  entries=(list [=cass:clay tags=(set @t)])
         %+  turn  (tap:hon:hist:nexus u.sk)
         |=  [key=cass:clay val=entry:hist:nexus]
-        [key tags.val ?=(%tomb -.pace.val)]
+        [key tags.val]
       (enqu-take here ~ ~ %born wire.dart &+entries)
-      ::
+      ::      ::
         %lose
       ::  Drop hist entries and decrement silo refs (file or fold)
       =/  res=(each _this tang)
@@ -3820,8 +4084,8 @@
       =/  res=(each _this tang)
         %-  mule  |.
         ?-  -.u.dest-lane
-          %&  (firm-hist p.u.dest-lane ~)
-          %|  (firm-fold p.u.dest-lane ~)
+          %&  (firm-hist p.u.dest-lane tags.load.dart)
+          %|  (firm-fold p.u.dest-lane tags.load.dart)
         ==
       ?-  -.res
         %&  (enqu-take:p.res here ~ ~ %held wire.dart ~)
@@ -3901,13 +4165,11 @@
       ?^  case.load.dart
         =/  cp  (resolve-case:nexus u.case.load.dart fold.u.node)
         ?~  cp  ~
-        ?:  ?=(%tomb -.pace.u.cp)  ~
-        p.pace.u.cp
+        `lobe.pace.u.cp
       =/  got=(unit [key=cass:clay val=entry:hist:nexus])
         (ram:hon:hist:nexus fold.u.node)
       ?~  got  ~
-      ?:  ?=(%tomb -.pace.val.u.got)  ~
-      p.pace.val.u.got
+      `lobe.pace.val.u.got
     ?~  root-lobe
       ::  empty answer: a cased peek that found nothing is a %miss (the
       ::  dir exists, that REVISION doesn't) — honest and distinct from
@@ -3934,14 +4196,12 @@
       ?^  case.load.dart
         =/  cp  (resolve-case:nexus u.case.load.dart sk)
         ?~  cp  ~
-        ?:  ?=(%tomb -.pace.u.cp)  ~
-        p.pace.u.cp
+        `lobe.pace.u.cp
       ::  Current: get lobe from born pace
       =/  got=(unit [key=cass:clay val=entry:hist:nexus])
         (ram:hon:hist:nexus sk)
       ?~  got  ~
-      ?:  ?=(%tomb -.pace.val.u.got)  ~
-      p.pace.val.u.got
+      `lobe.pace.val.u.got
     ?~  src-lobe
       ::  a cased peek that found nothing is a %miss (that revision isn't
       ::  here), distinct from %none (nothing here at all).
@@ -3950,7 +4210,7 @@
     ::  Bump silo ref to keep ject alive while queued
     =.  silo  (~(bump-ject-ref si:nexus silo) u.src-lobe)
     =/  =cass:clay  (fall (top:hist:nexus sk) *cass:clay)
-    (enqu-take here ~ ~ %peek wire.dart [%file cass u.src-lobe blot.load.dart])
+    (enqu-take here ~ ~ %peek wire.dart [%file cass u.src-lobe blot.load.dart path.dest])
   ==
 ::  dart-code: peek the /code bins slice at dest — walk up to the governing
 ::  code nexus (lode), return its refs at the inner path. a file may resolve a
@@ -4041,6 +4301,15 @@
       :_  cards
       [%pass grub-wire %agent [target %grubbery] %poke grubbery-load+!>(req)]
     this
+  ::  a peer's poke at a grub that is not there is refused exactly as a
+  ::  vetoed one (gall nacks it, the peer reads a %pack veto): an
+  ::  outsider never learns whether a path exists. Local pokes keep
+  ::  queueing on the rail.
+  ?:  ?&  ?=([%sys %ames %ships @ ~] path.here)
+          ?=(~ (peek-grub-now dest))
+      ==
+    ~|  [%peer-vetoed name.here `dest-lane]
+    !!
   ::  /sys/ intercepts: validate and consume immediately.
   ::  Direct validation, no cache: poke payloads are transient
   ::  (never silo-resident), so the sham-keyed vale cache can only
@@ -4116,9 +4385,7 @@
         ==
       ==
     ?.  match  ~
-    ?:  ?=(%tomb -.pace.val)  ~
-    ?~  p.pace.val  ~
-    `[key u.p.pace.val]
+    `[key lobe.pace.val]
   ::  Bump silo refs for all matched lobes (pace lobes are jects)
   =.  silo
     %+  roll  hits
@@ -4164,16 +4431,8 @@
   =/  old=(unit proc:fiber:nexus)  (~(get by proc.pipe) name.here)
   =/  old-next=(qeu take:fiber:nexus)  ?~(old ~ next.u.old)
   =/  old-skip=(qeu take:fiber:nexus)  ?~(old ~ skip.u.old)
-  ::
-  ::  Except %veto takes, which are dropped. Each answers a dart the OLD
-  ::  process sent, and a fiber parked by a veto keeps that veto queued
-  ::  (+bang-file carries next and skip over). Merged back, it fails the
-  ::  fresh fiber's first wait and parks it again before it sends a
-  ::  thing, so "grant the permits, then reload" never revived anything.
   =/  merged-skip=(qeu take:fiber:nexus)
-    %-  ~(gas to *(qeu take:fiber:nexus))
-    %+  skip  (weld ~(tap to old-skip) ~(tap to old-next))
-    |=(=take:fiber:nexus ?=([~ %veto *] in.take))
+    (~(gas to old-skip) ~(tap to old-next))
   =.  this  (store-proc here [&+process ~ merged-skip])
   (enqu-take here ~ ~)
 ::
@@ -4233,7 +4492,34 @@
     %+  give-poke-sign  here
     [take `~[leaf+"no process at {(spud (snoc path.here name.here))}"]]
   =/  =proc:fiber:nexus  u.prc
-  ::  Crashed process — nack pokes immediately, queue everything else
+  ::  A BANGED grub rebuilds when ANY take arrives for it. Nothing
+  ::  retries a bang on its own -- no timer, no restart loop -- so the
+  ::  trigger is real work: whatever wants the grub is what asks for it
+  ::  back. Any take, not just a poke, because a grub driven only by
+  ::  subscriptions is never poked and would otherwise sit banged for
+  ::  ever with news piling up behind it.
+  ::
+  ::  A failed rebuild is a failed build-spool, which is not cached, so
+  ::  this is not free -- the printf below is there to make the cost
+  ::  visible if it ever matters.  ::
+  ::  The rebuilt fiber starts CLEAN (prod ~). It has no use for the tang
+  ::  that killed it: waiting-for-a-poke after a crash only ever guarded
+  ::  against being auto-restarted, and nothing auto-restarts now.
+  ::
+  =^  proc  this
+    ?.  ?=(%| -.process.proc)  [proc this]
+    ::  loud on purpose: a rebuild is a build-spool, and a grub that will
+    ::  not build pays for one on EVERY take while it stays banged. If
+    ::  this line repeats, that is the cost showing itself rather than
+    ::  hiding in a slow event.
+    ~&  >>  "rebuild {(spud (snoc path.here name.here))}: banged, a take arrived"
+    =/  rebuilt=_this  (spawn-proc here ~)
+    =/  pip=pipe:nexus  (fall (~(get of pool.rebuilt) path.here) *pipe:nexus)
+    =/  got=(unit proc:fiber:nexus)  (~(get by proc.pip) name.here)
+    [?~(got proc u.got) rebuilt]
+  ::  Still banged — nack pokes with the tang, queue everything else so
+  ::  it replays when the grub does come back (news and acks have no
+  ::  return address to nack).
   ?:  ?=(%| -.process.proc)
     ?:  ?=([* ~ %poke *] take)
       (give-poke-sign here [take `p.process.proc])
@@ -4277,7 +4563,6 @@
         %none  [%none ~]
         %miss  [%miss ~]
         %veto  [%veto ~]
-        %tomb  [%tomb ~]
           %file
         =/  jot  (~(get by jects.silo) lobe.cite)
         ?~  jot  [%none ~]
@@ -4285,17 +4570,27 @@
         ?.  ?=(%leaf -.jt)  [%none ~]
         =/  got=(unit noun)  (~(get si:nexus silo) lobe.leaf.jt)
         ?~  got  [%none ~]
+        ::  the bang rides with the grub, resolved from the ject the same
+        ::  way a ball's per-file bang is
+        =/  bang=(unit tang)
+          ?~  bang.leaf.jt  ~
+          =/  tn  (~(get si:nexus silo) u.bang.leaf.jt)
+          ?~  tn  ~
+          `!<(tang [-:!>(*tang) u.tn])
         =/  =bask:tarball  [blot.mark.leaf.jt u.got]
-        =/  res  (validate-bask cod bask)
+        ::  the mark resolves from the grub's own position when it is
+        ::  found there, else from the reader's
+        =/  pos=path  (mark-position cod at.cite p.bask)
+        =/  res  (validate-bask pos bask)
         ?:  ?=(%| -.res)
-          [%file cass.cite [blot.mark.leaf.jt %| [p.res u.got]]]
+          [%file cass.cite [blot.mark.leaf.jt %| [p.res u.got]] bang]
         =/  =sage:tarball  p.res
         =/  result=sang:tarball
           ?~  conv.cite  (sage-to-sang:tarball sage)
           ?:  =(p.sage u.conv.cite)  (sage-to-sang:tarball sage)
-          =/  =tube:clay  (get-tube cod [p.sage u.conv.cite])
+          =/  =tube:clay  (get-tube pos [p.sage u.conv.cite])
           (sage-to-sang:tarball [u.conv.cite (tube q.sage)])
-        [%file cass.cite result]
+        [%file cass.cite result bang]
           %ball
         =/  sub-ball
           ?:  deep.cite
@@ -4509,20 +4804,17 @@
   =/  eval-res=(each [darts=(list dart:nexus) done=(list took:eval) new-state=vase new-proc=proc:fiber:nexus res=result:eval core=_this] tang)
     (mule |.((take:eval here fil-state proc)))
   ?:  ?=(%| -.eval-res)
-    ::  Runtime crash — restart process with error prod
+    ::  Runtime crash: BANG. Nothing restarts a fiber on its own.
+    ::
+    ::  This used to rebuild the process here and enqueue a fresh start
+    ::  take, which is why +restart-cap had to exist: a fiber that
+    ::  crashed on its own restart take looped inside one event. A crash
+    ::  now makes the grub inert, with its tang, and it comes back when
+    ::  something needs it (+process-take rebuilds on the next take) --
+    ::  triggered repair, not self-healing. Queued pokes are nacked with
+    ::  the tang on arrival, so no caller is left waiting.
     ?:  (is-nexus-banged here)  this
-    =/  spool-got  (build-spool here)
-    =/  spool-res=(each spool:fiber:nexus tang)
-      ?:  ?=(%| -.spool-got)  spool-got
-      (mule |.((fall p.spool-got default-spool)))
-    ?:  ?=(%| -.spool-res)
-      (bang-file here p.spool-res)
-    =/  proc-res=(each process:fiber:nexus tang)
-      (mule |.((p.spool-res `p.eval-res)))
-    ?:  ?=(%| -.proc-res)
-      (bang-file here p.proc-res)
-    =.  this  (store-proc here [&+p.proc-res ~ next.proc])
-    (enqu-take here ~ ~)
+    (bang-file here p.eval-res)
   =/  [darts=(list dart:nexus) done=(list took:eval) new-state=vase new-proc=proc:fiber:nexus res=result:eval core=_this]
     p.eval-res
   ::  Restore core with updated vale cache
@@ -4563,34 +4855,20 @@
     ::  +mark-bang carries the pool's queues and the pool still holds the
     ::  pre-step snapshot with the take in it.
     =.  this  (store-proc here new-proc)
-    ::  A dart the weir refused is refused again on every retry, so a
-    ::  fiber that crashed consuming a %veto is a permanent loop, not a
-    ::  transient fault. The failing take is the head of `done`; if its
-    ::  input was a %veto, park the fiber (bang) instead of restarting.
-    ::  A reload after the app's permits are granted revives it. Every
-    ::  other failure still restarts as before.
-    =/  culprit=(unit pend:fiber:nexus)
-      ?~  done  ~
-      in.take.i.done
-    ?:  ?=([~ %veto *] culprit)
-      %+  bang-file  here
-      :~  leaf+"fiber parked: a dart was refused by the weir"
-          leaf+"grant this app's permits, then reload to retry"
-      ==
-    =/  spool-got  (build-spool here)
-    =/  spool-res=(each spool:fiber:nexus tang)
-      ?:  ?=(%| -.spool-got)  spool-got
-      (mule |.((fall p.spool-got default-spool)))
-    ?:  ?=(%| -.spool-res)
-      (bang-file here p.spool-res)
-    =/  proc-res=(each process:fiber:nexus tang)
-      (mule |.((p.spool-res `err.res)))
-    ?:  ?=(%| -.proc-res)
-      (bang-file here p.proc-res)
-    =/  merged-skip=(qeu take:fiber:nexus)
-      (~(gas to skip.new-proc) ~(tap to next.new-proc))
-    =.  this  (store-proc here [&+p.proc-res ~ merged-skip])
-    (enqu-take here ~ ~)
+    ::  A %veto gets NO special case. A weir refusing a dart is the weir
+    ::  answering correctly, not a fault: the fiber asked for something it
+    ::  is not permitted and was told so. A fiber that crashes while
+    ::  consuming that answer is an ordinary grub bug — it failed to handle
+    ::  a normal outcome — so it restarts like any other crash, and if it
+    ::  cannot handle the refusal it loops and the restart cap below bangs
+    ::  it for looping, which is the true reason.
+    ::
+    ::  (This used to bang on the veto directly, reporting a compilation
+    ::  state about a grub that compiled fine and then mishandled a
+    ::  permission answer.)
+    ::  a fiber that returned %fail bangs, same as a crash: inert with
+    ::  its tang until something needs it again.
+    (bang-file here err.res)
   ==
 ::
 ++  poke
@@ -4616,11 +4894,9 @@
       =/  fold-cas=(unit cass:clay)
         (top:hist:nexus fold.u.fil.existing)
       ?~  fold-cas  $(force %.y)
-      =/  cur-pace=(unit pace:hist:nexus)
-        (get-pace:hist:nexus fold.u.fil.existing u.fold-cas)
-      ::  Latest version is empty = directory was deleted, allow recreate
-      ?:  &(?=(^ cur-pace) ?=(?(%temp %firm) -.u.cur-pace) =(~ p.u.cur-pace))
-        $(force %.y)
+      ::  a directory that is gone has no versions at all -- tested
+      ::  by the line above. There is no "latest version is empty"
+      ::  any more: a version always references content.
       ~|("make failed: directory {(spud dest-path)} already exists" !!)
     ::  reload=%.y: a recompile reloads the directories it governs, always.
     ::  The walk below covers only the MADE subtree, and a namespace's
@@ -4671,8 +4947,6 @@
       =/  latest=(unit [key=cass:clay val=entry:hist:nexus])
         (ram:hon:hist:nexus u.sk)
       ?~  latest  $(force %.y)
-      ?:  ?=(%tomb -.pace.val.u.latest)  $(force %.y)
-      ?~  p.pace.val.u.latest  $(force %.y)
       ~|("make failed: file {(spud (snoc path.dest-rail name.dest-rail))} already exists" !!)
     ::  Convert mark if blot override is set
     =/  =bask:tarball
@@ -4682,8 +4956,22 @@
         bask.p.make
       =/  src=(each vase tang)  (validate-noun path.dest-rail p.bask.p.make q.bask.p.make)
       ?:  ?=(%| -.src)  ~|("make: source validation failed" (mean p.src))
-      =/  =tube:clay  (get-tube path.dest-rail [p.bask.p.make u.blot.p.make])
-      [u.blot.p.make q:(tube p.src)]
+      ::  a REQUESTED conversion must succeed, and its result must be a
+      ::  valid noun of the target blot, or the make fails and the poke
+      ::  nacks: the caller asked for a typed grub and gets one or an
+      ::  error. (Storing the raw result "unvalidated" here left a grub
+      ::  that boomed on every read, with only a dojo line to say so.)
+      =/  from=tape  (spud (rail-to-path:tarball p.bask.p.make))
+      =/  to=tape  (spud (rail-to-path:tarball u.blot.p.make))
+      =/  what=tape  (spud (snoc path.dest-rail name.dest-rail))
+      =/  conv=(each vase tang)
+        (mule |.(((get-tube path.dest-rail [p.bask.p.make u.blot.p.make]) p.src)))
+      ?:  ?=(%| -.conv)
+        ~|("make: no conversion from {from} to {to} for {what}" (mean p.conv))
+      =/  chk=(each vase tang)  (validate-noun path.dest-rail u.blot.p.make q.p.conv)
+      ?:  ?=(%| -.chk)
+        ~|("make: conversion from {from} to {to} gave an invalid {to} for {what}" (mean p.chk))
+      [u.blot.p.make q.p.conv]
     ::  Validate the bask before storing — but a validation failure (a bad
     ::  noun, or no marc for this blot) must NEVER drop the write. +record
     ::  stores the raw noun regardless and a read surfaces the boom lazily,
@@ -4714,6 +5002,7 @@
     =.  this  (nack-pool dest-path (~(dip of pool) dest-path) ~[leaf+"culled"])
     ::  Remove from pool
     =.  pool  (~(lop of pool) dest-path)
+    =.  this  (drop-bindings-of dest)
     (load-ball-changes dest-path *bole:tarball %.y)
     ::
       %&
@@ -4722,6 +5011,7 @@
     =/  dest-path=path  (rail-to-path:tarball dest-rail)
     ::  Nack queued pokes for this file
     =.  this  (nack-pool dest-path (~(dip of pool) dest-path) ~[leaf+"culled"])
+    =.  this  (drop-bindings-of dest)
     ::  Bump and remove from pool and ball
     (delete path.dest-rail name.dest-rail)
   ==
@@ -4765,9 +5055,7 @@
     ?~  fold-top  [~ %.n ~ ~ ~]
     =/  pac=(unit pace:hist:nexus)  (get-pace:hist:nexus fold.node u.fold-top)
     ?~  pac  [~ %.n ~ ~ ~]
-    ?:  ?=(%tomb -.u.pac)  [~ %.n ~ ~ ~]
-    ?~  p.u.pac  [~ %.n ~ ~ ~]
-    =/  jot  (~(get by jects.silo) u.p.u.pac)
+    =/  jot  (~(get by jects.silo) lobe.u.pac)
     ?~  jot  [~ %.n ~ ~ ~]
     ?.  ?=(%tree -.ject.u.jot)  [~ %.n ~ ~ ~]
     tree.ject.u.jot
@@ -4775,17 +5063,14 @@
     (fall (~(get by dir.existing-tree) child-name) [*jobe:nexus ~])
   =/  new-tree=tree:nexus
     existing-tree(dir (~(put by dir.existing-tree) child-name old-entry(weir weir)))
-  =/  old-born=born:nexus  born
   =/  [* new-born=born:nexus new-silo=silo:nexus]
-    (put-tree:nexus born silo now.bowl parent node new-tree)
+    (put-tree:nexus born silo peak now.bowl parent node new-tree)
   =.  born  new-born
   =.  silo  new-silo
-  ::  the parent's tree is already the new one, so record from the
-  ::  grandparent up: a walk from the parent finds its hash unchanged
-  ::  and stops, leaving every ancestor naming the old tree. Notify
-  ::  against the born from before the write.
-  =?  this  ?=(^ parent)  (record-trees (snip `path`parent))
-  =.  this  (notify old-born)
+  ::  Record tree from parent up, notify
+  =/  old-born=born:nexus  born
+  =.  this  (record-trees parent)
+  =.  this  (gage %set-weir-notify |.((notify old-born)))
   ::  Re-check subscriptions from watchers under this weir
   (audit-weir dest)
 ::  Walk up from a grub's rail, revealing path segments while allowed.
@@ -4816,9 +5101,7 @@
       (ram:hon:hist:nexus fold.u.fil.sub)
     ?~  fold-top  ~
     =/  =pace:hist:nexus  pace.val.u.fold-top
-    ?:  ?=(%tomb -.pace)  ~
-    ?~  p.pace  ~
-    =/  jot  (~(get by jects.silo) u.p.pace)
+    =/  jot  (~(get by jects.silo) lobe.pace)
     ?~  jot  ~
     =/  jt=ject:nexus  ject.u.jot
     ?.  ?=(%tree -.jt)  ~
@@ -4890,28 +5173,14 @@
   =/  next=filt:nexus
     (next-filt:nexus filt (filter:nexus jump path.here dest-lane weir-here))
   ?:  ?=([~ %|] next)
-    ::  name the boundary that said no — a veto without a WHERE is torture.
-    ::  Except one: a nexus peeking its own root directory. That is how a
-    ::  sandboxed fiber learns where it is (+walk-here climbs until the
-    ::  governor says no, and this is the no), so it fires on most requests
-    ::  and is not a fault. Still vetoed; just not announced.
-    ~?  &(dbg loud !=(dest-lane [%| path.here]))
-      [%weir-veto-at boundary=path.here jump=jump dest=dest-lane]
+    ::  name the boundary that said no — a veto without a WHERE is torture
+    ~?  >>>  loud
+      [%weir-veto-at boundary=path.here weir=weir-here jump=jump dest=dest-lane]
     [~ |]
   ::  Reached root - stop
   ?~  path.here
     next
   $(filt next, path.here (snip `fold:tarball`path.here))
-++  any-parked
-  |=  dest=path
-  ^-  ?
-  =/  pol=pool:nexus  (~(dip of pool) dest)
-  |-  ^-  ?
-  ?:  ?&  ?=(^ fil.pol)
-          (lien ~(val by proc.u.fil.pol) |=(p=proc:fiber:nexus ?=(%| -.process.p)))
-      ==
-    &
-  (lien ~(val by dir.pol) |=(kid=pool:nexus ^$(pol kid)))
 ::  Read weir for a directory from its parent's tree ject dir entry.
 ::  A directory's weir is owned by its parent, not by itself.
 ::
@@ -4929,9 +5198,7 @@
   =/  got=(unit pace:hist:nexus)
     (get-pace:hist:nexus fold.u.fil.parent-born u.fold-top)
   ?~  got  ~
-  ?:  ?=(%tomb -.u.got)  ~
-  ?~  p.u.got  ~
-  =/  jot  (~(get by jects.silo) u.p.u.got)
+  =/  jot  (~(get by jects.silo) lobe.u.got)
   ?~  jot  ~
   ?.  ?=(%tree -.ject.u.jot)  ~
   =/  entry  (~(get by dir.tree.ject.u.jot) child-name)
@@ -4949,11 +5216,88 @@
   |=  dir=fold:tarball
   ^-  (unit cass:clay)
   (~(get-dir-cass bo:nexus now.bowl born) dir)
+::  +live-children: the names a directory holds RIGHT NOW, one level
+::  deep. Its current tree ject, read as a membership test -- no
+::  recursion, no history.
 ::
+++  live-children
+  |=  dir=path
+  ^-  [folds=(set @ta) grubs=(set @ta)]
+  =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
+    (~(get of born) dir)
+  ?~  node  [~ ~]
+  =/  got=(unit [key=cass:clay val=entry:hist:nexus])
+    (ram:hon:hist:nexus fold.u.node)
+  ?~  got  [~ ~]
+  =/  =pace:hist:nexus  pace.val.u.got
+  =/  jot  (~(get by jects.silo) lobe.pace)
+  ?~  jot  [~ ~]
+  =/  jt=ject:nexus  ject.u.jot
+  ?.  ?=(%tree -.jt)  [~ ~]
+  [~(key by dir.tree.jt) ~(key by fil.tree.jt)]
+::  +ghosts-under: the names written directly beneath a directory that
+::  are no longer there -- what a listing shows greyed beside its live
+::  children. peak names every rail ever written here; whatever the
+::  directory does not hold now is a ghost, dated by its peak.
+::
+::  Membership, not arithmetic. Comparing the peak to born's top says
+::  "gone" for a grub, but a FOLD's peak rises past its hist (/docs
+::  stands at peak 61 against a top of 8 and is plainly still there),
+::  so the pair cannot answer this for directories.
+::
+::  Both kinds come back. One that was gained has its whole history in
+::  born and reads like any past version; one that was not has only the
+::  peak, so its name and its date are all there is.
+::
+++  ghosts-under
+  |=  dir=path
+  ^-  (list [name=@ta fold=? =cass:clay])
+  =/  here=peak:nexus  (~(dip of peak) dir)
+  =/  live  (live-children dir)
+  =/  folds=(list [name=@ta fold=? =cass:clay])
+    %+  murn  ~(tap by dir.here)
+    |=  [name=@ta kid=peak:nexus]
+    ^-  (unit [name=@ta fold=? cass=cass:clay])
+    ?~  fil.kid  ~
+    =/  top=(unit cass:clay)  fold.u.fil.kid
+    ?~  top  ~
+    ?:  (~(has in folds.live) name)  ~
+    `[name %.y u.top]
+  =/  grubs=(list [name=@ta fold=? =cass:clay])
+    ?~  fil.here  ~
+    %+  murn  ~(tap by file.u.fil.here)
+    |=  [name=@ta mark=cass:clay]
+    ^-  (unit [name=@ta fold=? cass=cass:clay])
+    ?:  (~(has in grubs.live) name)  ~
+    `[name %.n mark]
+  %+  sort  (weld folds grubs)
+  |=  [a=[name=@ta *] b=[name=@ta *]]
+  (aor name.a name.b)
+::  peak is born's shadow: the high-water cass of every rail ever
+::  written, raised with every write (+put-born) and never deleted. A
+::  born record may then be dropped at any time; a re-creation starts
+::  above the peak, so [rail cass] never rebinds.
 ++  init-born
   |=  here=rail:tarball
   ^+  this
-  this(born (~(init bo:nexus now.bowl born) here))
+  =.  born  (~(init bo:nexus now.bowl born) here)
+  this
+::  +put-born: the one way a file's hist is written. The peak is raised
+::  to the hist's top in the same step, so the mark exists before any
+::  record there is to lose.
+++  put-born
+  |=  [here=rail:tarball sok=hist:nexus]
+  ^+  this
+  =.  born  (~(put bo:nexus now.bowl born) here sok)
+  (raise-peak here)
+++  raise-peak
+  |=  here=rail:tarball
+  ^+  this
+  =/  sok=(unit hist:nexus)  (get-born here)
+  ?~  sok  this
+  =/  top=(unit cass:clay)  (top:hist:nexus u.sok)
+  ?~  top  this
+  this(peak (~(put-file pk:nexus peak) here u.top))
 ::
 ::  +propagate: repair ancestors and notify, after a leaf mutation
 ::
@@ -4984,9 +5328,52 @@
   |=  dir=path
   ^-  [(set lane:tarball) _this]
   =/  [bumped=(set lane:tarball) new-born=born:nexus new-silo=silo:nexus]
-    (record-trees-lanes:nexus born silo code now.bowl dir ~)
-  [bumped this(born new-born, silo new-silo)]
+    (record-trees-lanes:nexus born silo peak code now.bowl dir ~)
+  =.  this  this(born new-born, silo new-silo)
+  ::  every fold the walk bumped raises its peak, the way +put-born
+  ::  raises a grub's. Without it a directory's number never rises and
+  ::  a deleted one cannot be told from one that never existed.
+  [bumped (raise-fold-peaks bumped)]
+::  +raise-fold-peaks: peak follows born for the dirs just written.
+::
+++  raise-fold-peaks
+  |=  lanes=(set lane:tarball)
+  ^+  this
+  =/  dirs=(list lane:tarball)  ~(tap in lanes)
+  |-
+  ?~  dirs  this
+  ?.  ?=(%| -.i.dirs)  $(dirs t.dirs)
+  =/  top=(unit cass:clay)
+    =/  n  (~(get of born) p.i.dirs)
+    ?~(n ~ (top:hist:nexus fold.u.n))
+  ?~  top  $(dirs t.dirs)
+  =.  peak  (~(put-fold pk:nexus peak) p.i.dirs u.top)
+  $(dirs t.dirs)
 ::  Ensure a directory exists in the namespace.
+::
+::  TODO: the reload flag belongs to the OPERATION, not the call site.
+::
+::    +load-ball-changes takes reload=? and every caller picks a constant.
+::    The correct value depends on what encloses the write: during
+::    +cold-start a per-write reload is redundant (it ends with one
+::    reload of the whole tree, which is why +sync-gub passes %.n), while
+::    the same write from a live poke must reload. +ensure-dir cannot
+::    know which it is in, so whatever it passes is wrong half the time
+::    -- and it passes %.y, the wrong one for cold-start, where it is
+::    called most.
+::
+::    It should be a property of `this` -- a deferral set for the
+::    duration of cold-start and read inside +load-ball-changes, with
+::    the reloads done once at the end -- which also drops the parameter
+::    from every arm that currently just passes it along. The invariant
+::    is unchanged either way: a write that changes code always reloads,
+::    except while an operation that will reload everything is running.
+::
+::    Measured, NOT the cost of +ensure-dir: an empty directory adds no
+::    rails, +ball-diff compares rails only, so `affected` is empty and
+::    the flag is never read on this path. Flipping it to %.n made no
+::    difference to a 2GB install. The cost is elsewhere in
+::    +load-ball-changes.
 ::
 ++  ensure-dir
   |=  here=fold:tarball
@@ -4999,22 +5386,49 @@
 ++  record
   |=  [here=rail:tarball =bask:tarball gain=? cas=(unit cass:clay)]
   ^+  this
-  =/  sok=hist:nexus  (need (get-born here))
-  ::  Use provided cass or compute next from current top of hist
-  =/  file-cass=cass:clay  (need (top:hist:nexus sok))
+  =/  sok=hist:nexus  (fall (get-born here) *hist:nexus)
+  =/  top=(unit cass:clay)  (top:hist:nexus sok)
+  ::  a rail with no versions yet has nothing to be replaced: both of
+  ::  si:record's lookups miss on an empty hist, so any cass does here
+  =/  file-cass=cass:clay  (fall top [0 now.bowl])
+  ::  provided cass, else next from the top -- and for the FIRST version
+  ::  at this rail, above its peak, so [rail cass] never rebinds
   =/  new-cass=cass:clay
-    (fall cas (~(next-cass bo:nexus now.bowl born) file-cass))
+    ?^  cas  u.cas
+    ?^  top  (~(next-cass bo:nexus now.bowl born) u.top)
+    =/  mark=(unit cass:clay)  (~(get-file pk:nexus peak) here)
+    ?~(mark [0 now.bowl] (~(next-cass bo:nexus now.bowl born) u.mark))
   =/  resolved  (resolve-built path.here %mar p.bask)
   =/  marc-ckey=@uv   ?~(resolved 0v0 ckey.u.resolved)
   =/  marc-ns=path     ?~(resolved / namespace.u.resolved)
   =/  raw=*  q.bask
-  ::  Capture the leaf being replaced before si-record tombs it
-  =/  prev-leaf=(unit leaf:nexus)  (hist-leaf sok file-cass)
+  ::  the leaf at the current top, for the vale cache below
+  =/  prev-leaf=(unit leaf:nexus)  ?~(top ~ (hist-leaf sok u.top))
+  ::  A version is filled once. A caller naming a cass that already holds
+  ::  a leaf may only re-record the SAME thing — content, blot, marc, ns
+  ::  and gain, the five si:record dedupes on — in which case nothing is
+  ::  written. Anything else would put new bytes under an old number: a
+  ::  read at that version would answer differently depending on when it
+  ::  was asked, and +notify, which diffs versions, would never hear of
+  ::  it. That is how every reload's rewrites went silent (sync-bole
+  ::  pinned the cass). Crash here, at the caller, rather than land it.
+  ?:  ?&  ?=(^ cas)
+          =(u.cas file-cass)
+          ?=(^ prev-leaf)
+          ?|  !=((~(hash si:nexus silo) raw) lobe.u.prev-leaf)
+              !=(p.bask blot.mark.u.prev-leaf)
+              !=(marc-ckey ckey.mark.u.prev-leaf)
+              !=(marc-ns ns.mark.u.prev-leaf)
+              !=(gain gain.u.prev-leaf)
+          ==
+      ==
+    ~|  "record: {(spud path.here)}/{(trip name.here)} already holds a different leaf at {<u.cas>}; a version is filled once"
+    !!
   =/  [=nobe:nexus new-silo=silo:nexus new-sok=hist:nexus]
     (~(record si:nexus silo) raw p.bask marc-ckey marc-ns gain new-cass file-cass sok)
   =.  silo  new-silo
   =.  vale  (gc-vale-prev prev-leaf)
-  =.  born  (~(put bo:nexus now.bowl born) here new-sok)
+  =.  this  (put-born here new-sok)
   ::  Populate vale cache so reads never miss
   ?:  =(marc-ckey 0v0)  this
   =/  entry  (~(get by bins) marc-ckey)
@@ -5032,6 +5446,48 @@
 ::  cull (cull = empty bole).  Bottom-up walk: children settle before
 ::  parent builds its tree.  New bole is sole source of truth.
 ::
+::  +set-fold-gain: write a directory's retention policy onto its tree
+::  ject, the way +set-gain-lane writes a grub's onto its leaf.
+::
+++  set-fold-gain
+  |=  [dir=path flag=?]
+  ^+  this
+  =/  node  (~(get of born) dir)
+  ?~  node  this
+  =/  got=(unit [key=cass:clay val=entry:hist:nexus])
+    (ram:hon:hist:nexus fold.u.node)
+  ?~  got  this
+  =/  jot  (~(get by jects.silo) lobe.pace.val.u.got)
+  ?~  jot  this
+  ?.  ?=(%tree -.ject.u.jot)  this
+  ?:  =(gain.tree.ject.u.jot flag)  this
+  =/  new-tree=tree:nexus  tree.ject.u.jot(gain flag)
+  =.  silo  (~(drop-ject si:nexus silo) lobe.pace.val.u.got)
+  =/  [new-jobe=jobe:nexus new-silo=silo:nexus]
+    (~(put-ject si:nexus silo) [%tree new-tree])
+  =.  silo  new-silo
+  =/  =pace:hist:nexus  ?:(flag [%firm new-jobe] [%temp new-jobe])
+  =/  new-fold=hist:nexus
+    (put:hon:hist:nexus fold.u.node key.u.got [pace tags.val.u.got])
+  this(born (~(put of born) dir u.node(fold new-fold)))
+::  +fold-gain: a directory's retention policy, from its tree ject.
+::
+::    %.n when the directory has no versions yet (nothing has said
+::    otherwise) or its ject is missing.
+::
+++  fold-gain
+  |=  dir=path
+  ^-  ?
+  =/  node  (~(get of born) dir)
+  ?~  node  %.n
+  =/  top=(unit cass:clay)  (top:hist:nexus fold.u.node)
+  ?~  top  %.n
+  =/  pc=(unit pace:hist:nexus)  (get-pace:hist:nexus fold.u.node u.top)
+  ?~  pc  %.n
+  =/  jot  (~(get by jects.silo) lobe.u.pc)
+  ?~  jot  %.n
+  ?.  ?=(%tree -.ject.u.jot)  %.n
+  gain.tree.ject.u.jot
 ::  +owner-code: the code namespace a path is INSIDE — the nearest
 ::  ancestor (itself included) registered in the code map. Containment,
 ::  not governance: the namespace whose build a source file belongs to.
@@ -5057,13 +5513,14 @@
   |=  [here=fold:tarball =bole:tarball reload=?]
   ^+  this
   =/  old-born=born:nexus  born
-  =/  old-ball=ball:tarball  (peek-ball-now here)
-  =.  this  (sync-bole here bole)
-  =?  this  !=(~ here)  (record-trees (snip `path`here))
-  =/  new-ball=ball:tarball  (peek-ball-now here)
-  =.  this  (deregister-code-under here new-ball)
-  =.  this  (rebuild-changed here old-ball new-ball reload)
-  (notify old-born)
+  =/  old-ball=ball:tarball  (gage %lbc-peek-old |.((peek-ball-now here)))
+  =.  this  (gage %lbc-sync-bole |.((sync-bole here bole)))
+  =?  this  !=(~ here)
+    (gage %lbc-record-trees |.((record-trees (snip `path`here))))
+  =/  new-ball=ball:tarball  (gage %lbc-peek-new |.((peek-ball-now here)))
+  =.  this  (gage %lbc-deregister |.((deregister-code-under here new-ball)))
+  =.  this  (gage %lbc-rebuild |.((rebuild-changed here old-ball new-ball reload)))
+  (gage %lbc-notify |.((notify old-born)))
 ::  +deregister-code-under: drop lodes whose directory under here is
 ::  gone or no longer carries the /code neck; release their artifacts.
 ::
@@ -5121,10 +5578,17 @@
       (fall (~(get by dir.bol) i.all-kids) *bole:tarball)
     =.  this  ^$(here (snoc here i.all-kids), bol kid-bole)
     $(all-kids t.all-kids)
-  ::  2. Record files: store jects for bole files, [%temp ~ ~] for stale
+  ::  2. Record files: store jects for bole files, drop the record of
+  ::  any the tree no longer has
   =/  new-files=(map @ta [=bask:tarball gain=?])
     ?~(fil.bol ~ contents.u.fil.bol)
   =/  new-names=(set @ta)  ~(key by new-files)
+  ::  RETENTION IS INHERITED. A directory's gain is the policy for what
+  ::  is written into it, not a one-time sweep over what is already
+  ::  there -- gaining an empty directory has to protect what lands in
+  ::  it next, or it protects nothing. A writer that asks for gain still
+  ::  gets it; this only ever adds.
+  =/  dir-gain=?  (fold-gain here)
   ::  Record bole files (init born if new)
   =/  to-record=(list @ta)  ~(tap in new-names)
   =.  this
@@ -5133,9 +5597,15 @@
     =/  name=@ta  i.to-record
     =.  this  ?^((get-born [here name]) this (init-born [here name]))
     =/  entry  (~(got by new-files) name)
-    =/  sok=hist:nexus  (need (get-born [here name]))
-    =.  this
-      (record [here name] bask.entry gain.entry `(need (top:hist:nexus sok)))
+    ::  cas=~: a file whose bytes changed gets the NEXT cass, so born
+    ::  moves and keeps on it are told. Pinning the existing cass here
+    ::  re-recorded a reload's rewrites in place — new bytes, same
+    ::  version — and +notify, which diffs versions, saw nothing: a
+    ::  nexus could rebuild a derived view and no follower of it ever
+    ::  heard. No churn either way: si:record hashes the noun and skips
+    ::  a file whose content, blot, marc and gain are unchanged, so the
+    ::  cass advances only when something actually differs.
+    =.  this  (record [here name] bask.entry |(gain.entry dir-gain) ~)
     $(to-record t.to-record)
   ::  Delete files in born but not in ball
   =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
@@ -5147,44 +5617,28 @@
       ~(tap in (~(dif in ~(key by file.u.node)) new-names))
     |-
     ?~  to-delete  this
-    =/  sok=(unit hist:nexus)  (get-born [here i.to-delete])
-    ?~  sok  $(to-delete t.to-delete)
-    =/  file-cas=(unit cass:clay)  (top:hist:nexus u.sok)
-    ?~  file-cas  $(to-delete t.to-delete)
-    =/  cur-pace=(unit pace:hist:nexus)
-      (get-pace:hist:nexus u.sok u.file-cas)
-    ?:  &(?=(^ cur-pace) ?=(?(%temp %firm) -.u.cur-pace) =(~ p.u.cur-pace))
-      $(to-delete t.to-delete)
-    =/  new-cass=cass:clay  (next-cass:boo u.file-cas)
-    =/  new-sok=hist:nexus  (put-pace:hist:nexus u.sok new-cass [%temp ~])
-    =.  born  (~(put bo:nexus now.bowl born) [here i.to-delete] new-sok)
-    ::  Nack queued inputs and remove process for deleted file
-    =/  del-rail=rail:tarball  [here i.to-delete]
-    =/  old-pipe=pipe:nexus  (fall (~(get of pool) here) *pipe:nexus)
-    =/  old-proc=(unit proc:fiber:nexus)  (~(get by proc.old-pipe) i.to-delete)
-    =?  this  ?=(^ old-proc)
-      =.  this  (nack-poke-takes del-rail next.u.old-proc ~[leaf+"deleted"])
-      (nack-poke-takes del-rail skip.u.old-proc ~[leaf+"deleted"])
-    =.  pool
-      =/  =pipe:nexus  old-pipe(proc (~(del by proc.old-pipe) i.to-delete))
-      (~(put of pool) here pipe)
+    =.  this  (drop-grub here i.to-delete)
     $(to-delete t.to-delete)
   ::  3. Build tree from settled born + update fold
   ::  If bole has no content here, delete the fold
+  ::  A FOLD DIES AS A GRUB DOES: its versions go by the ordinary
+  ::  retention rule and nothing is appended. What it held is born's
+  ::  business; whether it still exists is read from peak standing
+  ::  above born's top.
   ?:  &(=(~ fil.bol) =(~ dir.bol))
     =/  fold-node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
       fil:(~(dip of born) here)
     ?~  fold-node  this
     =/  fold-cas=(unit cass:clay)  (top:hist:nexus fold.u.fold-node)
     ?~  fold-cas  this
-    =/  cur-pace=(unit pace:hist:nexus)
-      (get-pace:hist:nexus fold.u.fold-node u.fold-cas)
-    ?:  &(?=(^ cur-pace) ?=(?(%temp %firm) -.u.cur-pace) =(~ p.u.cur-pace))
-      this
-    =/  new-cass=cass:clay  (next-cass:boo u.fold-cas)
-    =/  new-fold=hist:nexus
-      (put-pace:hist:nexus fold.u.fold-node new-cass [%temp ~])
-    this(born (~(put of born) here u.fold-node(fold new-fold)))
+    ::  the death is a number: peak rises above born's top and nothing
+    ::  is stored, exactly as a grub's death works
+    =/  death=cass:clay  (next-cass:boo u.fold-cas)
+    =.  peak  (~(put-fold pk:nexus peak) here death)
+    =^  dropped=hist:nexus  silo
+      =/  res  (~(drop-temp si:nexus silo) fold.u.fold-node u.fold-cas)
+      [+.res -.res]
+    this(born (~(put of born) here u.fold-node(fold dropped)))
   ::  Build tree: file lobes + child fold lobes from born
   =/  settled-born=born:nexus  (~(dip of born) here)
   =/  settled-node=[fold=hist:nexus file=(map @ta hist:nexus)]
@@ -5198,18 +5652,17 @@
     =/  res  (resolve-built here %nex neck)
     ?~  res  `[neck 0v0 /]
     `[neck ckey.u.res namespace.u.res]
-  ::  File lobes from born (skip deleted/tombed)
+  ::  File lobes from born, the dead ones left out
   =/  fil=(map @ta jobe:nexus)
     %-  ~(rep by file.settled-node)
     |=  [[name=@ta sk=hist:nexus] out=(map @ta jobe:nexus)]
     =/  cas=(unit cass:clay)  (top:hist:nexus sk)
     ?~  cas  out
+    ?:  (~(gone-file pk:nexus peak) [here name] u.cas)  out
     =/  val=(unit pace:hist:nexus)  (get-pace:hist:nexus sk u.cas)
     ?~  val  out
-    ?:  ?=(%tomb -.u.val)  out
-    ?~  p.u.val  out
-    (~(put by out) name u.p.u.val)
-  ::  Dir lobes from born (skip deleted/tombed/null-lobe)
+    (~(put by out) name lobe.u.val)
+  ::  Dir lobes from born, the dead ones left out
   =/  dir-map=(map @ta [jobe:nexus weir=(unit weir:nexus)])
     %-  ~(rep by dir.settled-born)
     |=  [[name=@ta kid=born:nexus] out=(map @ta [jobe:nexus weir=(unit weir:nexus)])]
@@ -5217,40 +5670,45 @@
     ?~  kid-node  out
     =/  cas=(unit cass:clay)  (top:hist:nexus fold.u.kid-node)
     ?~  cas  out
+    ?:  (~(gone-fold pk:nexus peak) (snoc here name) u.cas)  out
     =/  got=(unit pace:hist:nexus)
       (get-pace:hist:nexus fold.u.kid-node u.cas)
     ?~  got  out
-    ?:  ?=(%tomb -.u.got)  out
-    ?~  p.u.got  out
     =/  kid-weir=(unit weir:nexus)
       =/  kid-bol=(unit bole:tarball)  (~(get by dir.bol) name)
       ?~  kid-bol  ~
       ?~  fil.u.kid-bol  ~
       weir.u.fil.u.kid-bol
-    (~(put by out) name [u.p.u.got kid-weir])
+    (~(put by out) name [lobe.u.got kid-weir])
   =/  tree-gain=?  ?~(fil.bol %.n gain.u.fil.bol)
   =/  =tree:nexus  [nek tree-gain ~ fil dir-map]
   =/  [changed=? new-born=born:nexus new-silo=silo:nexus]
-    (put-tree:nexus born silo now.bowl here settled-node tree)
+    (put-tree:nexus born silo peak now.bowl here settled-node tree)
   this(born new-born, silo new-silo)
 ::  Mirror Clay desks to /sys/clay/desks/[desk]/
 ::
 ++  sync-clay
   ^+  this
   ~?  dbg  "sync-clay: start"
-  ::  Ensure /sys/clay/desks directory structure exists
+  ::  MIRRORS NOTHING. The directory and the clay-state grub exist; no desk
+  ::  is read here.
+  ::
+  ::  This arm used to scry clay for every desk on the ship and mirror each
+  ::  one, reading every file typed (.^ %cr). On-load is atomic, so all of
+  ::  that spent a single event's loom and a pill boot with fourteen desks
+  ::  bailed %meme at 2GB and at 8GB alike -- the work is proportional to
+  ::  total desk content, so no loom size is enough.
+  ::
+  ::  Nothing needs a mirror to exist at on-load. /code comes from +sync-gub,
+  ::  which scries the grubbery desk directly, not from this mirror. The only
+  ::  reader is the shell's docket tiles, and it skips %grubbery, %base and
+  ::  %kids. A desk arrives when something asks for it -- the shell when it
+  ::  builds its tile store, or +mount-to-grubbery by hand -- and the clay
+  ::  subscription +sync-clay-desk leaves behind keeps it current from then on.
   =.  this  (ensure-dir /sys/clay/desks)
-  =.  this  (ensure-dir /sys/clay/desks/base)
-  =.  this  (ensure-dir /sys/clay/desks/grubbery)
-  ::  Sync all desks listed as kids of /sys/clay/desks/
-  =/  dek=(list desk)  (lss-born /sys/clay/desks)
-  ::  Update clay-state with synced desks
+  =/  known=(set desk)  (silt (lss-born /sys/clay/desks))
   =/  clay-rail=rail:tarball  [/sys/clay %'main.clay-state']
-  =/  st=clay-state:nexus  [%0 (silt dek)]
-  =.  this  (save-file clay-rail [[/ %clay-state] st])
-  |-  ^+  this
-  ?~  dek  this
-  $(dek t.dek, this (sync-clay-desk i.dek))
+  (save-file clay-rail [[/ %clay-state] [%0 known]])
 ::
 ++  sync-clay-desk
   |=  dek=desk
@@ -5604,9 +6062,7 @@
   ^-  (unit leaf:nexus)
   =/  pv=(unit pace:hist:nexus)  (get-pace:hist:nexus sok cas)
   ?~  pv  ~
-  ?:  ?=(%tomb -.u.pv)  ~
-  ?~  p.u.pv  ~
-  =/  got  (~(get by jects.silo) u.p.u.pv)
+  =/  got  (~(get by jects.silo) lobe.u.pv)
   ?~  got  ~
   ?.  ?=(%leaf -.ject.u.got)  ~
   `leaf.ject.u.got
@@ -5681,9 +6137,7 @@
   ?~  sk  ~
   =/  top=(unit [key=cass:clay val=entry:hist:nexus])  (ram:hon:hist:nexus u.sk)
   ?~  top  ~
-  ?:  ?=(%tomb -.pace.val.u.top)  ~
-  ?~  p.pace.val.u.top  ~
-  `[[fold name] sang u.p.pace.val.u.top]
+  `[[fold name] sang lobe.pace.val.u.top]
 ::  and clam all grubs with that mark through validate-vase.
 ::  On success, updates grubs in ball with clammed vases.
 ::  On failure, downgrades the mark to .tang in new-bin.
@@ -5730,13 +6184,11 @@
     =/  top=(unit [key=cass:clay val=entry:hist:nexus])
       (ram:hon:hist:nexus sk)
     ?~  top  ~
-    ?:  ?=(%tomb -.pace.val.u.top)  ~
-    ?~  p.pace.val.u.top  ~
-    =/  entry  (~(get by jects.silo) u.p.pace.val.u.top)
+    =/  entry  (~(get by jects.silo) lobe.pace.val.u.top)
     ?~  entry  ~
     ?.  ?=(%leaf -.ject.u.entry)  ~
     ?.  =(cod ns.mark.leaf.ject.u.entry)  ~
-    `[[fold name] u.p.pace.val.u.top leaf.ject.u.entry]
+    `[[fold name] lobe.pace.val.u.top leaf.ject.u.entry]
   ::  Process each changed mark
   =/  remaining=_changed  changed
   |-
@@ -5803,12 +6255,10 @@
     =/  top=(unit [key=cass:clay val=entry:hist:nexus])
       (ram:hon:hist:nexus sk)
     ?~  top  ~
-    ?:  ?=(%tomb -.pace.val.u.top)  ~
-    ?~  p.pace.val.u.top  ~
-    =/  entry  (~(get by jects.silo) u.p.pace.val.u.top)
+    =/  entry  (~(get by jects.silo) lobe.pace.val.u.top)
     ?~  entry  ~
     ?.  ?=(%leaf -.ject.u.entry)  ~
-    `[[fold name] u.p.pace.val.u.top leaf.ject.u.entry]
+    `[[fold name] lobe.pace.val.u.top leaf.ject.u.entry]
   ~?  dbg  "revalidate-all: {<(lent all-grubs)>} grubs"
   =/  [n-ok=@ud n-boom=@ud n-skip=@ud]  [0 0 0]
   |-
@@ -5878,9 +6328,7 @@
     =/  top=(unit [key=cass:clay val=entry:hist:nexus])
       (ram:hon:hist:nexus fold.node)
     ?~  top  ~
-    ?:  ?=(%tomb -.pace.val.u.top)  ~
-    ?~  p.pace.val.u.top  ~
-    =/  entry  (~(get by jects.silo) u.p.pace.val.u.top)
+    =/  entry  (~(get by jects.silo) lobe.pace.val.u.top)
     ?~  entry  ~
     ?.  ?=(%tree -.ject.u.entry)  ~
     ?~  nek.tree.ject.u.entry  ~
@@ -6425,15 +6873,28 @@
 ::
 ++  sync-peer
   ^+  this
-  =.  this  (ensure-dir /sys/ames)
-  =.  this  (ensure-dir /sys/ames/usergroups)
-  =.  this  (ensure-dir /sys/ames/ships)
-  ::  Ensure usergroups registry exists
+  =.  this  (gage %peer-dirs |.((ensure-dir /sys/ames)))
+  =.  this  (gage %peer-dirs-ug |.((ensure-dir /sys/ames/usergroups)))
+  =.  this  (gage %peer-dirs-ships |.((ensure-dir /sys/ames/ships)))
+  ::  the usergroup registry is gone: the shell writes every group's
+  ::  files from its own record. A ship still holding the registry grub
+  ::  loses it, and the watches it kept on its registrants.
   =/  reg-rail=rail:tarball  [/sys/ames %'registry']
-  =?  this  =(~ (peek-grub-now reg-rail))
-    (save-file reg-rail [[/usergroups %registry] *(map rail:tarball path)])
-  =.  this  ensure-public-group
-  (ensure-peer-ship our.bowl)
+  =.  this  (gage %peer-registry-check |.(this))
+  =?  this  ?=(^ (peek-grub-now reg-rail))
+    =.  this  (sub-wipe reg-rail)
+    (delete /sys/ames %'registry')
+  =.  this  (gage %ensure-public-group |.(ensure-public-group))
+  ::  a ship that still holds a directory for ITSELF under the peer tree
+  ::  loses it: we are not our own peer, and that directory was the one
+  ::  unweired place a dart addressed to us could come back to.
+  ::  reap the guest directories nobody named (see +cull-stale-peers)
+  =.  this  (gage %cull-stale-peers |.(cull-stale-peers))
+  =/  self-dir=path  /sys/ames/ships/[(scot %p our.bowl)]
+  =.  this  (gage %peer-self-check |.(this))
+  ?.  ?=(^ (~(get of born) self-dir))  this
+  =.  this  (sub-wipe [self-dir %'ship.sig'])
+  (cull [%| self-dir])
 ::  Ensure /sys/ames/usergroups/public.grp/ exists with who.ships and how.weir.
 ::  The public group's weir applies to all foreign ships regardless of membership.
 ::
@@ -6469,6 +6930,8 @@
       Each permission is a set of path prefixes. A request is allowed if its destination matches any prefix in the relevant set. An empty set means that category is blocked.
       '''
     (save-file man-rail [[/ %mime] default-man])
+  ::  No weir here. A usergroup is data; the grant it declares is
+  ::  enforced where askers stand, under /sys/ames/ships.
   this
 ::  Ensure /sys/ames/ships/~ship/ exists with ship.sig and computed weir.
 ::  Our ship gets no weir (full access). Foreign ships get weir from usergroups.
@@ -6476,6 +6939,15 @@
 ++  ensure-peer-ship
   |=  src=@p
   ^+  this
+  ::  OUR OWN SHIP IS NOT A PEER. /sys/ames/ships is the inbound face:
+  ::  one directory per ship whose darts arrive here, carrying the weir
+  ::  we judge them by. We never arrive at ourselves, so there is
+  ::  nothing to represent, and a directory for us could only be an
+  ::  unweired place inside the peer tree — the thing a loopback dart
+  ::  used to land on. +ship-sig-rail still names us: it is an identity,
+  ::  not a grub, and a caller with no weir above it is unrestricted,
+  ::  which is what local privilege means.
+  ?:  =(src our.bowl)  this
   =/  ship-ta=@ta  (scot %p src)
   =/  ship-dir=path  /sys/ames/ships/[ship-ta]
   ::  Always ensure dir, /root, and ship.sig exist
@@ -6485,8 +6957,11 @@
     =/  ship-rail=rail:tarball  [ship-dir %'ship.sig']
     =.  this  (save-file ship-rail [[/ %sig] ~])
     (spawn-proc ship-rail ~)
-  ::  Set weir (our ship gets none — full access)
-  ?:  =(src our.bowl)  this
+  ::  when this ship was last heard from. +cull-stale-peers reads it to
+  ::  drop the directories of ships nobody grouped and nobody has talked
+  ::  to -- an eyre guest's identity is a fresh comet per session, so
+  ::  without this they accumulate forever.
+  =.  this  (save-file [ship-dir %'last.time'] [[/ %time] now.bowl])
   =/  =weir:nexus  (compute-peer-weir src)
   =.  this  (set-weir ship-dir `weir)
   ::  Aggregate man pages from this ship's usergroups
@@ -6615,6 +7090,342 @@
     =/  existing=(set path)  (fall (~(get by acc) i.ships) ~)
     $(ships t.ships, acc (~(put by acc) i.ships (~(put in existing) name)))
   $(groups t.groups)
+::  +peer-grouped: has this ship been enrolled in a usergroup?
+::
+::    Membership is the tell for whether a foreign ship gets an identity
+::    in our namespace. Eyre mints a guest session's @p itself, from +og
+::    over eny (eyre.hoon +start-session), so a walk-in's name is random
+::    and unguessable — it can never be a group we wrote. A ship we
+::    deliberately enrolled can. /public is not membership: belonging to
+::    it is the default and grants only the public weir, which is what an
+::    unenrolled ship already gets without a directory.
+::
+++  peer-grouped
+  |=  =ship
+  ^-  ?
+  =/  src=(map @p (set path))  (build-peer-src read-peer-who)
+  =/  groups=(set path)  (fall (~(get by src) ship) ~)
+  !=(~ (~(del in groups) /public))
+::  +peer-stale: how long a ship may go unheard before +cull-stale-peers
+::  will drop its directory. Grouped ships are never dropped, however
+::  quiet; this only reaps askers nobody named.
+::
+++  peer-stale  ~d30
+::  +cull-stale-peers: drop the directory of every ship that is in no
+::  usergroup and has not been heard from in +peer-stale.
+::
+::    An eyre guest's identity is a fresh comet per session, and every
+::    asker gets a directory, so without this they accumulate forever.
+::    Dropping one costs nothing: the next request from that ship
+::    recreates it, and its weir is /public's grant either way.
+::
+::    Never our own ship, never a grouped ship, and never one whose
+::    last.time is missing or unreadable -- absence is not evidence of
+::    staleness, so an unreadable stamp is left alone and stays loud.
+::
+++  cull-stale-peers
+  ^+  this
+  =/  ships-ball=ball:tarball  (peek-ball-now /sys/ames/ships)
+  =/  kids=(list [@ta ball:tarball])  ~(tap by dir.ships-ball)
+  |-  ^+  this
+  ?~  kids  this
+  =/  ship-name=@ta  -.i.kids
+  =/  ship=(unit @p)  (slaw %p ship-name)
+  ?~  ship  $(kids t.kids)
+  ?:  =(u.ship our.bowl)  $(kids t.kids)
+  ?:  (peer-grouped u.ship)  $(kids t.kids)
+  =/  ship-dir=path  /sys/ames/ships/[ship-name]
+  =/  got=(unit sang:tarball)  (peek-grub-now [ship-dir %'last.time'])
+  ?~  got  $(kids t.kids)
+  =/  res=(each @da tang)  (mule |.(!<(@da (need-vase:tarball u.got))))
+  ?:  ?=(%| -.res)  $(kids t.kids)
+  ?:  (lth (sub now.bowl p.res) peer-stale)  $(kids t.kids)
+  ~&  >  "cull-stale-peers: dropping {<u.ship>}, last heard {<p.res>}"
+  =.  this  (sub-wipe [ship-dir %'ship.sig'])
+  $(kids t.kids, this (cull [%| ship-dir]))
+::  +asker-rail: the position an HTTP request's authority comes from
+::
+::    The HTTP counterpart of the first two lines of +take-remote-load,
+::    which resolves an ames peer to the rail its darts originate from.
+::    Everything downstream is then identical: +process-dart runs
+::    +allowed itself (grubbery.hoon, +dart-to-dest derives the jump from
+::    the load), so an op needs no permission argument — only a correct
+::    caller.
+::
+::    Our own ship gets its own directory, which carries no weir. An
+::    enrolled ship gets its directory, created on demand. Everyone else
+::    — every eyre guest identity included — is judged from the public
+::    group, so a drive-by page visit mints no directory, no ship.sig, no
+::    process and no man-page copy, and writes nothing to the event log.
+::
+++  asker-rail
+  |=  src=@p
+  ^-  [rail:tarball _this]
+  ?:  =(src our.bowl)
+    [(ship-sig-rail src) this]
+  ::  an unenrolled asker is an ordinary ship in no groups, and
+  ::  +compute-peer-weir-from already unions every ship's weir with
+  ::  /public's grant -- so it needs no position of its own, and no
+  ::  usergroup carries a weir for it to stand in.
+  =.  this  (ensure-peer-ship src)
+  [(ship-sig-rail src) this]
+::  +asker-allowed: pre-check an HTTP op so a veto becomes a 403
+::
+::    +process-dart enforces the weir regardless, but its veto path is
+::    shaped for ames: it crashes for darts originating under
+::    /sys/ames/ships so gall nacks the sender, and enqueues a %veto
+::    intake otherwise. Neither is an HTTP response, so a request is
+::    checked before dispatch and answered 403. The dart's own check
+::    still stands behind this one.
+::
+++  asker-allowed
+  |=  [caller=rail:tarball =jump:nexus dest=lane:tarball]
+  ^-  ?
+  !?=([~ %|] (allowed-quiet jump caller `dest))
+::  +jobe-at-case: the ject a path held at a given version.
+::
+::    The bridge that makes the PAST BROWSABLE. A fold's tree ject names
+::    each child's jobe, and every ancestor is bumped on any write
+::    beneath it, so a directory at a cass resolves its whole subtree as
+::    it stood. Feeding that jobe to +peek-ball / +peek-ball-shallow
+::    reuses the present-day rendering unchanged -- a past listing is the
+::    same listing, read from a different tree.
+::
+::    ~ covers every way a version fails to resolve, and the reasons
+::    differ: no such version, a tomb, a pace holding nothing, or a
+::    jobe the silo does not have. +case-gone tells them apart for the
+::    reader; this gate only says whether there is a ject.
+::
+++  jobe-at-case
+  |=  [here=lane:tarball cas=@ud]
+  ^-  (unit jobe:nexus)
+  =/  sk=(unit hist:nexus)
+    ?-  -.here
+      %&  (get-born p.here)
+      %|  =/(n (~(get of born) p.here) ?~(n ~ `fold.u.n))
+    ==
+  ?~  sk  ~
+  =/  cp  (resolve-case:nexus [%ud cas] u.sk)
+  ?~  cp  ~
+  `lobe.pace.u.cp
+::  +jobe-under: a descendant's ject INSIDE an ancestor's version.
+::
+::    Standing in version N of a directory, the things under it are the
+::    things it held then -- not those paths as they are now. A tree
+::    ject names its children's jects directly, so this is a walk down
+::    from the anchor's jobe, one segment at a time, and costs nothing
+::    like reading the subtree.
+::
+::    `rel` is the path from the anchor down. Its last segment is a file
+::    when `file` is set, a directory otherwise.
+::
+++  jobe-under
+  |=  [anchor=jobe:nexus rel=path file=?]
+  ^-  (unit jobe:nexus)
+  ?~  rel  ?:(file ~ `anchor)
+  =/  jot  (~(get by jects.silo) anchor)
+  ?~  jot  ~
+  ?.  ?=(%tree -.ject.u.jot)  ~
+  =/  =tree:nexus  tree.ject.u.jot
+  ?~  t.rel
+    ?:  file  (~(get by fil.tree) i.rel)
+    =/  kid  (~(get by dir.tree) i.rel)
+    ?~(kid ~ `lobe.u.kid)
+  =/  kid  (~(get by dir.tree) i.rel)
+  ?~  kid  ~
+  $(anchor lobe.u.kid, rel t.rel)
+::  +ud-arg: a version number as a URL carries it.
+::
+::    slaw %ud and dem:ag both want hoon's dotted form (1.000), and a
+::    url carries the plain number. Every version >= 1000 therefore
+::    parsed as ~ -- and a ~ case means "now", so the request silently
+::    served the PRESENT under a past label. dim:ag is the bare-digit
+::    parser; dots are stripped first so both spellings work.
+::
+++  ud-arg
+  |=  t=@t
+  ^-  (unit @ud)
+  (rush (crip (skip (trip t) |=(a=@tD =('.' a)))) dim:ag)
+::  +asof-arg: the ?asof= a request asked for.
+::
+::    Spelled <path>:<version> -- /apps/shell/forge/repos:14 -- so
+::    one argument carries both halves: WHOSE version, and which. A case
+::    says "this path at version N"; an asof says "this path as it was
+::    inside version N of that ancestor".
+::
+++  asof-arg
+  |=  args=quay:eyre
+  ^-  (unit [anchor=path cas=@ud])
+  =/  a=(unit @t)  (get-key:kv:html-utils 'asof' args)
+  ?~  a  ~
+  =/  txt=tape  (trip u.a)
+  ::  paths hold no colon, so the first one is the separator
+  =/  idx=(unit @ud)  (find ":" txt)
+  ?~  idx  ~
+  =/  num=(unit @ud)  (ud-arg (crip (slag +(u.idx) txt)))
+  ?~  num  ~
+  `[(stab (crip (scag u.idx txt))) u.num]
+::  +asof-jobe: resolve a path as of an ancestor's version.
+::
+++  asof-jobe
+  |=  [as=[anchor=path cas=@ud] =path file=?]
+  ^-  (unit jobe:nexus)
+  ?.  =(anchor.as (scag (lent anchor.as) path))  ~   ::  not under the anchor
+  =/  root  (jobe-at-case [%| anchor.as] cas.as)
+  ?~  root  ~
+  (jobe-under u.root (slag (lent anchor.as) path) file)
+::  +case-gone: why a version would not resolve.
+::
+::    no entry                      -- never recorded, or since collected
+::    entry, a jobe not in the silo -- a fault
+::
+::    There is no third case: a version always references content, so it
+::    cannot say the path held nothing. Whether the path still exists is
+::    $peak's answer, not a version's.
+::
+++  case-gone
+  |=  [here=lane:tarball cas=@ud]
+  ^-  @t
+  =/  sk=(unit hist:nexus)
+    ?-  -.here
+      %&  (get-born p.here)
+      %|  =/(n (~(get of born) p.here) ?~(n ~ `fold.u.n))
+    ==
+  ?~  sk  'no such version'
+  =/  cp  (resolve-case:nexus [%ud cas] u.sk)
+  ?~  cp  'no such version'
+  'this version references an object that is not in the silo; that cannot happen, and means something is broken'
+::  +case-arg: the ?case= a request asked for, if any and if a number
+::
+++  case-arg
+  |=  args=quay:eyre
+  ^-  (unit @ud)
+  =/  c=(unit @t)  (get-key:kv:html-utils 'case' args)
+  ?~  c  ~
+  (ud-arg u.c)
+::  +ball-op-jump: which jump does this endpoint perform?
+::
+::    One endpoint per dart, named after it. Authority is decided here,
+::    once. The groupings are +dart-to-dest's: %cull and %sand file
+::    under %make there, %keep and %born under %peek.
+::
+::    ~ means "not a namespace op" — nothing to gate, and nothing that
+::    reads or writes a grub.
+::
+::  +wash-tang: a tang as flat lines, for reporting a failed build.
+::  Flopped first: a tang is innermost-frame-first, and the line you
+::  need is the outermost. Same shape as strandio and as the forge's
+::  own +format-told.
+::
+++  wash-tang
+  |=  =tang
+  ^-  wall
+  (zing (turn (flop tang) (cury wash [0 80])))
+::  +ball-bangs: every banged grub and directory under a ball, with the
+::  tang that banged it. A lump carries its own bang, and one per grub in
+::  its contents; both are reported, told apart by kind.
+::
+++  ball-bangs
+  |=  [sub=path bal=ball:tarball]
+  ^-  (list [where=path kind=@tas =tang])
+  =/  here=(list [where=path kind=@tas =tang])
+    ?~  fil.bal  ~
+    %+  weld
+      ^-  (list [where=path kind=@tas =tang])
+      ?~  bang.u.fil.bal  ~
+      ~[[sub %dir u.bang.u.fil.bal]]
+    ^-  (list [where=path kind=@tas =tang])
+    %+  murn  ~(tap by contents.u.fil.bal)
+    |=  [n=@ta e=[=sang:tarball gain=? bang=(unit tang)]]
+    ^-  (unit [where=path kind=@tas =tang])
+    ?~  bang.e  ~
+    `[(snoc sub n) %grub u.bang.e]
+  %+  roll  ~(tap by dir.bal)
+  |=  [[nam=@ta kid=ball:tarball] acc=_here]
+  (weld acc (ball-bangs (snoc sub nam) kid))
+::  +pool-procs: every fiber under a path as the kernel holds it: crashed
+::  or live, and the depth of its held (next) and skipped (skip) intakes
+::  with the kinds of what it skipped. A fiber parked on a dart shows as
+::  live with a skip queue full of %poke -- the only materialized trace
+::  of "where it is waiting", since the position itself is a closure.
+::
+++  pool-procs
+  |=  [sub=path pp=pool:nexus]
+  ^-  (list [where=path crashed=? next=@ud skip=@ud kinds=(list [@tas @ud])])
+  =/  here=(list [where=path crashed=? next=@ud skip=@ud kinds=(list [@tas @ud])])
+    ?~  fil.pp  ~
+    %+  turn  ~(tap by proc.u.fil.pp)
+    |=  [n=@ta pr=proc:fiber:nexus]
+    ^-  [where=path crashed=? next=@ud skip=@ud kinds=(list [@tas @ud])]
+    =/  tally=(map @tas @ud)
+      %+  roll  ~(tap to skip.pr)
+      |=  [t=take:fiber:nexus acc=(map @tas @ud)]
+      =/  k=@tas  ?~(in.t %start -.u.in.t)
+      (~(put by acc) k +((fall (~(get by acc) k) 0)))
+    :*  (snoc sub n)
+        ?=(%| -.process.pr)
+        (lent ~(tap to next.pr))
+        (lent ~(tap to skip.pr))
+        ~(tap by tally)
+    ==
+  %+  roll  ~(tap by dir.pp)
+  |=  [[nam=@ta kid=pool:nexus] acc=_here]
+  (weld acc (pool-procs (snoc sub nam) kid))
+++  ball-op-jump
+  |=  [method=@tas endpoint=@tas]
+  ^-  (unit jump:nexus)
+  ?+    [method endpoint]  ~
+      [%'GET' ?(%peek %keep %born %build %bang %queue %procs)]  `%peek
+      [%'POST' %poke]                `%poke
+      [%'PUT' ?(%make %sand)]        `%make
+      [%'DELETE' ?(%cull %sand)]     `%make
+  ==
+::  +api-lane: which lane does an api path address?
+::
+::    The trailing slash is the whole rule: /foo/ is the FOLD at /foo,
+::    /foo the grub. Written without one, a path that holds no grub is
+::    the fold — a directory keeps working unslashed, and a grub and a
+::    fold of the same name stay tellable apart.
+::
+++  api-grub
+  |=  api-path=path
+  ^-  (unit sang:tarball)
+  ?~  api-path  ~
+  (peek-grub-now [(snip `path`api-path) (rear api-path)])
+::  +api-fold-exists: is there a directory here? +peek-ball-now answers an
+::  absent one with an empty ball, which a reader cannot tell from an empty
+::  directory — and a peek of nothing must 404, not describe a void.
+::
+++  api-fold-exists
+  |=  =fold:tarball
+  ^-  ?
+  =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
+    (~(get of born) fold)
+  ?~  node  %.n
+  =/  got=(unit [key=cass:clay val=entry:hist:nexus])
+    (ram:hon:hist:nexus fold.u.node)
+  ?~  got  %.n
+  %.y
+::
+++  api-lane
+  |=  api-path=path
+  ^-  (unit lane:tarball)
+  ?~  api-path  `[%| /]
+  ?:  =('' (rear api-path))  `[%| (snip `path`api-path)]
+  ?^  (api-grub api-path)  `[%& [(snip `path`api-path) (rear api-path)]]
+  `[%| api-path]
+::  +ball-op-dest: which lane does this endpoint address?
+::
+++  ball-op-dest
+  |=  [endpoint=@tas api-path=path]
+  ^-  (unit lane:tarball)
+  ::  a weir is set on a directory, never on a grub
+  ?:  ?=(%sand endpoint)
+    =/  bare=path
+      ?:  ?&(?=(^ api-path) =('' (rear api-path)))  (snip `path`api-path)
+      api-path
+    `[%| bare]
+  (api-lane api-path)
 ::  Union two weirs
 ::
 ++  union-weirs
@@ -6716,31 +7527,60 @@
 ++  route-http
   |=  [eyre-id=@ta req=inbound-request:eyre]
   ^+  this
-  ::  every owner check downstream asks src == our. Eyre on our kelvins
-  ::  already sends a guest identity for a request with no session, but
-  ::  an older or forked Eyre sends our own ship for every request. So
-  ::  an unauthenticated request never reaches a handler as our: it
-  ::  goes on as a fresh comet-sized guest, as Eyre's own guests do.
-  =/  who=@p
-    ?.  &(=(src.bowl our.bowl) !authenticated.req)  src.bowl
-    (end 7 (shas %grubbery-guest eny.bowl))
   =/  [site=path args=quay:eyre]  (parse-url:http-utils url.request.req)
   ::  every owner gate downstream asks only src == our, which the
   ::  session cookie decides, and a browser sends that cookie on a write
   ::  from any site. A write that carries the owner's session must come
-  ::  from our own origin.
+  ::  from our own origin. Websocket upgrades would be method GET and
+  ::  so pass this gate unconditionally, but no inbound upgrade path
+  ::  reaches it: the only websockets here are outbound client sockets
+  ::  through iris, poked from our own ship.
   =/  cross=(unit [mode=(unit @t) site=(unit @t)])  (cross-site-write req)
   ?^  cross
     %-  emit-cards
     %+  give-simple-payload:app:server  eyre-id
     (cross-origin-forbidden:http-utils u.cross)
   ?+    site
-    (forward-http eyre-id who req site)
+    (forward-http eyre-id req site)
     ::
       [%grubbery %push *]
-    (handle-push-http eyre-id who req t.t.site args)
+    (handle-push-http eyre-id src.bowl req t.t.site args)
     ::
       [%grubbery %api *]
+    ::  AUTHORITY: the kernel gates exactly what the kernel itself does.
+    ::  These built-in endpoints are its own operations, so they are
+    ::  gated here, once, before the sync/fiber split below — and it
+    ::  cannot be left to the fiber half, because a request grub lives at
+    ::  /sys/eyre/requests/[id] and its darts originate there under
+    ::  eyre's authority, never the asker's.
+    ::
+    ::  A request forwarded to a grub's own binding is deliberately NOT
+    ::  gated here (see +forward-http): that grub's darts come from its
+    ::  own rail, so its own weir already confines it whoever asks, and
+    ::  it receives src.bowl to apply whatever finer policy it wants.
+    ::  That is the advanced path, and it is meant to be rare.
+    ::
+    ::  +asker-rail is the HTTP counterpart of +take-remote-load's first
+    ::  two lines. Our own ship's rail carries no weir, so all of this is
+    ::  a no-op for local requests.
+    ::
+    =^  gated=?  this
+      =/  site-rest=path  t.t.site
+      ?~  site-rest  [& this]
+      =/  endpoint=@tas  i.site-rest
+      =/  jump=(unit jump:nexus)
+        (ball-op-jump method.request.req endpoint)
+      ::  not a namespace op: no grub is read or written, nothing to gate
+      ?~  jump  [& this]
+      =/  dest=(unit lane:tarball)  (ball-op-dest endpoint t.site-rest)
+      ?~  dest  [& this]
+      =^  caller=rail:tarball  this  (asker-rail src.bowl)
+      [(asker-allowed caller u.jump u.dest) this]
+    ?.  gated
+      %-  emit-cards
+      %-  give-simple-payload:app:server
+      :-  eyre-id
+      [[403 ~] `(as-octs:mimes:html 'Forbidden')]
     ::  ARCHITECTURAL RULE: a request enters the namespace (materializes
     ::  as a grub in /sys/eyre/requests, spawning a fiber) ONLY if it
     ::  needs a general-purpose ASYNCHRONOUS script to handle it — one
@@ -6750,11 +7590,11 @@
     ::  make+cull cascade, no permanent event-log record per read.
     ::
     =/  handled=(unit (list card:agent:gall))
-      (serve-api-read-sync eyre-id who req)
+      (serve-api-read-sync eyre-id src.bowl req)
     ?^  handled
       (emit-cards u.handled)
     ::  needs a fiber: materialize the request grub as before
-    (make /sys/eyre [%& /sys/eyre/requests eyre-id] %.n %.n [%| [[/ %http-request] [who req]] ~])
+    (make /sys/eyre [%& /sys/eyre/requests eyre-id] %.n %.n [%| [[/ %http-request] [src.bowl req]] ~])
   ==
 ::  +cross-site-write: the fetch metadata of a write from another site
 ::  that carries the owner's session, or ~ to let it through. A guest
@@ -6762,8 +7602,11 @@
 ::  nothing. Sec-Fetch-Site same-origin or none passes. With no
 ::  Sec-Fetch-Site, an Origin naming our own host passes, and so does
 ::  no Origin at all: browsers send one on every cross-site write, so
-::  that is a native client. A moz-extension:// origin is an add-on the
-::  owner installed. The host is compared without the scheme, since
+::  that is a native client. A moz-extension:// origin passes on its
+::  scheme prefix alone: the check cannot verify that the add-on is
+::  one the owner installed, only that the request came from a
+::  browser extension context rather than a web page. The host is
+::  compared without the scheme, since
 ::  a ship behind a TLS proxy sees plain http.
 ::
 ++  cross-site-write
@@ -6814,14 +7657,213 @@
   =/  ok-json
     |=  =json
     (ok-mime [/application/json (as-octs:mimes:html (en:json:html json))])
-  ?.  =(src our.bowl)  (err 403 'Forbidden')
+  ::  +gone: nothing is here. Whoever is asking was already allowed here
+  ::  by +route-http, and inside the line a weir draws the answer is the
+  ::  plain truth — the same %none a peer gets from +process-peek.
+  =/  gone
+    |=  msg=@t
+    ^-  (unit (list card:agent:gall))
+    (err 404 msg)
+  ::  No src == our check — see +route-http, which gated this request from
+  ::  the asker's own position before dispatching here.
   =/  [site=path args=quay:eyre]  (parse-url:http-utils url.request.req)
   ?.  ?=([%grubbery %api @ *] site)  ~
   =/  endpoint=@tas  i.t.t.site
-  =/  api-path=path  t.t.t.site
-  ?+  [method.request.req endpoint]  ~   ::  ~ = not a sync read; needs a fiber
+  =/  raw-path=path  t.t.t.site
+  ::  the trailing slash names the fold; strip it and the handlers below
+  ::  read the path exactly as they always have
+  =/  slashed=?  ?&(?=(^ raw-path) =('' (rear raw-path)))
+  =/  api-path=path  ?.(slashed raw-path (snip `path`raw-path))
+  ::  ?as= picks which rendering of a peek you want; without it a grub
+  ::  comes back as its contents and a fold as its children. The arms
+  ::  below are the renderings, named as they were.
+  ::  %$ for anything that is not one of the read darts: no arm below
+  ::  answers it, so it is not a sync read and never reaches one of these
+  ::  handlers behind a name +ball-op-jump does not gate.
+  =/  shape=@tas
+    ?+    endpoint  %$
+        %peek
+      ::  a fold asked for by name, or anything with no grub at it, reads
+      ::  as a directory; otherwise as the grub's own contents
+      =/  natural=@tas
+        ?:  |(slashed ?=(~ (api-grub api-path)))  %kids
+        %file
+      ?+  (fall (get-key:kv:html-utils 'as' args) '')  natural
+        %tree   %tree
+        %tar    %tar
+        %weirs  %sand
+      ==
+    ::
+        %born
+      ?:(=('1' (fall (get-key:kv:html-utils 'ghosts' args) '')) %ghost %born)
+    ::
+        %build  %build
+        %bang   %bang
+        %queue  %queue
+        %procs  %procs
+    ==
+  ::  a directory rendering of a path that holds no directory is a 404,
+  ::  not an empty listing. At a past version the arms answer for
+  ::  themselves, with 410 and what was there instead.
+  ?:  ?&  ?=(?(%kids %tree %sand) shape)
+          ?=(~ (case-arg args))
+          ?=(~ (asof-arg args))
+          !(api-fold-exists api-path)
+      ==
+    (gone 'Not found')
+  ?+  [method.request.req shape]  ~   ::  ~ = not a sync read; needs a fiber
+      ::  GET /grubbery/api/build/<code namespace> -- what compiled and what
+      ::  did not, straight from the kernel. The shell's check_bin answers
+      ::  the same question better for one file, but it is an MCP tool: a
+      ::  shell that will not compile cannot report why it will not compile.
+      ::  This arm has no such dependency -- gall serves it, so it answers
+      ::  while every nexus on the ship is banged.
+      ::
+      ::  The path is the code namespace itself (/code, or a desk's
+      ::  /apps/.../desk/code). Failures first and in full: a tang is what
+      ::  you came for. ?all=1 adds the ones that built.
+      ::
+      [%'GET' %build]
+    =/  ns=(unit lode:nexus)  (~(get by code) api-path)
+    ?~  ns  (gone (crip "no code namespace at {(spud api-path)}"))
+    =/  want-all=?  =('1' (fall (get-key:kv:html-utils 'all' args) ''))
+    ::  sorted by source: an unordered tap shuffles between calls, and
+    ::  this is read by eye and diffed against the last run
+    =/  rows=(list [rail:tarball built:nexus])
+      %+  sort
+        %+  murn  ~(tap by keys.u.ns)
+        |=  [r=rail:tarball k=@uv]
+        ^-  (unit [rail:tarball built:nexus])
+        =/  e=(unit [refs=@ud =built:nexus])  (~(get by bins) k)
+        ?~  e  ~
+        `[r built.u.e]
+      |=  [a=[r=rail:tarball *] b=[r=rail:tarball *]]
+      (aor (spud (snoc path.r.a name.r.a)) (spud (snoc path.r.b name.r.b)))
+    =/  bad=(list [rail:tarball built:nexus])
+      (skim rows |=([* b=built:nexus] ?=([%tang *] b)))
+    =/  show=(list [rail:tarball built:nexus])  ?:(want-all rows bad)
+    %-  ok-json
+    %-  pairs:enjs:format
+    :~  ['namespace' s+(crip (spud api-path))]
+        ['total' (numb:enjs:format (lent rows))]
+        ['failed' (numb:enjs:format (lent bad))]
+      ::
+        :-  'files'
+        :-  %a
+        %+  turn  show
+        |=  [r=rail:tarball b=built:nexus]
+        ^-  json
+        %-  pairs:enjs:format
+        :~  ['source' s+(crip (spud (snoc path.r name.r)))]
+            ['status' s+(scot %tas -.b)]
+          ::
+            ::  ?= on the whole value, not on -.b: testing the tag alone
+            ::  leaves b unrefined, and reading tang.b off an unrefined
+            ::  $% sends the compiler fusing through tank's recursion
+            :-  'error'
+            ?.  ?=([%tang *] b)  ~
+            a+(turn (wash-tang tang.b) |=(l=tape s+(crip l)))
+        ==
+    ==
+  ::
+      ::  GET /grubbery/api/bang/<path> -- every banged grub and directory
+      ::  under here, with the tang that banged it. The companion to
+      ::  /build: that one says what would not COMPILE, this one says what
+      ::  is not RUNNING. A banged nexus serves nothing, so the shell can
+      ::  never report its own bang; gall serves this.
+      ::
+      [%'GET' %bang]
+    ?.  (api-fold-exists api-path)  (gone 'nothing there')
+    =/  hits=(list [where=path kind=@tas =tang])
+      (ball-bangs api-path (peek-ball-now api-path))
+    %-  ok-json
+    %-  pairs:enjs:format
+    :~  ['path' s+(crip (spud api-path))]
+        ['banged' (numb:enjs:format (lent hits))]
+      ::
+        :-  'hits'
+        :-  %a
+        %+  turn  hits
+        |=  [where=path kind=@tas =tang]
+        ^-  json
+        %-  pairs:enjs:format
+        :~  ['where' s+(crip (spud where))]
+            ['kind' s+(scot %tas kind)]
+            ['error' a+(turn (wash-tang tang) |=(l=tape s+(crip l)))]
+        ==
+    ==
+  ::
+      ::  GET /grubbery/api/queue -- how much work is pending and whose it
+      ::  is. `takes` is the live queue +abet drains; `owed` is what a spent
+      ::  budget parked for the next behn wake. Both are agent state and
+      ::  neither was readable from anywhere, so "why is the ship busy" has
+      ::  only ever been answerable by guessing. Grouped by the grub each
+      ::  take addresses: a queue that is thousands deep against ONE grub is
+      ::  a loop, and against many is a backlog, and those want opposite
+      ::  fixes.
+      ::
+      [%'GET' %queue]
+    =/  live=(list take:nexus)  ~(tap to takes)
+    =/  park=(list take:nexus)  ~(tap to owed)
+    =/  tally
+      |=  ts=(list take:nexus)
+      ^-  (list [@t @ud])
+      =/  cnt=(map @t @ud)
+        %+  roll  ts
+        |=  [t=take:nexus acc=(map @t @ud)]
+        =/  k=@t  (crip (spud (snoc path.here.t name.here.t)))
+        (~(put by acc) k +((fall (~(get by acc) k) 0)))
+      %+  sort  ~(tap by cnt)
+      |=([a=[* n=@ud] b=[* n=@ud]] (gth n.a n.b))
+    =/  rows  |=(l=(list [@t @ud]) ^-(json a+(turn (scag 20 l) |=([k=@t n=@ud] (pairs:enjs:format ~[['grub' s+k] ['takes' (numb:enjs:format n)]])))))
+    %-  ok-json
+    %-  pairs:enjs:format
+    :~  ['takes' (numb:enjs:format (lent live))]
+        ['owed' (numb:enjs:format (lent park))]
+        ['budget' (numb:enjs:format take-budget)]
+        ['live-by-grub' (rows (tally live))]
+        ['owed-by-grub' (rows (tally park))]
+    ==
+  ::
+      ::  GET /grubbery/api/procs/<path> -- the fibers under here as the
+      ::  kernel holds them: crashed or live, held and skipped intake
+      ::  depth, and what kinds were skipped. See +pool-procs.
+      ::
+      [%'GET' %procs]
+    =/  rows  (pool-procs api-path (~(dip of pool) api-path))
+    %-  ok-json
+    %-  pairs:enjs:format
+    :~  ['path' s+(crip (spud api-path))]
+        ['fibers' (numb:enjs:format (lent rows))]
+      ::
+        :-  'procs'
+        :-  %a
+        %+  turn  rows
+        |=  [where=path crashed=? next=@ud skip=@ud kinds=(list [@tas @ud])]
+        ^-  json
+        %-  pairs:enjs:format
+        :~  ['where' s+(crip (spud where))]
+            ['crashed' b+crashed]
+            ['next' (numb:enjs:format next)]
+            ['skip' (numb:enjs:format skip)]
+            ['skipped' a+(turn kinds |=([k=@tas n=@ud] (pairs:enjs:format ~[['kind' s+(scot %tas k)] ['n' (numb:enjs:format n)]])))]
+        ==
+    ==
+  ::
       [%'GET' %kids]
-    =/  =ball:tarball  (peek-ball-now api-path)
+    =/  cas=(unit @ud)  (case-arg args)
+    =/  as=(unit [anchor=path cas=@ud])  (asof-arg args)
+    =/  bal=(unit ball:tarball)
+      ?^  as
+        =/  jb  (asof-jobe u.as api-path %.n)
+        ?~(jb ~ `(peek-ball-shallow u.jb))
+      ?~  cas  `(peek-ball-now api-path)
+      =/  jb  (jobe-at-case [%| api-path] u.cas)
+      ?~(jb ~ `(peek-ball-shallow u.jb))
+    ?~  bal
+      ?^  as  (err 410 'that directory was not there in that version')
+      (err 410 (case-gone [%| api-path] (need cas)))
+    =/  =ball:tarball  u.bal
     %-  ok-json
     %-  pairs:enjs:format
     :~  ['files' [%a (turn (~(lis ba:tarball ball) /) |=(n=@ta s+n))]]
@@ -6829,23 +7871,131 @@
     ==
   ::
       [%'GET' %tree]
-    =/  =ball:tarball  (peek-ball-now api-path)
-    (ok-json (tree-to-json:tarball (ball-to-tree:tarball ball)))
+    =/  cas=(unit @ud)  (case-arg args)
+    =/  as=(unit [anchor=path cas=@ud])  (asof-arg args)
+    =/  bal=(unit ball:tarball)
+      ?^  as
+        =/  jb  (asof-jobe u.as api-path %.n)
+        ?~(jb ~ `(peek-ball u.jb))
+      ?~  cas  `(peek-ball-now api-path)
+      =/  jb  (jobe-at-case [%| api-path] u.cas)
+      ?~(jb ~ `(peek-ball u.jb))
+    ?~  bal
+      ?^  as  (err 410 'that directory was not there in that version')
+      (err 410 (case-gone [%| api-path] (need cas)))
+    (ok-json (tree-to-json:tarball (ball-to-tree:tarball u.bal)))
   ::
       [%'GET' %sand]
     =/  =ball:tarball  (peek-ball-now api-path)
     (ok-json (ball-weirs-to-json:nexus ball))
   ::
-      [%'GET' %weir]
-    =/  =ball:tarball  (peek-ball-now api-path)
-    (ok-json (ball-weirs-to-json:nexus ball))
+      [%'GET' %born]
+    ::  the SURVIVING MOMENTS of a path -- the versions whose record is
+    ::  still here, for a grub or a directory alike. Sparse by nature:
+    ::  the past is mostly collected, and what is left is what was kept.
+    ::  `firm` marks a version somebody promoted, `tomb` one whose
+    ::  content is gone though its record remains.
+    ::
+    ::  A directory's own cass is a real recursive snapshot: its tree
+    ::  ject names each child's jobe, and every ancestor is bumped on
+    ::  any write beneath it (+record-trees-lanes recurses to the root),
+    ::  so a fold at a cass resolves its whole subtree as it was.
+    ::  ?fold=1 asks for the DIRECTORY's history at this path. Without it
+    ::  a path that reads as both -- a grub `x` in /a and a directory
+    ::  /a/x -- answers with the grub's, while +jobe-at-case resolves a
+    ::  directory against the fold's. Two different histories for one
+    ::  path: the version list and the versions it navigates to did not
+    ::  belong to the same thing.
+    =/  want-fold=?  =([~ '1'] (get-key:kv:html-utils 'fold' args))
+    =/  as-fold=(unit hist:nexus)
+      =/  n  (~(get of born) api-path)
+      ?~(n ~ `fold.u.n)
+    =/  sk=(unit hist:nexus)
+      ?~  api-path  =/(n (~(get of born) /) ?~(n ~ `fold.u.n))
+      ?:  want-fold  as-fold
+      =/  as-file=(unit hist:nexus)
+        (get-born [(snip `path`api-path) (rear api-path)])
+      ?^  as-file  as-file
+      as-fold
+    ?~  sk  (err 404 'no history at that path')
+    %-  ok-json
+    :-  %a
+    %+  turn  (tap:hon:hist:nexus u.sk)
+    |=  [key=cass:clay val=entry:hist:nexus]
+    ::  `broken` names an object the silo does not have. That cannot
+    ::  happen and means something is wrong -- but it belongs IN THE
+    ::  LIST, not only in the answer when the version is opened, so an
+    ::  unreadable version can be seen and dropped without clicking
+    ::  every row to find it.
+    ::
+    ::  There is no `empty`: a version always references content.
+    =/  broken=?  !(~(has by jects.silo) lobe.pace.val)
+    %-  pairs:enjs:format
+    :~  ['ud' (numb:enjs:format ud.key)]
+        ['da' s+(scot %da da.key)]
+        ['tags' [%a (turn ~(tap in tags.val) |=(t=@t s+t))]]
+        ['firm' b+?=(%firm -.pace.val)]
+        ['broken' b+broken]
+    ==
+  ::
+      [%'GET' %ghost]
+    ::  the GHOSTS under a directory -- the children that used to be
+    ::  here. The listing draws them greyed beside the living ones, so
+    ::  a deletion is visible at the place it happened instead of only
+    ::  in the history of a path you have to already know about.
+    ::
+    ::  `case` is the version it died at: a ghost with history opens
+    ::  there, one without has nothing behind the name.
+    %-  ok-json
+    :-  %a
+    %+  turn  (ghosts-under api-path)
+    |=  [name=@ta fold=? =cass:clay]
+    %-  pairs:enjs:format
+    :~  ['name' s+name]
+        ['fold' b+fold]
+        ['case' (numb:enjs:format ud.cass)]
+        ::  the listing's own format, so a ghost sorts in the Modified
+        ::  column beside the siblings that outlived it
+        ['modified' s+(crip (en:datetime-local:iso da.cass))]
+    ==
   ::
       [%'GET' %file]
     ?~  api-path  (err 400 'File path required')
     =/  dir=path  (snip `path`api-path)
     =/  name=@ta  (rear api-path)
-    =/  content=(unit sang:tarball)  (peek-grub-now dir name)
-    ?~  content  (err 404 'Not found')
+    ::  ?case=N serves a PAST version of this grub. Without it, now.
+    ::  The peek has always taken a case (load's %peek carries one); it
+    ::  was simply never reachable over HTTP, so an old version could be
+    ::  listed and not read. A tomb is a version whose record survived
+    ::  its content, and says so rather than 404ing as if it never was.
+    =/  cas=(unit @ud)  (case-arg args)
+    =/  as=(unit [anchor=path cas=@ud])  (asof-arg args)
+    =/  content=(unit sang:tarball)
+      ?^  as
+        =/  jb  (asof-jobe u.as api-path %.y)
+        ?~(jb ~ (peek-grub u.jb))
+      ?~  cas  (peek-grub-now dir name)
+      =/  jb  (jobe-at-case [%& [dir name]] u.cas)
+      ?~(jb ~ (peek-grub u.jb))
+    ?~  content
+      ?^  as  (err 410 'that file was not there in that version')
+      ?~  cas  (gone 'Not found')
+      (err 410 (case-gone [%& [dir name]] u.cas))
+    ::  A BOOM is the noun surviving its type: it is here, and it does not
+    ::  clam with the blot it is stored under. That is not special to old
+    ::  versions -- a blot is a convention, marcs are meant to stay
+    ::  backward compatible, and when one does not the honest answer is to
+    ::  say so and name the blot, rather than serve a jam blob. The noun
+    ::  is still readable through ?pretty.
+    ?:  (is-boom:tarball u.content)
+      %-  err
+      :-  409
+      %-  crip
+      ;:  weld
+        "does not clam with the present "
+        (trip (spat (snoc path.p.u.content name.p.u.content)))
+        " blot; the noun is intact -- read it with ?pretty"
+      ==
     =/  =sage:tarball  [p.u.content (need-vase:tarball u.content)]
     ::  optional ?blot= conversion, then blot->mime, all synchronous via
     ::  get-tube (resolved from the grub's own governing code nexus)
@@ -6891,7 +8041,7 @@
 ::  bound handler, recording the connection; 404 if nothing matches.
 ::
 ++  forward-http
-  |=  [eyre-id=@ta who=@p req=inbound-request:eyre site=path]
+  |=  [eyre-id=@ta req=inbound-request:eyre site=path]
   ^+  this
   =/  match=(unit [=binding:eyre handler=rail:tarball])
     (find-eyre-binding bindings:get-server-state site)
@@ -6904,7 +8054,7 @@
   ::  recording the connection is agent state only. this runs on every
   ::  inbound request, so it must never reach save-server-state.
   =.  conns  (~(put by conns) eyre-id binding.u.match)
-  (poke ~ handler.u.match [[/ %handle-http-request] [eyre-id who req]])
+  (poke ~ handler.u.match [[/ %handle-http-request] [eyre-id src.bowl req]])
 ::
 ++  find-eyre-binding
   |=  [bindings=(map binding:eyre rail:tarball) site=path]
@@ -7242,36 +8392,60 @@
       =/  dek=desk  !<(desk q.sage)
       =.  this  (handle-clay-mount dek)
       `(enqu-take here ~ ~ %pack wir ~)
+    ::  the write handlers emit their own %pack: each guards the
+    ::  kernel desks itself and answers a refusal with a failed pack
+    ::  (see +kernel-desk)
     ?:  =([/ %unmount-desk] p.sage)
       =/  dek=desk  !<(desk q.sage)
-      =.  this  (handle-clay-unmount dek)
-      `(enqu-take here ~ ~ %pack wir ~)
-    ::  %base and %grubbery are the ship's own code: writing either is a
-    ::  kernel upgrade, which %unmount-desk already refuses to touch
-    =/  kernel-desk  |=(dek=desk |(=(%base dek) =(%grubbery dek)))
+      `(handle-clay-unmount here wir dek)
     ?:  =([/ %new-desk] p.sage)
       =/  dek=desk  !<(desk q.sage)
-      ?:  (kernel-desk dek)
-        `(enqu-take here ~ ~ %pack wir `~[leaf+"%{(trip dek)} is not written through /sys/clay"])
-      =.  this  (handle-clay-new-desk dek)
-      `(enqu-take here ~ ~ %pack wir ~)
+      `(handle-clay-new-desk here wir dek)
     ?:  =([/ %clay-info] p.sage)
       =/  [dek=desk files=(list [path (unit mime)])]
         !<([desk (list [path (unit mime)])] q.sage)
-      ?:  (kernel-desk dek)
-        `(enqu-take here ~ ~ %pack wir `~[leaf+"%{(trip dek)} is not written through /sys/clay"])
-      =.  this  (handle-clay-info dek files)
-      `(enqu-take here ~ ~ %pack wir ~)
+      `(handle-clay-info here wir dek files)
     ~  :: unknown clay poke, fall through
   ::
       %dill
-    ?.  =([/ %dill-belt] p.sage)  ~
-    =/  [session=@tas =belt:dill]  !<([@tas belt:dill] q.sage)
-    ::  the default session is the owner's own dojo; no grub types there
-    ?:  =(%$ session)
-      `(enqu-take here ~ ~ %pack wir `~[leaf+"the default dill session takes no belts from grubs"])
-    =.  this  (emit-card [%pass /dill/belt %arvo %d %shot session %belt belt])
-    `(enqu-take here ~ ~ %pack wir ~)
+    ?:  =([/ %dill-belt] p.sage)
+      =/  [session=@tas =belt:dill]  !<([@tas belt:dill] q.sage)
+      ::  the default session is the owner's own dojo; no grub types there
+      ?:  =(%$ session)
+        `(enqu-take here ~ ~ %pack wir `~[leaf+"the default dill session takes no belts from grubs"])
+      =.  this  (emit-card [%pass /dill/belt %arvo %d %shot session %belt belt])
+      `(enqu-take here ~ ~ %pack wir ~)
+    ::  a session task: open a session (its grub appears and is viewed
+    ::  from then on, as +sync-dill does for the ones found at boot),
+    ::  shut one (stop viewing; the grub and its history stay), or tell
+    ::  dill the size of the terminal looking at it
+    ?.  =([/ %dill-task] p.sage)  ~
+    =/  [ses=@tas task=session-task:dill]  !<([@tas session-task:dill] q.sage)
+    ::  dill crashes on a task for a session that is not there (or an
+    ::  open of one that is), and that crash would be this event's: a
+    ::  task that does not fit the sessions dill has is dropped
+    =/  have=?
+      %.  ses
+      %~  has  in
+      .^((set @tas) %dy /(scot %p our.bowl)/$/(scot %da now.bowl)/sessions)
+    ?:  =(have ?=(%open -.task))  `(enqu-take here ~ ~ %pack wir ~)
+    ?+    -.task  ~
+        %open
+      =.  this  (emit-card [%pass /dill/session/[ses] %arvo %d %shot ses task])
+      =.  this  (save-file [/sys/dill/sessions ses] [[/ %dill-blit] *(list blit:dill)])
+      =.  this  (set-gain-lane [%& /sys/dill/sessions ses] %.y)
+      =.  this  (emit-card [%pass /dill/session/[ses] %arvo %d %shot ses %view ~])
+      `(enqu-take here ~ ~ %pack wir ~)
+    ::
+        %shut
+      =.  this  (emit-card [%pass /dill/session/[ses] %arvo %d %shot ses %flee ~])
+      =.  this  (emit-card [%pass /dill/session/[ses] %arvo %d %shot ses task])
+      `(enqu-take here ~ ~ %pack wir ~)
+    ::
+        %blew
+      =.  this  (emit-card [%pass /dill/session/[ses] %arvo %d %shot ses task])
+      `(enqu-take here ~ ~ %pack wir ~)
+    ==
   ::
       %gall
     ?.  =([/ %gall-poke] p.sage)  ~
@@ -7303,6 +8477,10 @@
   ::
       %scry
     ?:  =([/ %scry-request] p.sage)
+      ::  every other handler in this branch updates state and lets the
+      ::  dispatch site emit the %pack; +handle-typed-scry owns its own
+      ::  %pack because it must also emit the result %poke first, and on
+      ::  a guarded miss it emits the failed %pack instead of either
       `(handle-typed-scry here wir q.sage)
     ::  remote-scry farm writes. Weir-gated as ordinary /sys pokes by
     ::  arrival here; gall consumes the emitted cards and signs
@@ -7341,11 +8519,6 @@
       `(enqu-take here ~ ~ %pack wir ~)
     ~
   ::
-      %ames
-    ?>  =(dest [/sys/ames %'registry'])
-    ?>  =([/usergroups %registry-action] p.sage)
-    =.  this  (handle-ames-registry here wir q.sage)
-    `(enqu-take here ~ ~ %pack wir ~)
   ==
 ::  /sys/behn/ timer service
 ::
@@ -7477,11 +8650,29 @@
   =.  this  (ensure-dir /sys/clay/desks/[dek])
   (sync-clay-desk dek)
 ::
-++  handle-clay-unmount
+::  +kernel-desk: %base and %grubbery are the ship's own code: writing
+::  either through /sys/clay is a kernel upgrade. Every clay write
+::  handler checks this itself, first thing, so a handler added later
+::  inherits no silent gap, and answers with a failed pack rather than
+::  an event crash (the sys-clay wart: a grub holding /sys/clay poke
+::  access must get a no it can read, not a crashed event).
+::
+++  kernel-desk
   |=  dek=desk
+  ^-  ?
+  |(=(%base dek) =(%grubbery dek))
+::
+++  clay-refuse
+  |=  [here=rail:tarball wir=path dek=desk]
   ^+  this
-  ?>  !=(dek %grubbery)
-  ?>  !=(dek %base)
+  =/  msg=tape  "%{(trip dek)} is not written through /sys/clay"
+  ~&  >>>  msg
+  (enqu-take here ~ ~ %pack wir `~[leaf+msg])
+::
+++  handle-clay-unmount
+  |=  [here=rail:tarball wir=path dek=desk]
+  ^+  this
+  ?:  (kernel-desk dek)  (clay-refuse here wir dek)
   =/  clay-rail=rail:tarball  [/sys/clay %'main.clay-state']
   =/  old=(unit sang:tarball)  (peek-grub-now clay-rail)
   =/  st=clay-state:nexus
@@ -7489,11 +8680,13 @@
     !<(clay-state:nexus (need-vase:tarball u.old))
   =.  desks.st  (~(del in desks.st) dek)
   =.  this  (save-file clay-rail [[/ %clay-state] st])
-  (unmount-clay-desk dek)
+  =.  this  (unmount-clay-desk dek)
+  (enqu-take here ~ ~ %pack wir ~)
 ::
 ++  handle-clay-new-desk
-  |=  dek=desk
+  |=  [here=rail:tarball wir=path dek=desk]
   ^+  this
+  ?:  (kernel-desk dek)  (clay-refuse here wir dek)
   =/  base-paths=(list path)
     :~  /sys/kelvin
         /mar/bill/hoon
@@ -7518,7 +8711,8 @@
     :-  (rear path)
     .^(noun %cx (scot %p our.bowl) %base (scot %da now.bowl) path)
   =.  this  (emit-card [%pass /new-desk %arvo (new-desk:cloy dek ~ files)])
-  (emit-card [%pass /desk-bill %arvo %c %info dek %& [/desk/bill %ins bill+!>(~[dek])]~])
+  =.  this  (emit-card [%pass /desk-bill %arvo %c %info dek %& [/desk/bill %ins bill+!>(~[dek])]~])
+  (enqu-take here ~ ~ %pack wir ~)
 ::  /sys/clay/ file write service
 ::
 ::  Every file arrives as a mime and goes to Clay as a %mime cage, the
@@ -7529,15 +8723,17 @@
 ::  the clay-info mark instead of crashing inside Clay.
 ::
 ++  handle-clay-info
-  |=  [dek=desk files=(list [path (unit mime)])]
+  |=  [here=rail:tarball wir=path dek=desk files=(list [path (unit mime)])]
   ^+  this
+  ?:  (kernel-desk dek)  (clay-refuse here wir dek)
   =/  mis=(list [path miso:clay])
     %+  turn  files
     |=  [pax=path fil=(unit mime)]
     ^-  [path miso:clay]
     ?~  fil  [pax %del ~]
     [pax %ins %mime !>(u.fil)]
-  (emit-card [%pass /clay-info %arvo %c %info dek %& mis])
+  =.  this  (emit-card [%pass /clay-info %arvo %c %info dek %& mis])
+  (enqu-take here ~ ~ %pack wir ~)
 ::  /sys/eyre/ HTTP server service
 ::
 ++  eyre-response-cards
@@ -7554,29 +8750,61 @@
     (give-simple-payload:app:server eyre-id simple-payload.upd)
   ==
 ::
+::  +drop-bindings: forget eyre bindings. Open connections on them are
+::  kicked, and the server-state grub is written once.
+::
+++  drop-bindings
+  |=  gone=(list binding:eyre)
+  ^+  this
+  ?~  gone  this
+  =/  set-gone=(set binding:eyre)  (sy gone)
+  =/  orphans=(list @ta)
+    %+  murn  ~(tap by conns)
+    |=  [eid=@ta =binding:eyre]
+    ?.  (~(has in set-gone) binding)  ~
+    `eid
+  =.  this
+    %-  emit-cards
+    %+  turn  orphans
+    |=  eid=@ta
+    ^-  card
+    [%give %kick ~[/http-response/[eid]] ~]
+  =.  conns
+    %-  ~(gas by *(map @ta binding:eyre))
+    %+  skip  ~(tap by conns)
+    |=  [eid=@ta =binding:eyre]
+    (~(has in set-gone) binding)
+  =/  st=server-state:nexus  get-server-state
+  =.  bindings.st
+    %-  ~(gas by *(map binding:eyre rail:tarball))
+    %+  skip  ~(tap by bindings.st)
+    |=  [=binding:eyre *]
+    (~(has in set-gone) binding)
+  (save-server-state st)
+::  +drop-bindings-of: forget every eyre binding whose handler is a culled
+::  grub: a request to its route would be poked at nothing and never
+::  answered. Lane %| names a subtree, %& one file.
+::
+++  drop-bindings-of
+  |=  dest=lane:tarball
+  ^+  this
+  =/  gone=(list binding:eyre)
+    %+  murn  ~(tap by bindings:get-server-state)
+    |=  [=binding:eyre handler=rail:tarball]
+    ^-  (unit binding:eyre)
+    ?-  -.dest
+      %&  ?:(=(p.dest handler) `binding ~)
+      %|  ?:(=(p.dest (scag (lent p.dest) path.handler)) `binding ~)
+    ==
+  (drop-bindings gone)
+::
 ++  handle-eyre-action
   |=  [sender=rail:tarball =wire vaz=vase]
   ^+  this
   =/  act=eyre-action:nexus  !<(eyre-action:nexus vaz)
-  ::  a route belongs to the grub that bound it. Anyone who may poke
-  ::  /sys/eyre could otherwise take over another app's route, unbind
-  ::  it, or answer its requests. A handler owns the grubs under its
-  ::  own directory too: its per-request grubs live there and send.
-  =/  owns
-    |=  handler=rail:tarball
-    (is-prefix path.handler path.sender)
-  ::  a binding held by a handler that no longer exists may be taken
-  ::  over, so an app that moved or was deleted cannot pin its route
-  =/  may-bind
-    |=  =binding:eyre
-    =/  cur=(unit rail:tarball)  (~(get by bindings:get-server-state) binding)
-    ?|  ?=(~ cur)
-        =(sender u.cur)
-        ?=(~ (peek-grub-now u.cur))
-    ==
   ::  the server-state grub is read per branch, not up front. %send
-  ::  fires on every header, body chunk and kick, and it needs the
-  ::  grub only to find the handler of a bound connection.
+  ::  fires on every header, body chunk and kick, and it needs nothing
+  ::  from the grub.
   ?-    -.act
       %bind
     ::  NB: avoid dots in binding paths. Eyre parses a dotted final
@@ -7584,10 +8812,6 @@
     ::  bindings against the STRIPPED path, so a binding ending in
     ::  a dotted segment never matches a slash-less URL (it falls
     ::  through to docket's catch-all). Bind dot-free paths.
-    ::  the handler is the sender: +bind-http names its own rail
-    ?.  &(=(sender handler.act) (may-bind binding.act))
-      ~&  >>  [%eyre-bind-refused sender path.binding.act]
-      this
     =/  st=server-state:nexus  get-server-state
     =.  bindings.st  (~(put by bindings.st) binding.act handler.act)
     =.  this  (save-server-state st)
@@ -7597,57 +8821,15 @@
     ::  bind requests to the SENDER — the kernel already knows who poked,
     ::  so the caller needn't walk to root (get-here-abs) to self-report a
     ::  handler rail. This is the common case: a nexus serving its own UI.
-    ?.  (may-bind binding.act)
-      ~&  >>  [%eyre-bind-refused sender path.binding.act]
-      this
     =/  st=server-state:nexus  get-server-state
     =.  bindings.st  (~(put by bindings.st) binding.act sender)
     =.  this  (save-server-state st)
     (emit-card [%pass /eyre-bind %arvo %e %connect binding.act dap.bowl])
   ::
       %unbind
-    =/  cur=(unit rail:tarball)
-      (~(get by bindings:get-server-state) binding.act)
-    ?:  &(?=(^ cur) !(owns u.cur))
-      ~&  >>  [%eyre-unbind-refused sender path.binding.act]
-      this
-    =/  orphans=(list @ta)
-      %+  murn  ~(tap by conns)
-      |=  [eid=@ta =binding:eyre]
-      ?.  =(binding binding.act)  ~
-      `eid
-    =.  this
-      %-  emit-cards
-      %+  turn  orphans
-      |=  eid=@ta
-      ^-  card
-      [%give %kick ~[/http-response/[eid]] ~]
-    =.  conns
-      %-  ~(gas by *(map @ta binding:eyre))
-      %+  skip  ~(tap by conns)
-      |=  [eid=@ta =binding:eyre]
-      =(binding binding.act)
-    ::  bindings changed, so this one writes the grub.
-    =/  st=server-state:nexus  get-server-state
-    =.  bindings.st  (~(del by bindings.st) binding.act)
-    (save-server-state st)
+    (drop-bindings ~[binding.act])
   ::
       %send
-    ::  only the handler of a bound connection answers it. A /grubbery/api
-    ::  request is no bound connection: its own request grub answers. A
-    ::  send on no connection at all is quietly dropped: a cancel can
-    ::  land before a request fiber's last send, and Eyre has no one to
-    ::  give it to anyway.
-    =/  bid=(unit binding:eyre)  (~(get by conns) eyre-id.act)
-    ?~  bid
-      ?.  =(sender [/sys/eyre/requests eyre-id.act])
-        ~?  >>  dbg  [%eyre-send-no-conn sender eyre-id.act]
-        this
-      (emit-cards (eyre-response-cards eyre-id.act eyre-update.act))
-    =/  hand=(unit rail:tarball)  (~(get by bindings:get-server-state) u.bid)
-    ?.  &(?=(^ hand) (owns u.hand))
-      ~&  >>  [%eyre-send-refused sender eyre-id.act]
-      this
     =/  crds=(list card)
       (eyre-response-cards eyre-id.act eyre-update.act)
     ::  %kick and %simple end the connection, so forget it. %header and
@@ -7690,12 +8872,15 @@
       =/  seg=path  i.segs
       =/  dir=path  (snip seg)
       =/  nam=@ta   (rear seg)
-      ::  Try /mar/clay/[desk]/ then /mar/clay/base/
+      ::  Try /mar/clay/[desk]/ then /mar/clay/base/, each resolved
+      ::  from the sender's position like any other mark: its app's
+      ::  own /code first, root /code last. So an app can ship the
+      ::  typed marc for an agent it pokes.
       =/  res=(unit built:nexus)
-        (get-built / %mar [(weld /clay/[dek] dir) nam])
+        (get-built path.sender %mar [(weld /clay/[dek] dir) nam])
       ?^  res  res
       =/  res=(unit built:nexus)
-        (get-built / %mar [(weld /clay/base dir) nam])
+        (get-built path.sender %mar [(weld /clay/base dir) nam])
       ?^  res  res
       $(segs t.segs)
     =/  =marc:tarball
@@ -7796,7 +8981,7 @@
   =/  rel=from:fiber:nexus  (relativize-from:nexus sender iris-rail)
   (enqu-take sender ~ ~ %poke rel [[/ %http-response] client-response])
 ::  /sys/iris/ws.ws-state websocket client service (groundwire vere, UIP-125).
-::  Design and lessons: gub/nex/sys/WEBSOCKET.md.
+::  Design and lessons: .grubbery/docs/sys-ws.md.
 ::
 ::  The fiber-facing contract, all at that rail:
 ::    [/ %ws-connect] [key url]    → [/ %ws-open] wid | [/ %ws-fail] tang
@@ -8035,9 +9220,11 @@
   ?.  ?=([@ @ *] pat)  (fail "scry needs a care and a desk")
   =/  at=path  [(scot %p our.bowl) i.t.pat (scot %da now.bowl) t.t.pat]
   =/  vane=@t  (end 3 i.pat)
-  ::  %cu is file existence, so it guards only the file read; a %cy or %cs
-  ::  of a directory has no file and goes through as asked
-  ?:  &(=(%cx i.pat) !.^(? %cu at))
+  ::  %cu answers whether a path exists, so it guards the file read (%cx)
+  ::  and the tree read (%ct, which clay-tree issues and which crashes the
+  ::  same way on a missing desk path); a %cy or %cs of a directory has no
+  ::  file and goes through as asked
+  ?:  &(?=(%cx %ct) !.^(? %cu at))
     (fail "no such file")
   ?:  &(=('g' vane) !=(%gu i.pat) !.^(? %gu /(scot %p our.bowl)/[i.t.pat]/(scot %da now.bowl)/$))
     (fail "no such agent")
@@ -8078,7 +9265,6 @@
   |=  st=scry-state-1:nexus
   ^+  this
   (save-file scry-state-rail [[/ %scry-state] st])
-
 ::  +handle-scry-grow: publish a page at spur, typed as $page.
 ::
 ++  handle-scry-grow
@@ -8151,28 +9337,7 @@
 ++  farm-top
   |=  pax=path
   ^-  (unit @ud)
-  ::  OUR LEDGER, not the namespace. This used to ask %gt whether the
-  ::  spur was listed and then %gw for its case, and that pair cannot be
-  ::  made safe: gall keeps an emptied plot after a full cull, %gt still
-  ::  lists it, %gw CRASHES on it, and a failing .^ cannot be softened
-  ::  from inside the event (+mute hands the scry back out to the real
-  ::  namespace, so the crash lands outside the simulation).
-  ::
-  ::  The old caveat told callers to "gate re-culls on their own records".
-  ::  That is this function's job, not theirs: every %grow and %cull in
-  ::  the system is emitted by the two handlers above, so the ledger is
-  ::  complete by construction and no app needs to keep a parallel count.
-  ::  Lattice kept one - a /pub/meta counter - and one disagreement
-  ::  between it and the farm made every publish 500 with no way for the
-  ::  app to recover.
-  ::
-  ::  A spur grown before the ledger existed reads as unbound, so a cull
-  ::  of it leaks a plot instead of crashing the event. Leak over crash.
-  ::  No pending-card scan any more. That loop existed to make a second
-  ::  grow in the SAME event see the first one's effect, which the ledger
-  ::  now does directly - it is written before the card is emitted. Left
-  ::  in, the two would both count the same grow and the ledger would run
-  ::  one case ahead of gall.
+  ::  A lookup, not a scry. See above for why.
   (~(get by farm:get-scry-state) pax)
 ::  +handle-scry-keen: read a path from a remote ship's farm. Nothing
 ::  is staged: the requester's return address (rail + wire) rides the
@@ -8199,7 +9364,7 @@
 ::  same wire the keen did — the service records every keen's wire in
 ::  scry-state (see +handle-scry-keen) and replays %yawn on each wire
 ::  the yawning grub holds at that spar. Other grubs' keens at the
-::  same spar stay parked: the longpoll pattern has many grubs waiting
+::  same spar stay waiting: the longpoll pattern has many grubs waiting
 ::  on one name, and a by-spar %wham would cancel them all (PR #44's
 ::  interim fix). %wham remains only as the fallback when bookkeeping
 ::  has no record — better a broad cancel than a keen that
@@ -8265,381 +9430,19 @@
     =.  last  last(eny (shaz (cat 3 eny.bowl eny.last)))
     (enqu-take sender ~ ~ %poke rel [[/ %entropy] eny.last])
   ==
-::  /sys/ames/ usergroups registry
+::  +usergroups-lane: a lane under /sys/ames/usergroups — a change to one
+::  means some group's files changed; +notify-lanes recomputes the ship
+::  weirs on it, whatever wrote (a dart, a fiber's replace, a reload).
 ::
-::  Namespace ownership + per-group weir management.
-::  - %register/%deregister: claim/release a path prefix
-::  - %how: set weir roads for a named group, scoped to owned prefix
-::  - %gc: sweep grants whose managing registrant no longer exists
-::  - %create-group/%delete-group: group lifecycle
-::  - %add-ship/%del-ship: group membership
-::
-++  handle-ames-registry
-  |=  [sender=rail:tarball =wire vaz=vase]
-  ^+  this
-  =/  reg-rail=rail:tarball  [/sys/ames %'registry']
-  =/  reg=(map rail:tarball path)
-    =/  got=(unit sang:tarball)  (peek-grub-now reg-rail)
-    ?~  got  *(map rail:tarball path)
-    =/  res  (mule |.(!<((map rail:tarball path) (need-vase:tarball u.got))))
-    ?:(?=(%| -.res) *(map rail:tarball path) p.res)
-  =/  act  !<(registry-action:nexus vaz)
-  ::  A sandboxed nexus cannot name its own absolute rail: its fibers see
-  ::  a pant relative to their own root. So an app registers the rail it
-  ::  knows - lattice and auspex send [/ %main.sig] - and grants roads in
-  ::  the relative form, [%| up lane]. Resolve both against the sender,
-  ::  whose absolute rail the kernel does know. Before this the relative
-  ::  rail collided with the root nexus's own [/ %main.sig] row, the %how
-  ::  from the app's real rail found no registrant, and every cross-ship
-  ::  grant from a desk-installed app was refused with nothing to show for
-  ::  it but a missing road.
-  ::
-  ::  A rail is relative when its path is a suffix of the sender's path:
-  ::  the sender's own absolute rail passes through unchanged, and a
-  ::  delegated registration of another grub (the shell registering a
-  ::  desk's share.usergroups) does not match and stays absolute.
-  =/  nexus-dir
-    |=  rel=path
-    ^-  (unit path)
-    =/  n=@ud  (lent path.sender)
-    =/  k=@ud  (lent rel)
-    ?:  (gth k n)  ~
-    ?.  =(rel (slag (sub n k) path.sender))  ~
-    `(scag (sub n k) path.sender)
-  =/  abs-road
-    |=  r=road:tarball
-    ^-  road:tarball
-    ?:  ?=(%& -.r)  r
-    =/  base=path
-      =/  up=@ud  p.p.r
-      =/  b=path  path.sender
-      |-  ^-  path
-      ?:  |(=(0 up) ?=(~ b))  b
-      $(up (dec up), b (snip `path`b))
-    ?-  -.q.p.r
-      %&  [%& %& [(weld base path.p.q.p.r) name.p.q.p.r]]
-      %|  [%& %| (weld base p.q.p.r)]
-    ==
-  =.  act
-    ?+    -.act  act
-        %register
-      =/  nd=(unit path)  (nexus-dir path.rail.act)
-      ?~  nd  act
-      act(rail sender, pax (weld u.nd pax.act))
-        %deregister
-      =/  nd=(unit path)  (nexus-dir path.rail.act)
-      ?~  nd  act
-      act(rail sender)
-        %how
-      %=  act
-        weir
-        :*  (~(run in make.weir.act) abs-road)
-            (~(run in poke.weir.act) abs-road)
-            (~(run in peek.weir.act) abs-road)
-        ==
-      ==
-    ==
-  ::  a sender registers itself, and claims its own directory or what is
-  ::  under it. Registering another rail (the shell for a desk's
-  ::  share.usergroups) or claiming a prefix anywhere else takes make
-  ::  authority there. Without this, an app allowed to poke the registry
-  ::  could claim / and grant the whole namespace to other ships, or
-  ::  evict and strip another app's row.
-  =/  may-make
-    |=  =lane:tarball
-    !?=([~ %|] (allowed-quiet %make sender `lane))
-  ?:  ?&  ?=(?(%register %deregister) -.act)
-          !=(sender rail.act)
-          !(may-make %& rail.act)
-      ==
-    ~&  >>  [%registry-refused-rail sender]
-    this
-  ?:  ?&  ?=(%register -.act)
-          !(is-prefix path.sender pax.act)
-          !(may-make %| pax.act)
-      ==
-    ~&  >>  [%registry-refused-prefix sender pax.act]
-    this
-  ?-    -.act
-      %register
-    =/  new-prefix  pax.act
-    ::  last-writer-wins for the SAME prefix: a new registrant claiming a
-    ::  prefix evicts the row that already claimed exactly that prefix,
-    ::  which auto-heals a stale row left by a deleted nexus that never got
-    ::  to deregister.
-    ::
-    ::  It deliberately does NOT evict OVERLAPPING claims, which is what
-    ::  this did before, and that broke delegation completely: the root
-    ::  nexus registers `/`, and `/` is a prefix of every path, so the
-    ::  symmetric overlap test meant the root's own re-registration evicted
-    ::  every other registrant on the ship. After any rebuild that re-rose
-    ::  the root — which is every rebuild — `reg` held exactly one row and
-    ::  every delegated grant was refused with %how-rejected-not-registered.
-    ::  A desk sharing its code cross-ship stopped being able to, silently:
-    ::  the follower saw an empty /desk/code, no error, nothing in a log.
-    ::
-    ::  Nesting is unambiguous for everything that reads this map. %how
-    ::  looks a registrant up by its EXACT rail and scopes its roads to that
-    ::  registrant's own prefix, so a parent and a child holding nested
-    ::  prefixes never contend for a road. And stale rows do not need this
-    ::  rule anyway: the /registrant subscription below reports a
-    ::  registrant's deletion to +registry-news, and %gc sweeps grants whose
-    ::  registrant is gone.
-    =/  pruned=(map rail:tarball path)
-      %-  ~(gas by *(map rail:tarball path))
-      %+  skip  ~(tap by reg)
-      |=  [r=rail:tarball existing=path]
-      ^-  ?
-      ?:  =(r rail.act)  %.n
-      =(new-prefix existing)
-    ::  watch the registrant so its deletion reaches +registry-news;
-    ::  drop the watches of any rows the claim evicted
-    =.  this
-      %+  roll  (skip ~(tap by reg) |=([r=rail:tarball *] (~(has by pruned) r)))
-      |=  [[r=rail:tarball *] acc=_this]
-      ?:  =(r rail.act)  acc
-      (sub-del:acc [%& r] reg-rail)
-    =.  this  (sub-put [%& rail.act] reg-rail /registrant ~)
-    =/  new-reg=(map rail:tarball path)  (~(put by pruned) rail.act new-prefix)
-    (save-file reg-rail [[/usergroups %registry] new-reg])
-  ::
-      %deregister
-    =/  prefix=(unit path)  (~(get by reg) rail.act)
-    ?~  prefix  this
-    =.  this  (sub-del [%& rail.act] reg-rail)
-    =/  new-reg=(map rail:tarball path)  (~(del by reg) rail.act)
-    =.  this  (save-file reg-rail [[/usergroups %registry] new-reg])
-    ?.  clean.act  this
-    ::  Strip roads under prefix from ALL groups. Same exclusion as %how: a
-    ::  deregistering outer registrant must not take a nested registrant's
-    ::  grants with it. `new-reg` is used, not `reg`, so the row just removed
-    ::  is already gone and cannot exclude itself.
-    =/  inner=(list path)
-      %+  murn  ~(tap by new-reg)
-      |=  [r=rail:tarball pre=path]
-      ?:  =(u.prefix pre)  ~
-      ?.  (is-prefix u.prefix pre)  ~
-      `pre
-    =/  groups=(list [name=path grp=ball:tarball])
-      (find-groups / (peek-ball-now /sys/ames/usergroups))
-    |-
-    ?~  groups  recompute-all-weirs
-    =/  how-rail=rail:tarball  [(grp-storage-path name.i.groups) %'how.weir']
-    =/  cur=weir:nexus  (read-group-weir how-rail)
-    =/  new=weir:nexus
-      :*  (replace-roads make.cur ~ u.prefix inner)
-          (replace-roads poke.cur ~ u.prefix inner)
-          (replace-roads peek.cur ~ u.prefix inner)
-      ==
-    =.  this  (save-file how-rail [[/ %weir] new])
-    $(groups t.groups)
-  ::
-      %how
-    =/  prefix=(unit path)  (~(get by reg) sender)
-    ?~  prefix
-      ~&  >>  [%how-rejected-not-registered sender]
-      this
-    =/  grp-dir=path  (grp-storage-path group.act)
-    =/  how-rail=rail:tarball  [grp-dir %'how.weir']
-    =/  exists=(unit sang:tarball)  (peek-grub-now [grp-dir %'who.ships'])
-    ?~  exists
-      ~&  >>  [%how-rejected-no-such-group group.act]
-      this
-    =/  cur=weir:nexus  (read-group-weir how-rail)
-    ?.  (validate-weir-roads weir.act u.prefix)
-      ~&  >>  [%how-rejected-roads-outside-prefix sender group.act u.prefix]
-      this
-    ::  the prefixes of other registrants nested inside ours — their roads are
-    ::  not ours to strip. See +replace-roads.
-    =/  inner=(list path)
-      %+  murn  ~(tap by reg)
-      |=  [r=rail:tarball pre=path]
-      ?:  =(r sender)  ~
-      ?:  =(u.prefix pre)  ~
-      ?.  (is-prefix u.prefix pre)  ~
-      `pre
-    =/  new=weir:nexus
-      :*  (replace-roads make.cur make.weir.act u.prefix inner)
-          (replace-roads poke.cur poke.weir.act u.prefix inner)
-          (replace-roads peek.cur peek.weir.act u.prefix inner)
-      ==
-    =.  this  (save-file how-rail [[/ %weir] new])
-    recompute-all-weirs
-  ::
-      %gc
-    ::  Garbage-collect grants by manager existence, not target
-    ::  existence: a grant may legitimately point at a path its
-    ::  manager has not created yet, but a grant whose managing
-    ::  registrant is gone can never be updated or revoked again.
-    ::  Drops ownership rows for dead registrant grubs, then strips
-    ::  every group road no live prefix covers, and re-establishes the
-    ::  registrant watches +registry-news relies on — a full
-    ::  reconciliation, so it also migrates rows that predate the
-    ::  watches. Removal-only on grants, so any local sender may
-    ::  invoke it.
-    =/  rows=(list [r=rail:tarball pre=path])  ~(tap by reg)
-    =/  live=(list path)
-      %+  murn  rows
-      |=([r=rail:tarball pre=path] ?~((peek-grub-now r) ~ `pre))
-    =.  this
-      %+  roll  rows
-      |=  [[r=rail:tarball *] acc=_this]
-      ?~  (peek-grub-now r)
-        (sub-del:acc [%& r] reg-rail)
-      (sub-put:acc [%& r] reg-rail /registrant ~)
-    =/  new-reg=(map rail:tarball path)
-      %-  ~(gas by *(map rail:tarball path))
-      (skip rows |=([r=rail:tarball pre=path] =(~ (peek-grub-now r))))
-    =?  this  !=(new-reg reg)
-      (save-file reg-rail [[/usergroups %registry] new-reg])
-    =/  keep-road
-      |=  =road:tarball
-      ^-  ?
-      =/  pax=(unit path)  (ug-extract-dir road)
-      ?~  pax  |
-      (lien live |=(pre=path (is-prefix pre u.pax)))
-    =/  groups=(list [name=path grp=ball:tarball])
-      (find-groups / (peek-ball-now /sys/ames/usergroups))
-    |-
-    ?~  groups  recompute-all-weirs
-    =/  how-rail=rail:tarball
-      [(grp-storage-path name.i.groups) %'how.weir']
-    =/  cur=weir:nexus  (read-group-weir how-rail)
-    =/  new=weir:nexus
-      :*  (sy (skim ~(tap in make.cur) keep-road))
-          (sy (skim ~(tap in poke.cur) keep-road))
-          (sy (skim ~(tap in peek.cur) keep-road))
-      ==
-    =?  this  !=(new cur)
-      (save-file how-rail [[/ %weir] new])
-    $(groups t.groups)
-  ==
-::
-::  +registry-news: a watched registrant grub changed. The registry
-::  subscribes to every registrant at %register, so a registrant's
-::  deletion arrives here as ordinary news. A content change is
-::  ignored; a death sweeps the ownership row, the group grants under
-::  its prefix, and the watch itself.
-::
-++  registry-news
-  |=  target=lane:tarball
-  ^+  this
-  ?.  ?=(%& -.target)  this
-  =/  r=rail:tarball  p.target
-  ?:  (grub-lives r)  this
-  =/  reg-rail=rail:tarball  [/sys/ames %'registry']
-  =.  this  (sub-del target reg-rail)
-  =/  reg=(map rail:tarball path)
-    =/  got=(unit sang:tarball)  (peek-grub-now reg-rail)
-    ?~  got  ~
-    =/  res  (mule |.(!<((map rail:tarball path) (need-vase:tarball u.got))))
-    ?:(?=(%| -.res) ~ p.res)
-  =/  pre=(unit path)  (~(get by reg) r)
-  ?~  pre  this
-  =.  this  (save-file reg-rail [[/usergroups %registry] (~(del by reg) r)])
-  =/  keep-road
-    |=  =road:tarball
-    ^-  ?
-    =/  pax=(unit path)  (ug-extract-dir road)
-    ?~  pax  %.y
-    !(is-prefix u.pre u.pax)
-  =/  groups=(list [name=path grp=ball:tarball])
-    (find-groups / (peek-ball-now /sys/ames/usergroups))
-  |-
-  ?~  groups  recompute-all-weirs
-  =/  how-rail=rail:tarball
-    [(grp-storage-path name.i.groups) %'how.weir']
-  =/  cur=weir:nexus  (read-group-weir how-rail)
-  =/  new=weir:nexus
-    :*  (sy (skim ~(tap in make.cur) keep-road))
-        (sy (skim ~(tap in poke.cur) keep-road))
-        (sy (skim ~(tap in peek.cur) keep-road))
-    ==
-  =?  this  !=(new cur)
-    (save-file how-rail [[/ %weir] new])
-  $(groups t.groups)
-::
-++  read-group-weir
-  |=  how-rail=rail:tarball
-  ^-  weir:nexus
-  =/  got=(unit sang:tarball)  (peek-grub-now how-rail)
-  ?~  got  *weir:nexus
-  =/  res  (mule |.(!<(weir:nexus (need-vase:tarball u.got))))
-  ?:(?=(%| -.res) *weir:nexus p.res)
-::
-++  is-prefix
-  |=  [pre=path full=path]
+++  usergroups-lane
+  |=  l=lane:tarball
   ^-  ?
-  ?~  pre  &
-  ?~  full  |
-  ?.  =(i.pre i.full)  |
-  $(pre t.pre, full t.full)
-::  +ug-extract-dir:
-::    a road's directory — a file's parent, or the dir itself.
-::    we ignore relative roads. normal weirs can have relative roads.
-::    usergroup weirs cannot.
-::
-++  ug-extract-dir
-  |=  =road:tarball
-  ^-  (unit path)
-  ?.  ?=(%& -.road)  ~ :: ignore relative roads
-  :-  ~
-  ?-  -.p.road
-    %|  p.p.road      :: for folders, the path
-    %&  path.p.p.road :: for files, the path of the parent folder
-  ==
-::
-++  validate-weir-roads
-  |=  [=weir:nexus prefix=path]
-  ^-  ?
-  %+  levy
-    %+  weld  ~(tap in make.weir)
-    %+  weld  ~(tap in poke.weir)
-    ~(tap in peek.weir)
-  |=  =road:tarball
-  =/  pax=(unit path)  (ug-extract-dir road)
-  ?~  pax  |  :: reject relative roads
-  (is-prefix prefix u.pax)
-::
-++  replace-roads
-  |=  $:  cur=(set road:tarball)
-          new=(set road:tarball)
-          prefix=path
-          inner=(list path)
-      ==
-  ^-  (set road:tarball)
-  ::  Strip the roads this registrant OWNS, then add the ones it is claiming.
-  ::
-  ::  Owning a prefix is not the same as owning every road under it. Registrants
-  ::  nest: the shell owns /apps/shell.shell, and a desk inside it owns
-  ::  /apps/shell.shell/desks/<x>.desk. `inner` is the prefixes of the OTHER
-  ::  registrants that sit inside ours, and roads under those are theirs.
-  ::
-  ::  Without that exclusion the outer registrant erases the inner one's grants
-  ::  every time it re-applies its own, which the shell does whenever a desk's
-  ::  share state changes — so a desk sharing its code always lost the race and
-  ::  the grant vanished a moment after it landed:
-  ::
-  ::    [%how-written public.grp peeks=4]   <- the desk's two roads arrive
-  ::    [%how-written public.grp peeks=2]   <- the shell re-applies, they are gone
-  ::
-  ::  with nothing refused and nothing logged.
-  =/  mine
-    |=  =road:tarball
-    ^-  ?
-    =/  pax=(unit path)  (ug-extract-dir road)
-    ?~  pax  |
-    ?.  (is-prefix prefix u.pax)  |
-    ::  inside our prefix, but under a nested registrant's: not ours
-    !(lien inner |=(i=path (is-prefix i u.pax)))
-  =/  stripped=(set road:tarball)
-    %-  ~(gas in *(set road:tarball))
-    (skip ~(tap in cur) mine)
-  ::  Add new roads
-  (~(uni in stripped) new)
+  ?=([%sys %ames %usergroups *] ?-(-.l %& path.p.l, %| p.l))
 ::
 ++  recompute-all-weirs
   ^+  this
+  ::  Only ship directories carry weirs. /public's grant reaches every
+  ::  ship through +compute-peer-weir-from, which unions it in.
   =/  ships-ball=ball:tarball  (peek-ball-now /sys/ames/ships)
   =/  kids=(list [@ta ball:tarball])  ~(tap by dir.ships-ball)
   |-

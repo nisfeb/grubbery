@@ -45,7 +45,9 @@ const STYLE = `
   }
   :host([layout="free"]) .icon { position: absolute; }
   .icon:hover { background: rgba(31,35,40,.05); }
-  .icon.sel { background: rgba(9,105,218,.12); }
+  /* neutral, not blue: blue is the selected PANE's colour, and a blue
+     tile inside a pane reads as a second, competing selection */
+  .icon.sel { background: var(--fg-sel-bg, #eaeef2); }
   .gl { font-size: 34px; line-height: 1.15; position: relative; }
   .gl .badge { position: absolute; right: -7px; bottom: -3px; font-size: 15px; }
   .gl img { width: 40px; height: 40px; object-fit: contain; display: block; }
@@ -54,10 +56,11 @@ const STYLE = `
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
     -webkit-box-orient: vertical; overflow-wrap: anywhere;
   }
+  .lb.unnamed { color: #8b949e; font-style: italic; }
   .loading {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
     font-size: 12px; color: #8b949e; user-select: none;
-    padding: 18px;
+    padding: 28px 18px; grid-column: 1 / -1;
   }
   .loading .d { animation: dpulse 1.1s ease-in-out infinite; }
   @keyframes dpulse { 50% { opacity: .2; } }
@@ -82,7 +85,7 @@ class FileGrid extends HTMLElement {
   #iconFn = null;
   #labelFn = null;
   #baseHref = '';
-  #grid;
+  #grid; #keys = false;
 
   constructor() {
     super();
@@ -138,6 +141,12 @@ class FileGrid extends HTMLElement {
     const rows = free ? Math.max(1, Math.floor((innerHeight - 44 - 24) / 104)) : 0;
     const sorted = this.#sorted();
 
+    // empty state — a genuinely empty directory reads as empty, not broken
+    if (!sorted.length) {
+      this.#grid.innerHTML = '<div class="loading"><span class="d">◆</span> empty directory</div>';
+      return;
+    }
+
     sorted.forEach((item, i) => {
       const el = document.createElement('div');
       el.className = 'icon';
@@ -169,9 +178,13 @@ class FileGrid extends HTMLElement {
 
       const lb = document.createElement('div');
       lb.className = 'lb';
-      lb.textContent = this.#labelFn ? this.#labelFn(item) : item.name;
+      const lab = this.#labelFn ? this.#labelFn(item) : item.name;
+      // a grub may have no name (dill's default session is the empty one):
+      // an empty label is an invisible target, so it is named for the reader
+      if (lab === '' || lab == null) { lb.textContent = '[unnamed]'; lb.classList.add('unnamed'); }
+      else lb.textContent = lab;
       // the label clamps to two lines; hover shows the full name
-      el.title = item.name;
+      el.title = item.name || '[unnamed]';
 
       el.append(gl, lb);
 
@@ -186,6 +199,7 @@ class FileGrid extends HTMLElement {
       this.#wireClick(el, item);
       this.#grid.appendChild(el);
     });
+    this.#attachKeys();
   }
 
   #wireDrag(el, item) {
@@ -212,6 +226,81 @@ class FileGrid extends HTMLElement {
     });
   }
 
+  // one open path for the mouse and the keyboard
+  #open(el, item, mods) {
+    const href = this.#baseHref ? this.#baseHref + '/' + item.name : item.name;
+    this.#emit('ft-navigate', { item, href, mods: mods || { meta: false, ctrl: false, shift: false, alt: false } });
+  }
+
+  // ← ↑ → ↓ move the selection, Enter opens it. Nothing else: the same
+  // minimal vocabulary <tree-view> uses, and it reuses .sel, the class a
+  // click and a drag already set, rather than inventing a second cursor.
+  //
+  // Movement is measured, not assumed: the grid is auto-fill (and in free
+  // mode the tiles are absolutely positioned and draggable), so the column
+  // count is whatever the layout happens to be. Up/down pick the nearest
+  // tile by x in the adjacent visual row. getBoundingClientRect, not
+  // offsetTop/offsetLeft -- offsetParent is null inside a shadow root, so
+  // those offsets are not meaningful here.
+  #attachKeys() {
+    if (this.#keys) return;
+    this.#keys = true;
+    this.setAttribute('data-focus', '');          // gmux +focusContent finds this; querySelector cannot cross the shadow boundary
+    const g = this.#grid;
+    if (!g.hasAttribute('tabindex')) g.tabIndex = 0;
+    g.addEventListener('keydown', (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key;
+      let used = true;
+      if (k === 'ArrowLeft' || k === 'ArrowRight' || k === 'ArrowUp' || k === 'ArrowDown') {
+        this.#move(k.slice(5).toLowerCase());
+      } else if (k === 'Enter') {
+        const cur = g.querySelector('.icon.sel') || this.#tiles()[0];
+        if (cur) { this.#point(cur); if (cur.__item) this.#open(cur, cur.__item, { meta: false, ctrl: false, shift: e.shiftKey, alt: false }); }
+      } else used = false;
+      if (used) { e.preventDefault(); e.stopPropagation(); }
+    });
+    g.addEventListener('focus', () => {
+      if (!g.querySelector('.icon.sel')) { const t = this.#tiles(); if (t.length) this.#point(t[0]); }
+    });
+  }
+  #tiles() { return Array.from(this.#grid.querySelectorAll('.icon')); }
+  #point(el) {
+    this.#grid.querySelectorAll('.icon.sel').forEach((x) => x.classList.remove('sel'));
+    if (el) { el.classList.add('sel'); el.scrollIntoView({ block: 'nearest' }); }
+  }
+  #move(dir) {
+    const t = this.#tiles();
+    if (!t.length) return;
+    const cur = this.#grid.querySelector('.icon.sel');
+    const i = t.indexOf(cur);
+    if (i < 0) { this.#point(t[0]); return; }
+    const r = t.map((e) => e.getBoundingClientRect());
+    const laidOut = r.some((x) => x.width || x.height);
+    // left/right walk the flat order; so does everything when the grid is
+    // unrendered, so the keys never go dead for a layout reason
+    if (!laidOut || dir === 'left' || dir === 'right') {
+      const n = i + ((dir === 'right' || dir === 'down') ? 1 : -1);
+      if (n >= 0 && n < t.length) this.#point(t[n]);
+      return;
+    }
+    const cx = r[i].left, cy = r[i].top;
+    const ahead = t.map((e, j) => ({ e, x: r[j].left, y: r[j].top }))
+      .filter((o) => (dir === 'down' ? o.y > cy + 1 : o.y < cy - 1));
+    if (!ahead.length) return;
+    const ys = ahead.map((o) => o.y);
+    const row = dir === 'down' ? Math.min.apply(null, ys) : Math.max.apply(null, ys);
+    const band = ahead.filter((o) => Math.abs(o.y - row) < 2);
+    band.sort((a, b) => Math.abs(a.x - cx) - Math.abs(b.x - cx));
+    this.#point(band[0].e);
+  }
+
+  // gmux focuses the host; the keys live on the shadow grid.
+  focus(o) {
+    if (this.#grid) this.#grid.focus(o);
+    else HTMLElement.prototype.focus.call(this, o);
+  }
+
   #wireClick(el, item) {
     if (!this.#isFree()) {
       el.addEventListener('click', () => {
@@ -219,11 +308,8 @@ class FileGrid extends HTMLElement {
         el.classList.add('sel');
       });
     }
-    el.addEventListener('dblclick', () => {
-      const href = this.#baseHref
-        ? this.#baseHref + '/' + item.name
-        : item.name;
-      this.#emit('ft-navigate', { item, href });
+    el.addEventListener('dblclick', (e) => {
+      this.#open(el, item, { meta: e.metaKey, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey });
     });
   }
 }

@@ -7,6 +7,30 @@
 ::  earn each road through weir.json + shell approval. Built-ins,
 ::  including the shell (the capability broker that sands everyone
 ::  else), just run open here.
+::  git-repo-config: config for a /git/repo instance — clones + checks
+::  out a github repo. poll drives the periodic re-fetch.
+=/  git-repo-config
+  |=  [repo=@t ref=@t]
+  ^-  json
+  %-  pairs:enjs:format
+  :~  ['repo' s+repo]
+      ['ref' s+ref]
+      ['token' s+'']
+      ['poll' n+'15']
+  ==
+::  desk-source-config: config for a /desk instance — subscribes to a
+::  code dir already in the namespace (here, a git_repo's checked-out
+::  tree) and deploys it. source is that dir's absolute path.
+=/  desk-source-config
+  |=  source=@t
+  ^-  json
+  %-  pairs:enjs:format
+  :~  ['source' s+source]
+      ['share' a+~]
+      ::  full version-file name — lets the desk watch its road before
+      ::  the source (a git_repo) has checked out. See desk.hoon.
+      ['version' s+'version.json']
+  ==
 ^-  nexus:nexus
 |%
 ++  on-load
@@ -52,64 +76,39 @@
         [%fall %& [/sys/scry %'main.scry-state'] [[/ %scry-state] *scry-state:nexus]]
         ::  child nexuses
         ::
-        ::  Lattice is NOT declared here any more, and that is the whole
-        ::  point of the migration: it installs as a stock desk under the
-        ::  shell, from its own repo, exactly as auspex, contacts and
-        ::  wallet do. A row here would boot a second instance that fights
-        ::  the desk's one for the /apps/lattice eyre binding.
-        ::
-        ::  What remains below is the core tier plus the apps a grubbery
-        ::  ship needs in order to install anything at all: the shell to
-        ::  consent, the forge to check out source, mcp to be reachable
-        ::  from a tool, explorer to look at the namespace.
-        ::
-        ::  the shell: the home surface and the userspace permission
-        ::  MANAGER. It reads each app's alias.json and weir.json, records
-        ::  what the user consents to, writes the weirs the kernel then
-        ::  enforces, and owns cross-ship discovery - public.json, the
-        ::  /peers mirrors, and the /sys/link registry above. Restored from
-        ::  upstream in the develop merge: the 2026-09-05 trim had deleted
-        ::  it because at the time nothing reached it.
-        [%fall %| /apps/'shell.shell' [`[`[/ %shell] ~ %.n ~] ~]]
-        ::
-        ::  mcp hosts the memory tool surface. Lattice serves no /mcp
-        ::  route of its own, so lattice-list, lattice-read, lattice-save
-        ::  and the rest live in gub/lib/tool-bundle/ here - a hermetic
-        ::  namespace carrying its own copies of the two lattice libs its
-        ::  tools import. Those tools reach the lattice instance through
-        ::  one constant, +base in tool-bundle/lattice-mcp.hoon, which the
-        ::  desk migration repoints at the shell's data tree. Removing mcp
-        ::  would leave the memory store reachable only over HTTP, which
-        ::  is the feature most of this distribution's users are here for.
-        ::
-        [%fall %| /apps/'mcp.mcp' [`[`[/ %mcp] ~ %.n ~] ~]]
-        ::
-        ::  explorer: the namespace browser and file viewer. Kept as a
-        ::  DEFAULT app, not as something a user installs later - it is how
-        ::  you look at a grubbery ship at all, and a distribution whose
-        ::  only windows onto the namespace are two apps of our own is a
-        ::  worse ship than the one upstream ships. Its row is upstream's,
-        ::  unchanged.
-        ::
-        [%fall %| /apps/'explorer.explorer' [`[`[/ %explorer] ~ %.n ~] ~]]
+        ::  the shell: the one bootstrap nexus, the user's interface to the
+        ::  kernel. Its home page's local tiles live inside it (/tiles).
+        [%fall %| /apps/shell [`[`[/ %shell] ~ %.n ~] ~]]
         ::
         ::  forge: the UI over git repo instances, housing them at
-        ::  /apps/forge.git_forge/repos/<name>.git_repo. Upstream's row,
-        ::  unchanged.
+        ::  /repos inside itself.
         ::
-        ::  This is a PUBLISHER's tool, not a user's: an installer gets apps
-        ::  from a peer's storefront and never needs it. It is here because
-        ::  we publish, and a desk mirrors from a path in the namespace - so
-        ::  something has to put the source there, and checking out the repo
-        ::  is how. ~200 KB, the largest single thing we carry for a role
-        ::  most ships never play; revisit if the ball budget gets tight.
+        ::  contacts + wallet seeds DISABLED: desks are managed by the
+        ::  shell's sync-defaults pipeline now.
         ::
-        [%fall %| /apps/'forge.git_forge' [`[`[/git %forge] ~ %.n ~] ~]]
-        ::  github: how a git_repo actually FETCHES. Nothing imports it -
-        ::  repo.hoon reaches it by poking /apps/github.github/main.sig - so
-        ::  the forge looked complete and then failed at run time with "no
-        ::  process at /apps/github.github/main.sig". Upstream's row.
-        [%fall %| /apps/'github.github' [`[`[/ %github] ~ %.n ~] ~]]
+        ::  /sys/link built-in names: the apps that ship with grubbery claim
+        ::  their discovery names HERE, next to where the apps are declared, so
+        ::  @github/@forge/… resolve the instant the tree loads — no shell scan,
+        ::  no approval, no first-boot race. Each dest.lanes points at the app's
+        ::  own root (a %| dir lane). The shell registers only the names USER
+        ::  DESKS claim; these shipped names are a fact of the base tree.
+        [%fall %| /sys/link/explorer [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/explorer %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/shell/explorer]]]]
+        ::  tools: the MCP endpoint's tools nexus is a service of the shell
+        ::  (its /tools directory, lib/shell/mcp), so @tools is that.
+        [%fall %| /sys/link/tools [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/tools %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/shell/tools]]]]
+        ::  forge: the shell's git forge, and the github proxy it houses
+        ::  at /github. Stock sync finds the forge by this name.
+        [%fall %| /sys/link/forge [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/forge %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/shell/forge]]]]
+        [%fall %| /sys/link/github [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/github %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/shell/forge/github]]]]
+        ::  notifications: the inbox is a service of the shell (its
+        ::  /notifications directory); the name points into it, so
+        ::  @notifications/main.sig is the shell's notifications/main.sig.
+        [%fall %| /sys/link/notifications [`[~ ~ %.n ~] ~]]
+        [%fall %& [/sys/link/notifications %'dest.lanes'] [[/ %lanes] ~[`lane:tarball`[%| /apps/shell/notifications]]]]
     ==
 ::
 ++  on-file

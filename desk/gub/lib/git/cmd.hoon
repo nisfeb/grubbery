@@ -32,13 +32,86 @@
   ++  val-t
     ;~  pose
       ::  "double quoted" (git/shell convention); may span lines, so a
-      ::  commit message can carry a body
-      (ifix [doq doq] (boss 256 (star ;~(less doq ;~(pose prn (just `@`10))))))
+      ::  commit message can carry a body. \" and \\ are escapes: without
+      ::  them a message that quotes anything ended at its own first quote,
+      ::  the rest parsed as garbage, and the command came back
+      ::  "unrecognized" — which the caller never saw, since the lane
+      ::  reports accepted, not done. A push then said "nothing to push".
+      %+  ifix  [doq doq]
+      %+  boss  256
+      %-  star
+      ;~  pose
+        ;~(pfix bas doq)                        ::  \" is a quote
+        ;~(pfix bas bas)                        ::  \\ is a backslash
+        ;~(less doq ;~(pose prn (just `@`10)))
+      ==
       ::  'single quoted'
       (ifix [soq soq] (boss 256 (star qit)))
       ::  unescaped cord
       (boss 256 (star ;~(less ace qit)))
     ==
+  ::  +trim-tail: drop trailing spaces and newlines from a tape.
+  ::
+  ++  trim-tail
+    |=  t=tape
+    ^-  tape
+    =/  r=tape  (flop t)
+    |-  ^-  tape
+    ?~  r  ~
+    ?:  |(=(' ' i.r) =(`@`10 i.r))  $(r t.r)
+    (flop r)
+  ::  +val-rest: EVERYTHING that is left, as one cord.
+  ::
+  ::    For a trailing text option whose value runs to the end of the line —
+  ::    a commit message, typically. +val-t stops a bare value at the first
+  ::    space, which is git's own rule (quote it, or it is one word), but an
+  ::    unquoted multi-word message then parsed as its first word and left
+  ::    the rest dangling, so the whole command came back `unrecognized`
+  ::    with no hint that quotes were what it wanted. A verb may offer this
+  ::    as a SECOND pass (see +parse-command) so the strict grammar — where
+  ::    repeated -m means paragraphs — still wins when it fits.
+  ::
+  ::    Trailing whitespace is dropped; inner spacing is kept as written.
+  ::
+  ++  val-rest
+    %+  cook  |=(t=tape (crip (trim-tail t)))
+    (plus ;~(pose prn (just `@`10)))
+  ::  +split-pathspec: git's end-of-options convention
+  ::
+  ::    Everything after a bare `--` is a pathspec and never an option.
+  ::    Split it off BEFORE any option grammar runs: +val-rest is greedy
+  ::    to end-of-line by design, so a `-m` that sees `--` swallows it as
+  ::    message text. Doing it here also means every verb gets pathspec
+  ::    support for free, and strict and loose passes agree.
+  ::
+  ::    Returns the command with the pathspec removed, and the paths. No
+  ::    `--` yields the text unchanged and ~, so this is safe to run over
+  ::    every command. A leading slash is optional on each path: `--
+  ::    desk/app/x.hoon` and `-- /desk/app/x.hoon` both parse.
+  ::
+  ++  split-pathspec
+    |=  txt=@t
+    ^-  [cmd=@t paths=(list path)]
+    =/  res
+      %+  rust  (trip txt)
+      ;~  plug
+        (star ;~(less (jest ' -- ') prn))
+        ;~  pose
+          ;~(pfix (jest ' -- ') (cook some (star prn)))
+          (easy ~)
+        ==
+      ==
+    ?~  res  [txt ~]
+    =/  head=tape  -.u.res
+    =/  tail=(unit tape)  +.u.res
+    :-  (crip (trim-tail head))
+    ?~  tail  ~
+    =/  toks  (rust u.tail (most (plus ace) (plus ;~(less ace prn))))
+    ?~  toks  ~
+    %+  turn  u.toks
+    |=  t=tape
+    ^-  path
+    (stab (crip ?:(=('/' -.t) t ['/' t])))
   ++  value
     |*  kind=opt-kind
     ?-  kind

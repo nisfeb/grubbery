@@ -9,7 +9,7 @@
 ::  The data nexus's on-load atomically checks out the tree.
 ::
 ::  Git actions (pull, checkout, branch, stash, commit, ...) run through
-::  the serial command lane at /run.git-action — poke it a {command} string.
+::  the serial command queue at /run.git-action — poke it a {command} string.
 ::
 /<  git-obj  /lib/git/object.hoon
 /<  git-pack  /lib/git/pack.hoon
@@ -30,7 +30,7 @@
       %+  spin:loader  ball
       :~  (manifest:loader 0)
           [%fall %& [/ %'config.json'] [[/ %json] default-config]]
-          ::  the serial command lane: one stateful grub (run.git-action) at
+          ::  the serial command queue: one stateful grub (run.git-action) at
           ::  root — the single entry point for every git action. Runs commands
           ::  one at a time: a repo has one working tree / index / HEAD, so
           ::  operations must not interleave. Poke it a {command} string; read
@@ -52,36 +52,78 @@
       ^-  process:fiber:nexus
       ?+    rail  stay:m
           ::
-          ::  /run.git-action: the serial command lane. Poke a {command}; it
+          ::  /run.git-action: the serial command queue. Poke a {command}; it
           ::  parses (lib/git/action), marks the job `active`, runs it to
           ::  completion, then appends the outcome to `log`. One command at a
           ::  time — the working tree / index / HEAD are single, so git
           ::  operations must not interleave.
           ::
           [~ %'run.git-action']
-        ;<  ~  bind:m  (rise-lane prod)
+        ;<  ~  bind:m  (rise-queue prod)
         |-
-        ;<  poke-sage=sage:tarball  bind:m  take-poke:io
+        ::  take-poke-FROM: the queue remembers who asked, so it can answer
+        ::  them when the command is actually finished. The %pack the poker
+        ::  already got means "consumed" -- queued, not done -- which is
+        ::  exactly what the tool used to report as `ran:`.
+        ::
+        ::  Only when the request says `reply`. The poll daemon pokes this
+        ::  queue too and then goes back to waiting on poll.json, so an
+        ::  unsolicited poke would land on its fiber as a skip and sit in
+        ::  its skip queue for ever.
+        ::
+        ;<  [src=from:fiber:nexus poke-sage=sage:tarball]  bind:m  take-poke-from:io
+        ::  the queue speaks json. A poke in another mark is not a command;
+        ::  say so and wait for the next, rather than crash on its body
+        ::  (a banged queue rebuilds on every take, which is the freeze).
+        ?.  =([/ %json] p.poke-sage)
+          ~&  >>>  [%git-action-unrecognized-poke mark=p.poke-sage from=src]
+          $
         =/  jon=json  (fall (mole |.(!<(json q.poke-sage))) *json)
         =/  raw=@t  (fall (jget jon 'command') '')
+        =/  wants-reply=?
+          =/  r  (~(get by ?:(?=(%o -.jon) p.jon ~)) 'reply')
+          ?=([~ %b %.y] r)
+        =/  answer
+          |=  out=outcome:git-act
+          =/  m  (fiber:fiber:nexus ,~)
+          ^-  form:m
+          ?.  wants-reply  (pure:m ~)
+          =/  rep=json
+            %-  pairs:enjs:format
+            :~  ['ok' b+?=(%ok -.out)]
+                ['message' s+msg.out]
+                ['command' s+raw]
+            ==
+          ::  poke-SOFT: a requester that has gone away must not take the
+          ::  queue down with it, and a failed answer is not a failed job.
+          ::  two different +bends: a fiber's `from` is (pair @ud rail),
+          ::  while a +road's relative arm is (pair @ud lane) -- so the
+          ::  sender's rail has to be wrapped as a lane to address it.
+          =/  back=road:tarball  [%| [p.src [%& q.src]]]
+          ;<  err=(unit tang)  bind:m  (poke-soft:io back [[/ %json] rep])
+          (pure:m ~)
         =/  parsed=(unit git-command:git-act)  (parse-command:git-act raw)
-        ;<  st=action-state:git-act  bind:m  (get-state-as:io ,action-state:git-act)
+        ;<  st-vase=vase  bind:m  get-state:io
+        =/  st=action-state:git-act  (read-action-state:git-act q.st-vase)
         ?~  parsed
           ::  unparseable — log it and wait for the next command
           ;<  now=@da  bind:m  get-time:io
-          =/  bad=done:git-act  [next-id.st [%invalid raw] raw [%error 'unrecognized command'] now]
+          =/  bad=done:git-act  [next-id.st raw [%error 'unrecognized command'] now]
           ;<  ~  bind:m  (replace:io st(log [bad log.st], next-id +(next-id.st)))
+          ;<  ~  bind:m  (answer [%error 'unrecognized command'])
           $
         ::  mark the job active, run it, log the outcome
-        =/  =job:git-act  [next-id.st u.parsed raw %start ~]
+        =/  =job:git-act  [next-id.st raw %start ~]
         ;<  ~  bind:m  (replace:io st(active `job, next-id +(next-id.st)))
         ;<  =outcome:git-act  bind:m  (run-command u.parsed)
         ;<  end=@da  bind:m  get-time:io
-        ;<  st2=action-state:git-act  bind:m  (get-state-as:io ,action-state:git-act)
-        =/  entry=done:git-act  [id.job u.parsed raw outcome end]
+        ;<  st2-vase=vase  bind:m  get-state:io
+        =/  st2=action-state:git-act  (read-action-state:git-act q.st2-vase)
+        =/  entry=done:git-act  [id.job raw outcome end]
         ;<  ~  bind:m  (replace:io st2(active ~, log [entry log.st2]))
+        ;<  ~  bind:m  (answer outcome)
         $
-          ::  /poll.json: the sync daemon. Boot-pull once, then poke the lane's
+          ::  /poll.json: the sync daemon. Boot-pull once, then poke the queue's
           ::  `pull` on poll.json's own `minutes` interval, watching itself for
           ::  changes. 0 = off (park until the interval is set).
           ::
@@ -137,7 +179,7 @@
       author-email=@t
   ==
 ::
-::  +run-command: execute one parsed git command in the serial lane,
+::  +run-command: execute one parsed git command in the serial queue,
 ::  yielding its outcome. Verbs are wired incrementally; unwired ones
 ::  report an error rather than silently no-op.
 ::
@@ -148,42 +190,36 @@
   ?-  -.cmd
     %stash          op-stash
     %stash-pop      op-stash-pop
+    %stash-drop     op-stash-drop
     %checkout       (op-checkout branch.cmd)
     %branch         (op-branch branch.cmd)
     %branch-delete  (op-branch-delete branch.cmd)
     %add            (op-add paths.cmd)
-    %commit         (op-commit message.cmd)
+    %commit         (op-commit message.cmd paths.cmd)
     %push           (op-push where.cmd)
     %pull           op-pull
     %invalid        (pure:m [%error 'unrecognized command'])
     %stash-list     op-stash-list
   ==
-::  +op-stash: stash the dirty index and reset the tree to HEAD. Writes
-::  stash-request.sig into the data ball and reloads (the data nexus does
-::  the git work). Same logic the /actions/stash.sig arm ran.
+::  +op-stash, +op-stash-pop, +op-stash-drop: the stash stack, each one
+::  request to the data nexus, which holds the tree and the index and
+::  answers from them: a clean tree has nothing to stash, an empty stack
+::  nothing to pop or drop.
 ::
 ++  op-stash
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
   ^-  form:m
-  ;<  req-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data %'stash-request.sig'])
-  ;<  ~  bind:m  (write-repo-file req-rd [[/ %sig] ~])
-  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-  ;<  ~  bind:m  (reload:io data-rd)
-  (pure:m [%ok 'stashed'])
-::  +op-stash-pop: pop the most recent stash onto the working tree.
-::
+  (request 'stash' ~)
 ++  op-stash-pop
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
   ^-  form:m
-  ;<  req-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data %'stash-pop-request.sig'])
-  ;<  ~  bind:m  (write-repo-file req-rd [[/ %sig] ~])
-  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-  ;<  ~  bind:m  (reload:io data-rd)
-  (pure:m [%ok 'stash popped'])
+  (request 'stash-pop' ~)
+++  op-stash-drop
+  =/  m  (fiber:fiber:nexus ,outcome:git-act)
+  ^-  form:m
+  (request 'stash-drop' ~)
 ::  +op-stash-list: report the stash stack (from data/ui/stash.json, which
-::  the data nexus builds from the reflog) as a one-line lane summary.
+::  the data nexus builds from the reflog) as a one-line queue summary.
 ::
 ++  op-stash-list
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
@@ -222,6 +258,98 @@
   ?+  cl  (pure:m %.n)
     [~ %b %.y]  (pure:m %.y)
   ==
+::  +request: one request to the data nexus, answered. Appends {id, kind,
+::  ...fields} to data/requests.json, reloads the data nexus, which runs
+::  every pending request in order and records each outcome beside its
+::  id, and reads this one's back. The id is this command's own queue id.
+::  An id still pending after the reload, or missing altogether, is
+::  reported as that: the request did not run. Never an inference from
+::  HEAD or a status count.
+::
+++  request
+  |=  [kind=@t fields=(list [@t json])]
+  =/  m  (fiber:fiber:nexus ,outcome:git-act)
+  ^-  form:m
+  ;<  st-vase=vase  bind:m  get-state:io
+  =/  st=action-state:git-act  (read-action-state:git-act q.st-vase)
+  =/  id=@ud  ?~(active.st 0 id.u.active.st)
+  ;<  rd=road:tarball  bind:m
+    (ancestor-road:io [/git %repo] [%& /data %'requests.json'])
+  ;<  cur=json  bind:m  (read-requests rd)
+  =/  entry=json
+    (pairs:enjs:format [['id' (numb:enjs:format id)] ['kind' s+kind] fields])
+  =/  next=json
+    %-  pairs:enjs:format
+    :~  ['pending' a+(snoc (json-list cur 'pending') entry)]
+        ['done' a+(json-list cur 'done')]
+    ==
+  ;<  ~  bind:m  (write-repo-file rd [[/ %json] next])
+  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
+  ;<  ~  bind:m  (reload:io data-rd)
+  ;<  after=json  bind:m  (read-requests rd)
+  =/  mine=(unit json)  (find-id (json-list after 'done') id)
+  ?^  mine
+    =/  msg=@t  (json-str u.mine 'message')
+    ?:  (json-flag u.mine 'ok')  (pure:m [%ok msg])
+    (pure:m [%error msg])
+  ?^  (find-id (json-list after 'pending') id)
+    %-  pure:m
+    :-  %error
+    (crip "the data nexus did not run the {(trip kind)} request: it is still pending after the reload")
+  %-  pure:m
+  :-  %error
+  (crip "the data nexus gave no answer to the {(trip kind)} request")
+::  +read-requests: data/requests.json, or an empty object when absent.
+::
+++  read-requests
+  |=  rd=road:tarball
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ;<  v=(unit view:nexus)  bind:m  (peek-soft:io rd `[/ %json])
+  ?~  v  (pure:m [%o ~])
+  =/  j=json  (view-to-json u.v)
+  (pure:m ?:(?=([%o *] j) j [%o ~]))
+++  json-list
+  |=  [j=json k=@t]
+  ^-  (list json)
+  ?.  ?=([%o *] j)  ~
+  =/  v  (~(get by p.j) k)
+  ?.(?=([~ %a *] v) ~ p.u.v)
+++  json-str
+  |=  [j=json k=@t]
+  ^-  @t
+  ?.  ?=(%o -.j)  ''
+  =/  v  (~(get by p.j) k)
+  ?.(?=([~ %s *] v) '' p.u.v)
+++  json-flag
+  |=  [j=json k=@t]
+  ^-  ?
+  ?.  ?=(%o -.j)  %.n
+  ?=([~ %b %.y] (~(get by p.j) k))
+::  +find-id: the entry of a request list with this id.
+::
+++  find-id
+  |=  [l=(list json) id=@ud]
+  ^-  (unit json)
+  |-
+  ?~  l  ~
+  =/  got  ?.(?=(%o -.i.l) ~ (~(get by p.i.l) 'id'))
+  ?:  &(?=([~ %n *] got) =(`id (rush p.u.got dem)))  `i.l
+  $(l t.l)
+::  +local-ahead: how many local commits the remote-tracking ref lacks
+::  (data/ui/status.json "ahead"); 0 when unknown.
+::
+++  local-ahead
+  =/  m  (fiber:fiber:nexus ,@ud)
+  ^-  form:m
+  ;<  status-rd=road:tarball  bind:m
+    (ancestor-road:io [/git %repo] [%& /data/ui %'status.json'])
+  ;<  status-view=view:nexus  bind:m  (peek:io status-rd `[/ %json])
+  =/  status-json=json  (view-to-json status-view)
+  ?.  ?=(%o -.status-json)  (pure:m 0)
+  =/  ah  (~(get by p.status-json) 'ahead')
+  ?.  ?=([~ %n *] ah)  (pure:m 0)
+  (pure:m (fall (rush p.u.ah dem) 0))
 ::  +op-branch: create refs/heads/<name> at the current HEAD.
 ::
 ++  op-branch
@@ -259,19 +387,24 @@
   (pure:m [%ok (crip "deleted branch {(trip name)}")])
 ::  +op-checkout: git checkout <ref>. A branch name → attached HEAD
 ::  (ref: refs/heads/<name>); a commit hash → detached HEAD (raw hash).
-::  Refuses on a dirty tree; updates HEAD and reloads the data nexus.
+::  The data nexus refuses a dirty tree itself, from the bytes, when it
+::  takes the request — no pre-check here against the cached status.
 ::
 ++  op-checkout
   |=  name=branch:git-act
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
   ^-  form:m
   ?:  =('' name)  (pure:m [%error 'branch or commit required'])
-  ;<  clean=?  bind:m  working-tree-clean
-  ?.  clean  (pure:m [%error 'working tree is dirty — commit or stash first'])
   ;<  ref-hash=@t  bind:m  (resolve-ref name)
-  ::  a matching branch → attached checkout
+  ::  a matching branch → attached checkout. The branch becomes the TRACKED
+  ::  ref too (config.json "ref"): +op-pull checks out ref.cfg whenever new
+  ::  objects arrive, so a checkout that left ref behind was undone by the
+  ::  next poll (a handbook on develop vanished when ref still said main).
   ?.  =('' ref-hash)
-    ;<  ~  bind:m  (do-checkout (crip "ref: refs/heads/{(trip name)}"))
+    ;<  out=outcome:git-act  bind:m
+      (do-checkout (crip "ref: refs/heads/{(trip name)}") %.n)
+    ?:  ?=(%error -.out)  (pure:m out)
+    ;<  ~  bind:m  (track-ref name)
     (pure:m [%ok (crip "switched to {(trip name)}")])
   ::  not a branch → try the arg as a full commit hash (detached HEAD)
   =/  parsed=(unit @ux)  (rust (trip name) parse-hash-sha-1:git-transport)
@@ -280,60 +413,69 @@
   =/  sto  store:~(. git-repo repo)
   ?~  (get-commit:sto u.parsed)
     (pure:m [%error (crip "commit not found: {(scag 7 (trip name))}")])
-  ;<  ~  bind:m  (do-checkout name)
+  ;<  out=outcome:git-act  bind:m  (do-checkout name %.n)
+  ?:  ?=(%error -.out)  (pure:m out)
   (pure:m [%ok (crip "checked out {(scag 7 (trip name))} (detached)")])
-::  +do-checkout: write HEAD to a value and reload the data nexus.
+::  +track-ref: record a branch as the one pulls follow (config.json "ref").
 ::
-++  do-checkout
-  |=  value=@t
+++  track-ref
+  |=  name=@t
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  ~  bind:m  (write-head value)
-  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-  (reload:io data-rd)
-::  +rise-lane: the lane fiber restarting after a crash. A command that
+  ;<  cfg-rd=road:tarball  bind:m
+    (ancestor-road:io [/git %repo] [%& / %'config.json'])
+  ;<  cv=view:nexus  bind:m  (peek:io cfg-rd `[/ %json])
+  =/  obj=(map @t json)
+    ?.  ?=([%file *] cv)  ~
+    =/  j=(unit json)  (mole |.(!<(json (need-vase:tarball sang.cv))))
+    ?:  &(?=(^ j) ?=([%o *] u.j))  p.u.j
+    ~
+  (over:io cfg-rd [[/ %json] o+(~(put by obj) 'ref' s+name)])
+::  +do-checkout: ask the data nexus to move HEAD: a checkout request
+::  {head, force}. The data nexus holds the tree and the index, so it
+::  alone decides whether the move would overwrite uncommitted work. HEAD
+::  is never written from this side.
+::
+++  do-checkout
+  |=  [value=@t force=?]
+  =/  m  (fiber:fiber:nexus ,outcome:git-act)
+  ^-  form:m
+  (request 'checkout' ~[['head' s+value] ['force' b+force]])
+::  +rise-queue: the queue fiber restarting after a crash. A command that
 ::  crashed mid-run (a GitHub API error in +gh-request, a bad path in the
 ::  data nexus) never reached the log, and `active` still names it, so the
 ::  UI shows a job that runs forever. Close it out as an %error with the
 ::  crash tang, then wait for the restart poke like any other fiber.
 ::
-++  rise-lane
+++  rise-queue
   |=  =prod:fiber:nexus
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?~  prod  (pure:m ~)
-  ;<  st=action-state:git-act  bind:m  (get-state-as:io ,action-state:git-act)
+  ;<  st-vase=vase  bind:m  get-state:io
+  =/  st=action-state:git-act  (read-action-state:git-act q.st-vase)
   ;<  ~  bind:m
     ?~  active.st  (pure:m ~)
     ;<  now=@da  bind:m  get-time:io
     =/  job  u.active.st
     =/  msg=@t  (crip "crashed: {(trip (render-tang:build u.prod))}")
-    =/  entry=done:git-act  [id.job git-command.job raw.job [%error msg] now]
+    =/  entry=done:git-act  [id.job raw.job [%error msg] now]
     (replace:io st(active ~, log [entry log.st]))
   (rise-wait:io prod "%git/repo run: failed")
-::  +op-add: stage changes. Empty paths = add all; else selective. Writes
-::  add-request.json into the data ball and reloads.
+::  +op-add: stage changes. Empty paths = add all; else selective. The
+::  data nexus counts what the add changed in the index and says so.
 ::
 ++  op-add
   |=  paths=(list @t)
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
   ^-  form:m
-  =/  req=json
-    ?~  paths  (pairs:enjs:format ~[['all' b+%.y]])
-    (pairs:enjs:format ~[['paths' a+(turn paths |=(p=@t s+p))]])
-  ;<  req-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data %'add-request.json'])
-  ;<  ~  bind:m  (write-repo-file req-rd [[/ %json] req])
-  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-  ;<  ~  bind:m  (reload:io data-rd)
-  =/  msg=@t
-    ?~  paths  'staged all changes'
-    (crip "staged {(scow %ud (lent paths))} path(s)")
-  (pure:m [%ok msg])
+  %+  request  'add'
+  ?~  paths  ~[['all' b+%.y]]
+  ~[['paths' a+(turn paths |=(p=@t s+p))]]
 ::  +op-commit: create a local commit from the staged tree.
 ::
 ++  op-commit
-  |=  message=@t
+  |=  [message=@t paths=(list path)]
   =/  m  (fiber:fiber:nexus ,outcome:git-act)
   ^-  form:m
   ?:  =('' message)  (pure:m [%error 'commit message required'])
@@ -345,21 +487,17 @@
   ?:  =('' author-email.cfg)
     (pure:m [%error 'no author email set — configure your identity in settings'])
   ;<  now=@da  bind:m  get-time:io
-  =/  req=json
-    %-  pairs:enjs:format
-    :~  ['message' s+message]
-        ['author_name' s+author-name.cfg]
-        ['author_email' s+author-email.cfg]
-        ['date' s+(scot %da now)]
-    ==
-  ;<  req-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data %'commit-request.json'])
-  ;<  ~  bind:m  (write-repo-file req-rd [[/ %json] req])
-  ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-  ;<  ~  bind:m  (reload:io data-rd)
-  (pure:m [%ok (crip "committed: {(trip message)}")])
+  %+  request  'commit'
+  :~  ['message' s+message]
+      ['author_name' s+author-name.cfg]
+      ['author_email' s+author-email.cfg]
+      ['date' s+(scot %da now)]
+      ::  a pathspec scopes the commit: the data nexus overlays only
+      ::  these paths onto the parent tree. Absent/empty = whole index.
+      ['paths' a+(turn paths |=(p=path s+(spat p)))]
+  ==
 ::  +op-pull: fetch from the remote and check out the tracked ref — the full
-::  transport logic (formerly /actions/sync.sig), now inline in the lane:
+::  transport logic (formerly /actions/sync.sig), now inline in the queue:
 ::  discovery, resolve+pin the default ref, then an incremental fetch or a
 ::  full clone. Reports the real outcome.
 ::
@@ -403,28 +541,8 @@
       |=  r=git-ref:git-transport
       ?:  (~(has in have-set) hash.r)  ~
       `hash.r
-    ?~  want-hashes
-      (pure:m [%ok 'already up to date'])
-    ;<  pack-res=(each octs tang)  bind:m
-      (fetch-pack repo.cfg (build-want:git-transport want-hashes ~['side-band-64k' 'ofs-delta'] ~ have-hashes))
-    ?:  ?=(%| -.pack-res)
-      =/  msg=tape  (zing (turn (scag 1 p.pack-res) |=(=tank ~(ram re tank))))
-      (pure:m [%error (crip "fetch-pack failed: {msg}")])
-    =/  pack-body=octs  p.pack-res
-    =/  new-pack-data=octs  (extract-pack:git-transport pack-body %.y)
-    ?:  =(0 p.new-pack-data)
-      ;<  ~  bind:m  (update-refs disc ref.cfg)
-      ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
-      ;<  ~  bind:m  (reload:io data-rd)
-      (pure:m [%ok 'already up to date'])
-    =/  new-pack=pack:git-pack  (read:git-pack (from-octs:bytestream new-pack-data))
-    =/  new-entries=(list [key=hash:git-repo val=@ud])  (tap:pack-on:git-pack index.new-pack)
-    =/  idx-text=tape
-      %-  zing
-      %+  turn  new-entries
-      |=  [key=hash:git-repo val=@ud]
-      "{(print-hash-sha-1:git-transport key)} {(a-co:co val)}\0a"
-    =/  pack-num=@ud  (lent archive.object-store.repo)
+    ::  the remote's branch refs and the tip of the tracked one: read off
+    ::  discovery alone, so the no-fetch path below can use them too.
     =/  branch-refs=(list [name=@t hash=hash:git-repo])
       %+  murn  refs.disc
       |=  r=git-ref:git-transport
@@ -441,10 +559,45 @@
         ~
       (fall match 0x0)
     =/  head-text=@t  (crip (print-hash-sha-1:git-transport head-hash))
-    ;<  ~  bind:m  (save-repo new-pack-data idx-text pack-num branch-refs head-text active-ref)
+    ::  nothing to FETCH is not nothing to DO. Every object the remote
+    ::  advertises can be here while local <ref> still points at an older
+    ::  commit — precisely what a pull held back by a dirty tree leaves
+    ::  behind. Answering 'already up to date' here wedged the repo: the
+    ::  only code that moved the local branch sat past this return, behind
+    ::  a non-empty pack, and that could never come true again.
+    ?~  want-hashes
+      ;<  ~  bind:m  (update-refs disc active-ref)
+      ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
+      ;<  ~  bind:m  (reload:io data-rd)
+      (advance-or-keep branch-refs active-ref head-hash data-rd ~)
+    ;<  pack-res=(each octs tang)  bind:m
+      (fetch-pack repo.cfg (build-want:git-transport want-hashes ~['side-band-64k' 'ofs-delta'] ~ have-hashes))
+    ?:  ?=(%| -.pack-res)
+      =/  msg=tape  (zing (turn (scag 1 p.pack-res) |=(=tank ~(ram re tank))))
+      (pure:m [%error (crip "fetch-pack failed: {msg}")])
+    =/  pack-body=octs  p.pack-res
+    =/  new-pack-data=octs  (extract-pack:git-transport pack-body %.y)
+    ?:  =(0 p.new-pack-data)
+      ;<  ~  bind:m  (update-refs disc active-ref)
+      ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
+      ;<  ~  bind:m  (reload:io data-rd)
+      (advance-or-keep branch-refs active-ref head-hash data-rd ~)
+    =/  new-pack=pack:git-pack  (read:git-pack (from-octs:bytestream new-pack-data))
+    =/  new-entries=(list [key=hash:git-repo val=@ud])  (tap:pack-on:git-pack index.new-pack)
+    =/  idx-text=tape
+      %-  zing
+      %+  turn  new-entries
+      |=  [key=hash:git-repo val=@ud]
+      "{(print-hash-sha-1:git-transport key)} {(a-co:co val)}\0a"
+    =/  pack-num=@ud  (lent archive.object-store.repo)
+    ::  the objects and the remote-tracking refs always land; whether the
+    ::  LOCAL branch follows is +advance-or-keep's call, the same one the
+    ::  no-fetch path above makes, so save with advance=%.n and let it decide.
+    ;<  ~  bind:m  (save-repo new-pack-data idx-text pack-num branch-refs head-text active-ref %.n)
     ;<  data-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data])
     ;<  ~  bind:m  (reload:io data-rd)
-    (pure:m [%ok (crip "fetched {(scow %ud (lent want-hashes))} new objects")])
+    =/  fetched=tape  "fetched {(scow %ud (lent want-hashes))} new objects"
+    (advance-or-keep branch-refs active-ref head-hash data-rd `fetched)
   ::  === full clone ===
   ;<  clone-err=(unit @t)  bind:m  (do-full-clone cfg disc)
   ?^  clone-err  (pure:m [%error u.clone-err])
@@ -595,9 +748,13 @@
   (pure:m [%ok (crip "pushed {(scow %ud n)} commit(s), {(scow %ud (lent raws))} object(s) to {(trip branch)}")])
 ::
 ++  jget
+  ::  match the WHOLE noun, not its head: a bunted json is ~, an atom,
+  ::  and -.j on an atom faults rather than answering. The caller falls
+  ::  back to *json when a poke payload will not coerce, so the guard
+  ::  meant to reject non-objects was itself the crash.
   |=  [j=json k=@t]
   ^-  (unit @t)
-  ?.  ?=(%o -.j)  ~
+  ?.  ?=([%o *] j)  ~
   =/  v  (~(get by p.j) k)
   ?.(?=([~ %s *] v) ~ `p.u.v)
 ::
@@ -688,7 +845,7 @@
   ::  clear old packs before writing fresh clone
   ;<  packs-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%| /data/packs])
   ;<  *  bind:m  (cull-soft:io packs-rd)
-  ;<  ~  bind:m  (save-repo pack-data idx-text 0 branch-refs head-text active-ref)
+  ;<  ~  bind:m  (save-repo pack-data idx-text 0 branch-refs head-text active-ref %.y)
   ;<  sync-data-rd=road:tarball  bind:m
     (ancestor-road:io [/git %repo] [%| /data])
   ~?  dbg  "%git/repo: clone complete"
@@ -718,9 +875,81 @@
   ;<  ~  bind:m  (write-repo-file remote-rd [[/ %mime] [/text/plain hash-octs]])
   $(branch-refs t.branch-refs)
 ::
+::  +advance-local: fast-forward local HEAD and the local branch refs to
+::  the remote's hashes, writing no pack. The objects are already in the
+::  store; only the refs are behind.
+::
+++  advance-local
+  |=  [branch-refs=(list [name=@t hash=hash:git-repo]) ref-name=@t]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  head-octs=octs  (as-octt:bytestream "ref: refs/heads/{(trip ref-name)}")
+  ;<  head-rd=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%& /data %'HEAD'])
+  ;<  ~  bind:m  (write-repo-file head-rd [[/ %mime] [/text/plain head-octs]])
+  |-
+  ?~  branch-refs  (pure:m ~)
+  =/  hash-octs=octs
+    (as-octt:bytestream (print-hash-sha-1:git-transport hash.i.branch-refs))
+  =/  bname=@ta  (crip (trip name.i.branch-refs))
+  ;<  rd=road:tarball  bind:m
+    (ancestor-road:io [/git %repo] [%& /data/refs/heads bname])
+  ;<  ~  bind:m  (write-repo-file rd [[/ %mime] [/text/plain hash-octs]])
+  $(branch-refs t.branch-refs)
+::
+::  +advance-or-keep: move the local branch and the tree to the remote's
+::  tip, or keep both and say why. The one decision a pull makes once its
+::  objects are in hand, so the fetch and no-fetch paths share it.
+::
+::    The local branch moves only when there is nothing of ours to lose:
+::    a clean tree and no local commits the remote lacks. A dirty tree or
+::    an unpushed commit keeps local HEAD and the tree untouched (a poll
+::    once reset a tree over a day's uncommitted work and a commit made
+::    seconds before); the outcome says so, and the merge is the user's move.
+::
+::    `fetched` describes what the transport did, for the message only; ~
+::    when nothing was fetched.
+::
+++  advance-or-keep
+  |=  $:  branch-refs=(list [name=@t hash=hash:git-repo])
+          active-ref=@t
+          head-hash=@ux
+          data-rd=road:tarball
+          fetched=(unit tape)
+      ==
+  =/  m  (fiber:fiber:nexus ,outcome:git-act)
+  ^-  form:m
+  =/  pre=tape  ?~(fetched "" "{u.fetched}; ")
+  ::  the remote advertises no tip for the tracked ref — there is nothing
+  ::  to fast-forward TO, so never write a zero hash over local HEAD.
+  ?:  =(0x0 head-hash)
+    %-  pure:m
+    :-  %ok
+    (crip (weld pre "origin has no {(trip active-ref)}"))
+  =/  head-text=@t  (crip (print-hash-sha-1:git-transport head-hash))
+  ;<  local=@t  bind:m  resolve-head
+  ?:  =(local head-text)
+    (pure:m [%ok ?~(fetched 'already up to date' (crip u.fetched))])
+  ;<  clean=?  bind:m  working-tree-clean
+  ;<  ahead=@ud  bind:m  local-ahead
+  ?.  &(clean =(0 ahead))
+    =/  why=tape
+      ?.  clean  "the working tree has uncommitted changes"
+      "local {(trip active-ref)} is {(scow %ud ahead)} commit(s) ahead of origin"
+    %-  pure:m
+    :-  %ok
+    %-  crip
+    :(weld pre "local {(trip active-ref)} and the tree kept: {why}. " "Commit or stash, then pull, or push first.")
+  ;<  ~  bind:m  (advance-local branch-refs active-ref)
+  ;<  ~  bind:m  (reload:io data-rd)
+  %-  pure:m
+  :-  %ok
+  (crip (weld pre "fast-forwarded {(trip active-ref)} to {(trip head-text)}"))
 ::  +save-repo: write pack + index + refs + HEAD into repo sub-nexus
 ::
-::  pack-num is the pack slot to write (0 for full clone, N for incremental)
+::  pack-num is the pack slot to write (0 for full clone, N for incremental).
+::  advance: also move HEAD and the LOCAL branch refs to the remote's
+::  hashes (a fast-forward). %.n writes the objects and the remote-tracking
+::  refs only, leaving local HEAD, local branches and the tree as they are.
 ::
 ++  save-repo
   |=  $:  pack-data=octs
@@ -729,6 +958,7 @@
           branch-refs=(list [name=@t hash=hash:git-repo])
           head-text=@t
           ref-name=@t
+          advance=?
       ==
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
@@ -741,46 +971,27 @@
   ;<  ~  bind:m  (write-repo-file rd1 [[/ %mime] [/application/octet-stream pack-data]])
   ;<  rd2=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%& /data/packs idx-name])
   ;<  ~  bind:m  (write-repo-file rd2 [[/ %mime] [/text/plain idx-octs]])
-  ::  a pull never overwrites a dirty tree: HEAD and the checked-out
-  ::  branch hold still, and only origin moves under it
-  ;<  clean=?  bind:m  working-tree-clean
-  ;<  rd4=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%& /data %'HEAD'])
   ;<  ~  bind:m
     =/  m  (fiber:fiber:nexus ,~)
-    ?.  clean  (pure:m ~)
+    ?.  advance  (pure:m ~)
+    ;<  rd4=road:tarball  bind:m  (ancestor-road:io [/git %repo] [%& /data %'HEAD'])
     (write-repo-file rd4 [[/ %mime] [/text/plain head-octs]])
-  ::  origin/<name> always takes the advertised head. The local branch
-  ::  follows only when it has nothing of its own: it is new, or still
-  ::  where origin was at the last fetch. A branch with local commits
-  ::  keeps them, where writing the remote head over it dropped them.
+  ::  write individual ref files — remote tracking always, local on advance
   |-
   ?~  branch-refs  (pure:m ~)
   =/  hash-text=tape  (print-hash-sha-1:git-transport hash.i.branch-refs)
   =/  hash-octs=octs  (as-octt:bytestream hash-text)
   =/  bname=@ta  (crip (trip name.i.branch-refs))
-  ;<  head-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data/refs/heads bname])
-  ;<  remote-rd=road:tarball  bind:m
-    (ancestor-road:io [/git %repo] [%& /data/refs/remotes/origin bname])
-  ;<  local=@t  bind:m  (ref-text head-rd)
-  ;<  was=@t  bind:m  (ref-text remote-rd)
   ;<  ~  bind:m
     =/  m  (fiber:fiber:nexus ,~)
-    ?.  |(=('' local) =(local was))  (pure:m ~)
-    ?:  &(!clean =(bname ref-name))  (pure:m ~)
+    ?.  advance  (pure:m ~)
+    ;<  head-rd=road:tarball  bind:m
+      (ancestor-road:io [/git %repo] [%& /data/refs/heads bname])
     (write-repo-file head-rd [[/ %mime] [/text/plain hash-octs]])
+  ;<  remote-rd=road:tarball  bind:m
+    (ancestor-road:io [/git %repo] [%& /data/refs/remotes/origin bname])
   ;<  ~  bind:m  (write-repo-file remote-rd [[/ %mime] [/text/plain hash-octs]])
   $(branch-refs t.branch-refs)
-::  +ref-text: the text of a ref file, '' when there is none
-::
-++  ref-text
-  |=  rd=road:tarball
-  =/  m  (fiber:fiber:nexus ,@t)
-  ^-  form:m
-  ;<  =view:nexus  bind:m  (peek:io rd `[/ %mime])
-  ?.  ?=([%file *] view)  (pure:m '')
-  =/  mim=mime  !<(mime (need-vase:tarball sang.view))
-  (pure:m (crip (trip q.q.mim)))
 ::
 ::  +write-head: update HEAD in repo sub-nexus
 ::
@@ -975,7 +1186,7 @@
   =/  o=@ud  (scan off dum:ag)
   $(lines t.lines, idx (put:pack-on:git-pack idx h o))
 ::
-::  GitHub traffic rides the /apps/github.github proxy (issue #45):
+::  GitHub traffic rides the @github proxy (the forge's own /github) (issue #45):
 ::  the ship's one token lives there, auth and redirects are handled
 ::  there, and this nexus needs no HTTP reach of its own. Lifecycle
 ::  per call: keep the lifecycle grub's road, poke main.sig, read the
@@ -1028,7 +1239,7 @@
   ::  +take-news blocks until the xfer grub changes. If the github app never
   ::  writes a terminal %done or %fail — it died, its request vanished, the
   ::  grub was never created — nothing ever wakes this loop. +run-command then
-  ::  never returns, so the run.git-action serial lane keeps active=pull
+  ::  never returns, so the run.git-action serial queue keeps active=pull
   ::  step=start permanently, and every command queued behind it is waiting on
   ::  a fetch that is never coming. Observed: a repo provisioned with no desk
   ::  for half an hour and not one line of error, because a blocked fiber has
@@ -1036,8 +1247,8 @@
   ::
   ::  So arm a timer beside the watch and take whichever arrives first. A
   ::  timeout is reported as an ordinary [%| tang], which every caller already
-  ::  handles: +op-pull turns it into "fetch failed" in the lane log, the job
-  ::  completes, and the lane moves on.
+  ::  handles: +op-pull turns it into "fetch failed" in the queue log, the job
+  ::  completes, and the queue moves on.
   ;<  now=@da  bind:m  get-time:io
   ;<  ~  bind:m  (set-timer:io /ghx-deadline (add now xfer-deadline))
   |-

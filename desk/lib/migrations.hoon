@@ -67,7 +67,7 @@
 ::
 +$  pend-0
   $%  [%poke =from =bask:tarball]
-      [%peek =wire =cite]
+      [%peek =wire cite=cite-10]
       [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
       [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
       [%news =wire =wave]
@@ -130,7 +130,7 @@
 ::
 +$  pend-1
   $%  [%poke =from =bask:tarball]
-      [%peek =wire =cite]
+      [%peek =wire cite=cite-10]
       [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
       [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
       [%news =wire =wave]
@@ -210,7 +210,7 @@
 ::
 +$  pend-3
   $%  [%poke =from =bask:tarball]
-      [%peek =wire =cite]
+      [%peek =wire cite=cite-10]
       [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
       [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
       [%news =wire =wave]
@@ -250,14 +250,14 @@
 ::
 +$  state-0
   $:  %0
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
       pool=pool-0   ::  live: the running process for each grub (frozen)
       code=code-2   ::  derived: the build index for each code namespace (frozen)
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -265,14 +265,14 @@
 ::
 +$  state-1
   $:  %1
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
       pool=pool-1   ::  live: the running process for each grub (frozen)
       code=code-2   ::  derived: the build index for each code namespace (frozen)
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -281,14 +281,14 @@
 ::
 +$  state-2
   $:  %2
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
       pool=pool-3   ::  live: the running process for each grub (frozen)
       code=code-2   ::  derived: the build index for each code namespace (frozen)
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -297,14 +297,14 @@
 ::
 +$  state-3
   $:  %3
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
       pool=pool-3   ::  live: the running process for each grub (frozen)
       code=code-4   ::  derived: the build index for each code namespace (frozen)
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -313,14 +313,14 @@
 ::
 +$  state-4
   $:  %4
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
-      =pool:nexus   ::  live: the running process for each grub
+      pool=pool-10    ::  live: the running process for each grub
       code=code-4   ::  derived: the build index for each code namespace (frozen)
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -329,14 +329,14 @@
 ::
 +$  state-5
   $:  %5
-      =born:nexus   ::  truth: version history for every directory and file
+      born=born-12  ::  truth: version history for every directory and file
       =silo:nexus   ::  truth: content-addressed object store with refcounts
       =subs:nexus   ::  live: subscription indexes, by target and by watcher
-      =pool:nexus   ::  live: the running process for each grub
+      pool=pool-10    ::  live: the running process for each grub
       =code:nexus   ::  derived: the build index for each code namespace
       =bins:nexus   ::  derived: compiled artifacts, keyed by build hash
       =vale:nexus   ::  derived: cached validation results
-      =remo:nexus   ::  live: pending cross-ship peeks and pinned snapshots
+      remo=remo-12   ::  live: pending cross-ship peeks and pinned snapshots
       =upki:nexus   ::  live: the rail that backs jael pki subscriptions
       =last:nexus   ::  live: monotonic time and entropy for the bowl
   ==
@@ -345,14 +345,14 @@
 ::  correction has run, so it runs exactly once, at the upgrade.
 +$  state-6
   $:  %6
-      =born:nexus
+      born=born-12
       =silo:nexus
       =subs:nexus
-      =pool:nexus
+      pool=pool-10
       =code:nexus
       =bins:nexus
       =vale:nexus
-      =remo:nexus
+      remo=remo-12
       =upki:nexus
       =last:nexus
   ==
@@ -369,111 +369,21 @@
 ::
 +$  state-7
   $:  %7
-      =born:nexus
+      born=born-12
       =silo:nexus
       =subs:nexus
-      =pool:nexus
+      pool=pool-10
       =code:nexus
       =bins:nexus
       =vale:nexus
-      =remo:nexus
+      remo=remo-12
       =upki:nexus
       =last:nexus
       ::  live: which eyre binding is serving each open eyre-id
       conns=(map @ta binding:eyre)
   ==
 ::
-+|  %dist
-::
-::  nisfeb dist/single-release's own state versions, from the line it ran
-::  before it took develop's kernel. Each is develop's %1 field for field
-::  (the %tag load, the %font load and take, the two-key lode with refs:
-::  pool-1 and code-2), with conns on the ones that carried them. Their
-::  tags name different shapes than develop's own %2..%5, which no ship
-::  on this line has ever held, so the union below can hold both.
-::
-::  %2, %3: the perf lineage (conns in agent state; %3 a one-time born
-::    sweep), which this line came down from to %1.
-::  %4: the cite-drop fix (#80) with its one-time skip-queue correction
-::    run (+fsr-pool), shape-identical to %1.
-::  %5: release/perf-requests (#48 ported): %4 plus conns, born swept.
-::
-+$  dist-state-2
-  $:  %2
-      =born:nexus
-      =silo:nexus
-      =subs:nexus
-      pool=pool-1
-      code=code-2
-      =bins:nexus
-      =vale:nexus
-      =remo:nexus
-      =upki:nexus
-      =last:nexus
-      conns=(map @ta binding:eyre)
-  ==
-+$  dist-state-3
-  $:  %3
-      =born:nexus
-      =silo:nexus
-      =subs:nexus
-      pool=pool-1
-      code=code-2
-      =bins:nexus
-      =vale:nexus
-      =remo:nexus
-      =upki:nexus
-      =last:nexus
-      conns=(map @ta binding:eyre)
-  ==
-+$  dist-state-4
-  $:  %4
-      =born:nexus
-      =silo:nexus
-      =subs:nexus
-      pool=pool-1
-      code=code-2
-      =bins:nexus
-      =vale:nexus
-      =remo:nexus
-      =upki:nexus
-      =last:nexus
-  ==
-+$  dist-state-5
-  $:  %5
-      =born:nexus
-      =silo:nexus
-      =subs:nexus
-      pool=pool-1
-      code=code-2
-      =bins:nexus
-      =vale:nexus
-      =remo:nexus
-      =upki:nexus
-      =last:nexus
-      conns=(map @ta binding:eyre)
-  ==
-::
 +|  %migrations
-::
-::  +dist-to-1: a dist ship's state as develop's %1, to climb develop's
-::  chain from there. conns go: they are per-request and the climb to %7
-::  starts them empty.
-::
-++  dist-to-1
-  |=  old=$%(dist-state-2 dist-state-3 dist-state-4 dist-state-5)
-  ^-  state-1
-  ::  one arm per layout: %4 ends at last, the others carry conns after
-  ::  it, so a face read across all four is not one place
-  ?:  ?=(%4 -.old)
-    :*  %1
-        born.old  silo.old  subs.old  pool.old  code.old
-        bins.old  vale.old  remo.old  upki.old  last.old
-    ==
-  :*  %1
-      born.old  silo.old  subs.old  pool.old  code.old
-      bins.old  vale.old  remo.old  upki.old  last.old
-  ==
 ::
 ++  state-0-to-1
   |=  old=state-0
@@ -547,6 +457,327 @@
 ::  the source (+cull drops an un-gained grub's record), and this clears
 ::  what already piled up.
 ::
+::  state-8: peak, born's shadow. Born's skeleton with every history
+::  collapsed to its highest cass, raised on every write and never
+::  deleted: numbering lives here, so a born record is history and may
+::  be dropped. Starts empty: every rail re-created before its first
+::  write under %8 numbers from zero once more (the one rebind this
+::  chain allows, at the crossing).
+::
++$  state-8
+  $:  %8
+      born=born-12
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-10
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-12
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+::  state-9: same shape as %8. The crossing is a one-time sweep: every
+::  history loses the dead entries the old write path left behind (a
+::  tomb per replaced temp pace, one absence per reload-deletion), and
+::  peak is seeded from born so every rail that exists today has its
+::  mark before any record of it can be dropped. Under %8 writes a
+::  rail's number only reached peak on its next write; a rail last
+::  written before %8 and culled after would have numbered from zero.
+::
++|  %frozen-9
+::  state-9 borrowed live `pool`, and %10 moves a type inside it: `view`
+::  gained a `bang`, and a suspended `process` is a GATE whose mold names
+::  intake -> view. No view noun is ever stored (pend is cold: "no vases
+::  — lobes and ckeys only", and hydrate resolves cite -> view at
+::  consumption time) but the continuation's TYPE drags it in, so the
+::  chain deepens here. Only the process slot widens to *; take/pend/cite
+::  are untouched by this crossing, and are frozen at %10 below.
+::
++$  proc-9
+  $:  process=(each * tang)
+      next=(qeu take-10)
+      skip=(qeu take-10)
+  ==
++$  pipe-9  [bang=(unit tang) proc=(map @ta proc-9)]
++$  pool-9  (axal pipe-9)
+::
++$  state-9
+  $:  %9
+      born=born-12
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-9
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-12
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+::  state-10: `view` carries the grub's bang, so a fiber that follows a
+::  grub learns it banged from the thing it already watches instead of
+::  having to peek the parent directory's ball.
+::
++$  state-10
+  $:  %10
+      born=born-12
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-10
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-12
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+++  state-9-to-10
+  |=  old=state-9
+  ^-  state-10
+  :*  %10
+      born.old
+      peak.old
+      silo.old
+      subs.old
+      (pool-9-to-pool-10 pool.old)
+      code.old
+      bins.old
+      vale.old
+      remo.old
+      upki.old
+      last.old
+      conns.old
+  ==
+++  pool-9-to-pool-10
+  |=  p=pool-9
+  ^-  pool-10
+  :-  ?~  fil.p  ~
+      `[bang.u.fil.p (~(run by proc.u.fil.p) proc-9-to-proc-10)]
+  (~(run by dir.p) pool-9-to-pool-10)
+::  a live continuation cannot be re-typed, and is never resumed: the
+::  reload machinery rebuilds it. A %| tang passes through untouched.
+::
+++  proc-9-to-proc-10
+  |=  p=proc-9
+  ^-  proc-10
+  :+  ?:  ?=(%| -.process.p)  process.p
+      |+~[leaf+"migrated: process rebuilt on load (view gained bang)"]
+    next.p
+  skip.p
++|  %frozen-10
+::  state-10 borrowed live `pool`, and %11 moves a type inside it: a
+::  %file cite gained `at`, the grub's position, which is where its mark
+::  resolves from. A queued peek persists in a proc's next and skip as a
+::  pend holding its cite, so the chain cite -> pend -> take -> proc ->
+::  pipe -> pool freezes here.
+::
++$  cite-10
+  $%  [%file =cass:clay lobe=jobe conv=(unit blot:tarball)]
+      [%ball =wave lobe=jobe deep=?]
+      [%none ~]
+      [%miss ~]
+      [%veto ~]
+      [%tomb ~]
+  ==
++$  pend-10
+  $%  [%poke =from =bask:tarball]
+      [%peek =wire cite=cite-10]
+      [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
+      [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
+      [%news =wire =wave]
+      [%kept =wire =kept]
+      [%made =wire err=(unit tang)]
+      [%gone =wire err=(unit tang)]
+      [%pack =wire err=(unit tang)]
+      [%sand =wire err=(unit tang)]
+      [%load =wire err=(unit tang)]
+      [%lost =wire err=(unit tang)]
+      [%gain =wire err=(unit tang)]
+      [%held =wire err=(unit tang)]
+      [%seek =wire res=(each (list [=rail:tarball =cass:clay]) tang)]
+      [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)]
+      [%fell =wire]
+      [%veto dart=dart-11]
+      [%here =wire =here]
+  ==
++$  take-10  [give=(unit give) in=(unit pend-10)]
++$  proc-10
+  $:  process=(each * tang)
+      next=(qeu take-10)
+      skip=(qeu take-10)
+  ==
++$  pipe-10  [bang=(unit tang) proc=(map @ta proc-10)]
++$  pool-10  (axal pipe-10)
+::  state-11: a %file cite says where the grub is, so its mark resolves
+::  from the grub's own code namespace and a desk-local mark reads from
+::  anywhere; the reader's namespace is the fallback.
+::
++$  state-11
+  $:  %11
+      born=born-12
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-11
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-12
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+++  state-10-to-11
+  |=  old=state-10
+  ^-  state-11
+  :*  %11
+      born.old
+      peak.old
+      silo.old
+      subs.old
+      (pool-10-to-pool / pool.old)
+      code.old
+      bins.old
+      vale.old
+      remo.old
+      upki.old
+      last.old
+      conns.old
+  ==
+::  a queued peek's answer did not say where it was read. It is given
+::  its reader's position, which is where its mark resolved from under
+::  %10, so nothing already queued reads differently.
+::
+++  pool-10-to-pool
+  |=  [here=path p=pool-10]
+  ^-  pool-11
+  :-  ?~  fil.p  ~
+      `[bang.u.fil.p (~(run by proc.u.fil.p) (cury proc-10-to-proc here))]
+  %-  ~(urn by dir.p)
+  |=([k=@ta kid=pool-10] ^$(here (snoc here k), p kid))
+::
+++  proc-10-to-proc
+  |=  [here=path p=proc-10]
+  ^-  proc-11
+  :+  ?:  ?=(%| -.process.p)  process.p
+      |+~[leaf+"migrated: process rebuilt on load (cite gained at)"]
+    (takes-10-to-takes here next.p)
+  (takes-10-to-takes here skip.p)
+::
+++  takes-10-to-takes
+  |=  [here=path q=(qeu take-10)]
+  ^-  (qeu take-11)
+  (~(gas to *(qeu take-11)) (turn ~(tap to q) (cury take-10-to-take here)))
+::
+++  take-10-to-take
+  |=  [here=path t=take-10]
+  ^-  take-11
+  ?~  in.t  [give.t ~]
+  [give.t `(pend-10-to-pend here u.in.t)]
+::
+++  pend-10-to-pend
+  |=  [here=path p=pend-10]
+  ^-  pend-11
+  ?.  ?=(%peek -.p)  p
+  ::  a %tomb answer was a dead path; a dead path answers %none
+  ?:  ?=(%tomb -.cite.p)  [%peek wire.p [%none ~]]
+  ?.  ?=(%file -.cite.p)  [%peek wire.p cite.p]
+  [%peek wire.p [%file cass.cite.p lobe.cite.p conv.cite.p here]]
+++  state-8-to-9
+  |=  old=state-8
+  ^-  state-9
+  :*  %9
+      (sweep-dead-born born.old)
+      (seed-peak born.old peak.old)
+      silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old
+      conns.old
+  ==
+::  +sweep-dead-born: drop every dead entry below the top of each file
+::  and fold history. Dead = a tomb, or an absence (a pace with no
+::  content); neither points at a ject, so no silo ref is released. The
+::  top entry stays whatever it is: it is the rail's current state.
+::
+++  sweep-dead-born
+  |=  bon=born-12
+  ^-  born-12
+  =?  fil.bon  ?=(^ fil.bon)
+    :-  ~
+    %=  u.fil.bon
+      fold  (sweep-hist fold.u.fil.bon)
+      file  (~(run by file.u.fil.bon) sweep-hist)
+    ==
+  bon(dir (~(run by dir.bon) |=(kid=born-12 ^$(bon kid))))
+::
+++  sweep-hist
+  |=  sk=hist-12
+  ^-  hist-12
+  =/  top=(unit cass:clay)  (top-12 sk)
+  ?~  top  sk
+  %+  gas:hon-12  *hist-12
+  %+  skim  (tap:hon-12 sk)
+  |=  [key=cass:clay val=entry-12]
+  ?:  =(key u.top)  %.y
+  ?:  ?=(%tomb -.pace.val)  %.n
+  ?=(^ p.pace.val)
+::  +seed-peak: born collapsed to its high-water casses, merged over the
+::  peak as it stands (a peak only ever rises).
+::
+++  seed-peak
+  |=  [bon=born-12 pk=peak:nexus]
+  ^-  peak:nexus
+  =/  here=(unit [fold=(unit cass:clay) file=(map @ta cass:clay)])
+    ?~  fil.bon  ~
+    :-  ~
+    :-  (top-12 fold.u.fil.bon)
+    %-  ~(rep by file.u.fil.bon)
+    |=  [[nom=@ta sk=hist-12] out=(map @ta cass:clay)]
+    =/  t=(unit cass:clay)  (top-12 sk)
+    ?~  t  out
+    (~(put by out) nom u.t)
+  =/  merged=(unit [fold=(unit cass:clay) file=(map @ta cass:clay)])
+    ?~  here  fil.pk
+    ?~  fil.pk  here
+    :-  ~
+    :-  (max-cass fold.u.here fold.u.fil.pk)
+    %-  ~(rep by file.u.here)
+    |=  [[nom=@ta c=cass:clay] out=_file.u.fil.pk]
+    =/  cur=(unit cass:clay)  (~(get by out) nom)
+    ?:  &(?=(^ cur) (gte ud.u.cur ud.c))  out
+    (~(put by out) nom c)
+  =/  kids=(set @ta)  (~(uni in ~(key by dir.bon)) ~(key by dir.pk))
+  :-  merged
+  %-  ~(gas by *(map @ta peak:nexus))
+  %+  turn  ~(tap in kids)
+  |=  k=@ta
+  :-  k
+  %+  seed-peak
+    (fall (~(get by dir.bon) k) *born-12)
+  (fall (~(get by dir.pk) k) *peak:nexus)
+::
+++  max-cass
+  |=  [a=(unit cass:clay) b=(unit cass:clay)]
+  ^-  (unit cass:clay)
+  ?~  a  b
+  ?~  b  a
+  ?:((gte ud.u.a ud.u.b) a b)
+::
+++  state-7-to-8
+  |=  old=state-7
+  ^-  state-8
+  :*  %8
+      born.old  *peak:nexus
+      silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old
+      conns.old
+  ==
 ++  state-6-to-7
   |=  old=state-6
   ^-  state-7
@@ -565,29 +796,29 @@
 ::    the silo. Dropping it releases no refcounts because it holds none.
 ::
 ++  prune-dead-born
-  |=  bon=born:nexus
-  ^-  born:nexus
+  |=  bon=born-12
+  ^-  born-12
   =?  fil.bon  ?=(^ fil.bon)
     :-  ~
     %=    u.fil.bon
         file
       %-  ~(rep by file.u.fil.bon)
-      |=  [[nom=@ta sk=hist:nexus] out=(map @ta hist:nexus)]
+      |=  [[nom=@ta sk=hist-12] out=(map @ta hist-12)]
       ?.  (hist-readable sk)  out
       (~(put by out) nom sk)
     ==
   %=    bon
       dir
     %-  ~(run by dir.bon)
-    |=(kid=born:nexus ^$(bon kid))
+    |=(kid=born-12 ^$(bon kid))
   ==
 ::  +hist-readable: does any revision of this file still point at a ject?
 ::
 ++  hist-readable
-  |=  sk=hist:nexus
+  |=  sk=hist-12
   ^-  ?
-  %+  lien  (tap:hon:hist:nexus sk)
-  |=  [key=cass:clay val=entry:hist:nexus]
+  %+  lien  (tap:hon-12 sk)
+  |=  [key=cass:clay val=entry-12]
   ?:  ?=(%tomb -.pace.val)  %.n
   ?=(^ p.pace.val)
 ::
@@ -612,6 +843,489 @@
       remo.old
       upki.old
       last.old
+  ==
+::
++|  %frozen-11
+::  %12 widens the %firm load to carry tags: +firm-hist always took
+::  them, the dart never supplied them. Loads persist in pool process
+::  queues via pend's [%veto =dart], so the documented chain freezes
+::  here: load -> dart -> pend -> take -> proc -> pipe -> pool.
+::
++$  load-11
+  $%  [%poke =bask:tarball]
+      [%make force=? gain=? =make]
+      [%cull ~]
+      [%sand weir=(unit weir)]
+      [%load ~]
+      [%peek blot=(unit blot:tarball) case=(unit case) deep=?]
+      [%keep blot=(unit blot:tarball)]
+      [%drop ~]
+      [%lose =lose]
+      [%gain flag=?]
+      [%firm ~]
+      [%tags case=(unit case) tags=(set @t)]
+      [%seek =nobe]
+      [%peep =find]
+      [%born ~]
+      [%code ~]
+  ==
+::
++$  dart-11
+  $%  [%node =wire road=road:tarball load=load-11]
+      [%here =wire]
+      [%kept =wire]
+  ==
+::
++$  pend-11
+  $%  [%poke =from =bask:tarball]
+      [%peek =wire cite=cite-14]
+      [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
+      [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
+      [%news =wire =wave]
+      [%kept =wire =kept]
+      [%made =wire err=(unit tang)]
+      [%gone =wire err=(unit tang)]
+      [%pack =wire err=(unit tang)]
+      [%sand =wire err=(unit tang)]
+      [%load =wire err=(unit tang)]
+      [%lost =wire err=(unit tang)]
+      [%gain =wire err=(unit tang)]
+      [%held =wire err=(unit tang)]
+      [%seek =wire res=(each (list [=rail:tarball =cass:clay]) tang)]
+      [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)]
+      [%fell =wire]
+      [%veto dart=dart-11]
+      [%here =wire =here]
+  ==
+::
++$  take-11  [give=(unit give) in=(unit pend-11)]
++$  proc-11
+  $:  process=(each * tang)
+      next=(qeu take-11)
+      skip=(qeu take-11)
+  ==
++$  pipe-11  [bang=(unit tang) proc=(map @ta proc-11)]
++$  pool-11  (axal pipe-11)
+::  state-12: a %firm load carries the labels to set on the version it
+::  promotes, so committing a version and naming it is one write.
+::
++$  state-12
+  $:  %12
+      born=born-12
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-14
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-12
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+++  state-11-to-12
+  |=  old=state-11
+  ^-  state-12
+  :*  %12
+      born.old
+      peak.old
+      silo.old
+      subs.old
+      (pool-11-to-pool pool.old)
+      code.old
+      bins.old
+      vale.old
+      remo.old
+      upki.old
+      last.old
+      conns.old
+  ==
+::  a queued %firm carried no labels, so it gets none.
+::
+++  pool-11-to-pool
+  |=  p=pool-11
+  ^-  pool-14
+  :-  ?~  fil.p  ~
+      `[bang.u.fil.p (~(run by proc.u.fil.p) proc-11-to-proc)]
+  (~(run by dir.p) pool-11-to-pool)
+::
+++  proc-11-to-proc
+  |=  p=proc-11
+  ^-  proc-14
+  :+  ?:  ?=(%| -.process.p)  process.p
+      |+~[leaf+"migrated: process rebuilt on load (%firm gained tags)"]
+    (takes-11-to-takes next.p)
+  (takes-11-to-takes skip.p)
+::
+++  takes-11-to-takes
+  |=  q=(qeu take-11)
+  ^-  (qeu take-14)
+  (~(gas to *(qeu take-14)) (turn ~(tap to q) take-11-to-take))
+::
+++  take-11-to-take
+  |=  t=take-11
+  ^-  take-14
+  ?~  in.t  [give.t ~]
+  [give.t `(pend-11-to-pend u.in.t)]
+::
+++  pend-11-to-pend
+  |=  p=pend-11
+  ^-  pend-14
+  ?.  ?=(%veto -.p)  p
+  [%veto (dart-11-to-dart dart.p)]
+::
+++  dart-11-to-dart
+  |=  d=dart-11
+  ^-  dart:nexus
+  ?.  ?=(%node -.d)  d
+  [%node wire.d road.d (load-11-to-load load.d)]
+::
+++  load-11-to-load
+  |=  l=load-11
+  ^-  load:nexus
+  ?.  ?=(%firm -.l)  l
+  [%firm ~]
+::
++|  %frozen-14
+::  %15 has no tomb pace; a dropped version is absent, its number in
+::  $peak. The chain pace -> entry -> hist -> born freezes here, and so
+::  does remo, whose staged peeks hold a pace; states %13 and %14 hold
+::  these.
+::
++$  pace-14
+  $%  [%firm lobe=jobe:nexus]
+      [%temp lobe=jobe:nexus]
+      [%tomb ~]
+  ==
++$  entry-14  [pace=pace-14 tags=(set @t)]
++$  hist-14   ((mop cass:clay entry-14) cor:hist:nexus)
+++  hon-14    ((on cass:clay entry-14) cor:hist:nexus)
++$  born-14   (axal [fold=hist-14 file=(map @ta hist-14)])
+::  a peek answer could say %tomb; now a dead path answers %none. The
+::  pool's queued takes and the owed queue hold pends, so they freeze.
+::
++$  cite-14
+  $%  [%file =cass:clay lobe=jobe:nexus conv=(unit blot:tarball) at=path]
+      [%ball =wave:nexus lobe=jobe:nexus deep=?]
+      [%none ~]
+      [%miss ~]
+      [%veto ~]
+      [%tomb ~]
+  ==
++$  pend-14
+  $%  [%poke =from =bask:tarball]
+      [%peek =wire cite=cite-14]
+      [%peep =wire res=(each (list [=cass:clay lobe=jobe]) tang)]
+      [%code =wire res=(each (axal (map @ta @uv)) (each @uv tang))]
+      [%news =wire =wave]
+      [%kept =wire =kept]
+      [%made =wire err=(unit tang)]
+      [%gone =wire err=(unit tang)]
+      [%pack =wire err=(unit tang)]
+      [%sand =wire err=(unit tang)]
+      [%load =wire err=(unit tang)]
+      [%lost =wire err=(unit tang)]
+      [%gain =wire err=(unit tang)]
+      [%held =wire err=(unit tang)]
+      [%seek =wire res=(each (list [=rail:tarball =cass:clay]) tang)]
+      [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)]
+      [%fell =wire]
+      [%veto =dart]
+      [%here =wire =here]
+  ==
++$  take-14  [give=(unit give) in=(unit pend-14)]
++$  otake-14  [here=rail:tarball take-14]                        ::  the kernel's take, owed between events
++$  proc-14
+  $:  process=(each * tang)
+      next=(qeu take-14)
+      skip=(qeu take-14)
+  ==
++$  pipe-14  [bang=(unit tang) proc=(map @ta proc-14)]
++$  pool-14  (axal pipe-14)
++$  snap-14   [=cass:clay pace=pace-14 refs=lobes:nexus]
++$  peek-14   [ship=@p dest=lane:tarball deep=? blot=(unit blot:tarball) snap=(unit snap-14) snap-id=@uvJ]
++$  peeks-14  (map [rail:tarball wire] peek-14)
++$  remo-14   [peeks=peeks-14 snaps=snaps:remo:nexus]
+::  state-15: the tomb pace is gone from the type. Nothing minted one
+::  since %9 except a silo repair, so a stored history should hold none;
+::  one that does loses that entry, which referenced nothing anyway.
+::
++$  state-15
+  $:  %15
+      =born:nexus
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      =pool:nexus
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      =remo:nexus
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+      owed=(qeu take:nexus)
+  ==
+++  state-14-to-15
+  |=  old=state-14
+  ^-  state-15
+  :*  %15
+      (born-14-to-born born.old)
+      peak.old  silo.old  subs.old  (pool-14-to-pool pool.old)  code.old
+      bins.old  vale.old  (remo-14-to-remo remo.old)  upki.old  last.old
+      conns.old  (owed-14-to-owed owed.old)
+  ==
+++  owed-14-to-owed
+  |=  q=(qeu otake-14)
+  ^-  (qeu take:nexus)
+  %-  ~(gas to *(qeu take:nexus))
+  (turn ~(tap to q) |=(t=otake-14 [here.t (take-14-to-take +.t)]))
+++  pool-14-to-pool
+  |=  p=pool-14
+  ^-  pool:nexus
+  :-  ?~  fil.p  ~
+      `[bang.u.fil.p (~(run by proc.u.fil.p) proc-14-to-proc)]
+  (~(run by dir.p) pool-14-to-pool)
+++  proc-14-to-proc
+  |=  p=proc-14
+  ^-  proc:fiber:nexus
+  :+  ?:  ?=(%| -.process.p)  process.p
+      |+~[leaf+"migrated: process rebuilt on load (no tomb)"]
+    (takes-14-to-takes next.p)
+  (takes-14-to-takes skip.p)
+++  takes-14-to-takes
+  |=  q=(qeu take-14)
+  ^-  (qeu take)
+  (~(gas to *(qeu take)) (turn ~(tap to q) take-14-to-take))
+++  take-14-to-take
+  |=  t=take-14
+  ^-  take
+  ?~  in.t  [give.t ~]
+  [give.t `(pend-14-to-pend u.in.t)]
+::  a %born answer carried a tomb flag per entry and a peek could answer
+::  %tomb; neither exists. A dead path answers %none.
+::
+++  pend-14-to-pend
+  |=  p=pend-14
+  ^-  pend
+  ?:  ?=(%born -.p)
+    :+  %born  wire.p
+    ?:  ?=(%| -.res.p)  res.p
+    [%& (turn p.res.p |=([=cass:clay tags=(set @t) *] [cass tags]))]
+  ?:  ?=(%peek -.p)
+    [%peek wire.p ?:(?=(%tomb -.cite.p) [%none ~] cite.p)]
+  p
+++  born-14-to-born
+  |=  b=born-14
+  ^-  born:nexus
+  :-  ?~  fil.b  ~
+      =/  files=(map @ta hist:nexus)
+        %-  ~(gas by *(map @ta hist:nexus))
+        %+  murn  ~(tap by file.u.fil.b)
+        |=  [nom=@ta h=hist-14]
+        ^-  (unit [@ta hist:nexus])
+        =/  kept=hist:nexus  (hist-14-to-hist h)
+        ?:  =(~ kept)  ~
+        `[nom kept]
+      `[(hist-14-to-hist fold.u.fil.b) files]
+  (~(run by dir.b) born-14-to-born)
+++  hist-14-to-hist
+  |=  h=hist-14
+  ^-  hist:nexus
+  %+  gas:hon:hist:nexus  *hist:nexus
+  %+  murn  (tap:hon-14 h)
+  |=  [key=cass:clay val=entry-14]
+  ^-  (unit [cass:clay entry:hist:nexus])
+  ?-  -.pace.val
+    %tomb  ~
+    %firm  `[key [[%firm lobe.pace.val] tags.val]]
+    %temp  `[key [[%temp lobe.pace.val] tags.val]]
+  ==
+++  remo-14-to-remo
+  |=  r=remo-14
+  ^-  remo:nexus
+  :_  snaps.r
+  %-  ~(run by peeks.r)
+  |=  p=peek-14
+  ^-  peek:remo:nexus
+  :*  ship.p  dest.p  deep.p  blot.p
+      ?~  snap.p  ~
+      ?-  -.pace.u.snap.p
+        %tomb  ~
+        %firm  `[cass.u.snap.p [%firm lobe.pace.u.snap.p] refs.u.snap.p]
+        %temp  `[cass.u.snap.p [%temp lobe.pace.u.snap.p] refs.u.snap.p]
+      ==
+      snap-id.p
+  ==
++|  %frozen-12
+::  %13 makes emptiness unrepresentable: a version always references
+::  content. The chain pace -> entry -> hist -> born freezes here, and
+::  born is a state field, so every state up to %12 holds the old one.
+::
++$  pace-12
+  $%  [%firm p=(unit jobe)]
+      [%temp p=(unit jobe)]
+      [%tomb ~]
+  ==
++$  entry-12  [pace=pace-12 tags=(set @t)]
++$  hist-12   ((mop cass:clay entry-12) cor:hist:nexus)
+++  hon-12    ((on cass:clay entry-12) cor:hist:nexus)
++$  born-12   (axal [fold=hist-12 file=(map @ta hist-12)])
+::  pace is reachable from TWO places, not one: a staged cross-ship peek
+::  holds the pace it negotiated, so remo freezes alongside born.
+::
++$  snap-12   [=cass:clay pace=pace-12 refs=lobes:nexus]
++$  peek-12
+  $:  ship=@p
+      dest=lane:tarball
+      deep=?
+      blot=(unit blot:tarball)
+      snap=(unit snap-12)
+      snap-id=@uvJ
+  ==
++$  peeks-12  (map [rail:tarball wire] peek-12)
++$  remo-12   [peeks=peeks-12 snaps=snaps:remo:nexus]
+++  top-12
+  |=  h=hist-12
+  ^-  (unit cass:clay)
+  =/  got=(unit [key=cass:clay val=entry-12])  (ram:hon-12 h)
+  ?~(got ~ `key.u.got)
+::  state-13: a version cannot say the path held nothing. What exists is
+::  $peak's answer -- a peak above born's top is a path that no longer
+::  does -- and what it held is born's. The two no longer blur.
+::
++$  state-13
+  $:  %13
+      born=born-14
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-14
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-14
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+  ==
+++  state-12-to-13
+  |=  old=state-12
+  ^-  state-13
+  :*  %13
+      (born-12-to-born born.old)
+      peak.old
+      silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  (remo-12-to-remo remo.old)  upki.old  last.old
+      conns.old
+  ==
+::  state-14: the take queue outlives its event. Draining to empty spends
+::  one event's loom on a whole cascade; with a budget the leftover takes
+::  wait here and a behn wake drains the next batch. Empty means nothing
+::  is owed, which is every ship that never hit the budget.
+::
+::  $take is NOT frozen here, and does not join the freeze chain
+::  load -> dart -> pend -> take. +on-save empties `owed` the way
+::  +bang-pool neutralizes the pool, so it is always ~ in a saved state
+::  and the live type never molds an older shape. Loads still persist in
+::  exactly one place.
+::
++$  state-14
+  $:  %14
+      born=born-14
+      =peak:nexus
+      =silo:nexus
+      =subs:nexus
+      pool=pool-14
+      =code:nexus
+      =bins:nexus
+      =vale:nexus
+      remo=remo-14
+      =upki:nexus
+      =last:nexus
+      conns=(map @ta binding:eyre)
+      owed=(qeu otake-14)
+  ==
+++  state-13-to-14
+  |=  old=state-13
+  ^-  state-14
+  :*  %14
+      born.old  peak.old  silo.old  subs.old  pool.old  code.old
+      bins.old  vale.old  remo.old  upki.old  last.old  conns.old
+      ::  nothing was owed before there was a place to owe it from: a
+      ::  cascade either finished inside its event or bailed and rolled
+      ::  the whole event back.
+      ~
+  ==
+::  Every null reference goes. A version that referenced nothing was one
+::  of two things and neither survives: +init's placeholder, a leftover
+::  of the old [%file ~] / [%fold ~] kind sentinel, and the marker a
+::  deletion used to append. A rail left with no versions goes with
+::  them -- it kept no history, and $peak still holds its number, so a
+::  later grub there still numbers above it.
+::
+::  Nothing is released: these paces name no ject, so they hold no silo
+::  refs to drop.
+::
+::  a staged peek whose negotiated pace referenced nothing cannot be
+::  represented, and could not have been read anyway: the snap goes and
+::  the peek renegotiates.
+::
+++  remo-12-to-remo
+  |=  r=remo-12
+  ^-  remo-14
+  :_  snaps.r
+  %-  ~(run by peeks.r)
+  |=  p=peek-12
+  ^-  peek-14
+  :*  ship.p
+      dest.p
+      deep.p
+      blot.p
+      ?~  snap.p  ~
+      ?:  ?=(%tomb -.pace.u.snap.p)
+        `[cass.u.snap.p [%tomb ~] refs.u.snap.p]
+      ?~  p.pace.u.snap.p  ~
+      :-  ~
+      :+  cass.u.snap.p
+        ?-  -.pace.u.snap.p
+          %firm  [%firm u.p.pace.u.snap.p]
+          %temp  [%temp u.p.pace.u.snap.p]
+        ==
+      refs.u.snap.p
+      snap-id.p
+  ==
+::
+++  born-12-to-born
+  |=  b=born-12
+  ^-  born-14
+  :-  ?~  fil.b  ~
+      =/  files=(map @ta hist-14)
+        %-  ~(gas by *(map @ta hist-14))
+        %+  murn  ~(tap by file.u.fil.b)
+        |=  [nom=@ta h=hist-12]
+        ^-  (unit [@ta hist-14])
+        =/  kept=hist-14  (hist-12-to-hist h)
+        ?:  =(~ kept)  ~
+        `[nom kept]
+      `[(hist-12-to-hist fold.u.fil.b) files]
+  (~(run by dir.b) born-12-to-born)
+::
+++  hist-12-to-hist
+  |=  h=hist-12
+  ^-  hist-14
+  %+  gas:hon-14  *hist-14
+  %+  murn  (tap:hon-12 h)
+  |=  [key=cass:clay val=entry-12]
+  ^-  (unit [cass:clay entry-14])
+  ?:  ?=(%tomb -.pace.val)  `[key [[%tomb ~] tags.val]]
+  ?~  p.pace.val  ~
+  :+  ~  key
+  :_  tags.val
+  ?-  -.pace.val
+    %firm  [%firm u.p.pace.val]
+    %temp  [%temp u.p.pace.val]
   ==
 ::
 +|  %pool-0-to-1
@@ -712,20 +1426,21 @@
   ?.  ?=(%tag -.l)  l
   [%tags case.l tags.l]
 ::
-+|  %pool-3-to-live
++|  %pool-3-to-10
 ::  Drops what no longer exists: a queued %font take, and a vetoed dart
-::  whose load was %font. Everything else passes through.
+::  whose load was %font. Everything else passes through. The result is
+::  the %10 pool: states %4 through %10 share that shape.
 ::
 ++  pool-3-to-pool
   |=  p=pool-3
-  ^-  pool:nexus
+  ^-  pool-10
   :-  ?~  fil.p  ~
       `[bang.u.fil.p (~(run by proc.u.fil.p) proc-3-to-proc)]
   (~(run by dir.p) pool-3-to-pool)
 ::
 ++  proc-3-to-proc
   |=  p=proc-3
-  ^-  proc:fiber:nexus
+  ^-  proc-10
   :+  ?:  ?=(%| -.process.p)  process.p
       |+~[leaf+"migrated: process rebuilt on load"]
     (takes-3-to-takes next.p)
@@ -733,21 +1448,21 @@
 ::
 ++  takes-3-to-takes
   |=  q=(qeu take-3)
-  ^-  (qeu take)
-  %-  ~(gas to *(qeu take))
+  ^-  (qeu take-10)
+  %-  ~(gas to *(qeu take-10))
   (murn ~(tap to q) take-3-to-take)
 ::
 ++  take-3-to-take
   |=  t=take-3
-  ^-  (unit take)
+  ^-  (unit take-10)
   ?~  in.t  `[give.t ~]
-  =/  p=(unit pend)  (pend-3-to-pend u.in.t)
+  =/  p=(unit pend-10)  (pend-3-to-pend u.in.t)
   ?~  p  ~
   `[give.t p]
 ::
 ++  pend-3-to-pend
   |=  p=pend-3
-  ^-  (unit pend)
+  ^-  (unit pend-10)
   ?:  ?=(%font -.p)  ~
   ?.  ?=(%veto -.p)  `p
   ?:  ?=([%node * * %font ~] dart.p)  ~
@@ -755,7 +1470,7 @@
 ::
 ++  dart-3-to-dart
   |=  d=dart-3
-  ^-  dart:nexus
+  ^-  dart-11
   ?.  ?=(%node -.d)  d
   ?<  ?=(%font -.load.d)
   [%node wire.d road.d load.d]

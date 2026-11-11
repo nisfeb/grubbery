@@ -224,14 +224,22 @@
       [%skip ~]
     [%done kept.u.in]
   ==
-::  On crash recovery (prod is [~ tang]), log the error and wait for a
-::  poke to restart. On clean start (prod is ~), continue.
-::  Any poke restarts the process — %sig is the convention; a non-sig
-::  poke logs a warning but restarts anyway, and its payload is
-::  consumed (the restarted process never sees it).
-::  Use at the top of a process to make it restartable:
-::    ;<  ~  bind:m  (rise-wait prod "my-process: failed")
-::    ::  startup code continues here
+::  DELETE THIS ARM AND EVERY CALL TO IT. It does nothing.
+::
+::  `prod` is always ~ (see its definition in /lib/nexus.hoon), so the
+::  only branch below that waits is unreachable: every caller takes
+::  `?~ prod (pure:m ~)` and falls straight through. There are 36 call
+::  sites, all of the form
+::
+::    ;<  ~  bind:m  (rise-wait:io prod "my-process: failed")
+::
+::  and each is a no-op line above the startup code it appears to guard.
+::  Removing them does not touch `prod` itself, which stays in the +spool
+::  signature until that separate change lands.
+::
+::  Do not reason about this arm from its body alone. It reads like crash
+::  recovery -- log the error, park on a poke, restart -- and that is why
+::  it has survived; the branch is simply never taken.
 ::
 ++  rise-wait
   |=  [=prod:fiber:nexus msg=tape]
@@ -489,12 +497,12 @@
 ::  firm the fold hist (whose pace lobe is the subtree merkle root).
 ::
 ++  checkpoint
-  |=  =road:tarball
+  |=  [=road:tarball tags=(set @t)]
   =/  m  (fiber ,~)
   ^-  form:m
   ;<  =wire  bind:m  (nonce /firm)
   ;<  ~  bind:m
-    (send-dart %node wire road %firm ~)
+    (send-dart %node wire road %firm tags)
   (take-held wire)
 ::  +tag: set tags on a hist entry (file or fold, per road)
 ::
@@ -555,6 +563,16 @@
   ;<  ~  bind:m  (send-dart %node wire road %peek blot ~ %.n)
   (take-peek wire)
 ::
+::  Shallow peek at a historical version: this level only, no recursion
+::
+++  peek-shallow-at
+  |=  [=road:tarball blot=(unit blot:tarball) =case:nexus]
+  =/  m  (fiber ,view:nexus)
+  ^-  form:m
+  ;<  =wire  bind:m  (nonce /peek)
+  ;<  ~  bind:m  (send-dart %node wire road %peek blot `case %.n)
+  (take-peek wire)
+::
 ::  Peek at a historical version of a file
 ::
 ++  peek-at
@@ -597,7 +615,33 @@
   =/  m  (fiber ,?)
   ^-  form:m
   ;<  =view:nexus  bind:m  (peek road ~)
-  (pure:m !?=(?(%none %miss %veto %tomb) -.view))
+  (pure:m !?=(?(%none %miss %veto) -.view))
+::
+::  +ensure-fold: a directory with at least this layout. Nothing there:
+::  made as the bole says. A directory there: every child directory the
+::  bole names and it lacks is made the same way, down the tree; what is
+::  there is kept, files included. The loader's %fall for a directory at
+::  runtime, so a layout can be stated once and asked for on every cause.
+::
+++  ensure-fold
+  |=  [=road:tarball =bole:tarball]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ;<  cur=view:nexus  bind:m  (peek-shallow road ~)
+  ?.  ?=([%ball *] cur)  (make road &+bole)
+  =/  kid
+    |=  n=@ta
+    ^-  road:tarball
+    =/  at  |=(=lane:tarball ^-(path ?-(-.lane %| p.lane, %& (snoc path.p.lane name.p.lane))))
+    ?-  -.road
+      %&  [%& %| (snoc (at p.road) n)]
+      %|  [%| p.p.road %| (snoc (at q.p.road) n)]
+    ==
+  =/  kids=(list [n=@ta b=bole:tarball])  ~(tap by dir.bole)
+  |-  ^-  form:m
+  ?~  kids  (pure:m ~)
+  ;<  ~  bind:m  (ensure-fold (kid n.i.kids) b.i.kids)
+  $(kids t.kids)
 ::
 ++  cull
   |=  =road:tarball
@@ -738,11 +782,11 @@
     [%done res.u.in]
   ==
 ::  +born: read hist metadata at dest — file (%&) or fold (%|).
-::  Pure metadata: revision, tags, tombstone flag per entry.
+::  Pure metadata: revision and tags per entry.
 ::
 ++  born
   |=  =road:tarball
-  =/  m  (fiber ,(each (list [=cass:clay tags=(set @t) tomb=?]) tang))
+  =/  m  (fiber ,(each (list [=cass:clay tags=(set @t)]) tang))
   ^-  form:m
   ;<  =wire  bind:m  (nonce /born)
   ;<  ~  bind:m  (send-dart %node wire road %born ~)
@@ -1026,8 +1070,8 @@
   ==
 ::  +yawn: cancel this grub's outstanding +keens for [ship path].
 ::  Precise: the service records each keen's wire and cancels by
-::  duct, so other grubs parked on the same spar (the longpoll
-::  pattern) stay parked. Fire-and-forget.
+::  duct, so other grubs waiting on the same spar (the longpoll
+::  pattern) keep waiting. Fire-and-forget.
 ::
 ++  yawn
   |=  [=ship =path]
@@ -1083,6 +1127,16 @@
   =/  m  (fiber ,~)
   ^-  form:m
   (poke &+&+[/sys/dill %'main.sig'] [[/ %dill-belt] [session belt]])
+::  Open, shut or resize a dill session via /sys/dill/ runtime service.
+::  Opening makes /sys/dill/sessions/<session> and views it from then
+::  on; shutting leaves the grub and its history.
+::
+++  send-dill-task
+  |=  [session=@tas task=session-task:dill]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ?>  ?=(?(%open %shut %blew) -.task)
+  (poke &+&+[/sys/dill %'main.sig'] [[/ %dill-task] [session task]])
 ::  +get-code: peek the code (bins) slice at a road
 ::
 ++  get-code
@@ -1757,7 +1811,7 @@
 ++  push-road  `road:tarball`[%& %& /sys/push %'main.push-state']
 ::
 ::  Notification service helpers — the human-addressed message bus
-::  at /apps/notifications.notifications. Register once (a registrant
+::  (the shell's /notifications, named so in /sys/link). Register once (a registrant
 ::  covers its directory subtree), then notify; payload jobj is
 ::  opaque (title/body/url are conventions). The service owns
 ::  delivery (push) and ack tracking.
@@ -2013,18 +2067,13 @@
   =/  m  (fiber ,~)
   ^-  form:m
   (poke server-road [[/ %eyre-action] act])
-::  HTTP response helpers. Sends poke server-road directly: the
-::  /sys/eyre intercept consumes %send in the sending event, so the
-::  dispatcher relay (main.sig) only added an eval cycle plus a second
-::  validation of the response. Nothing consumes from=main.sig (cancel
-::  routing is conns -> %handle-http-cancel -> dispatcher cull), and
-::  the dispatcher's %eyre-action branch stays for direct pokes. The
-::  door sample is retained so existing call sites compile unchanged.
-::  Usage: =/  srv  ~(. http-res:io [%| 1 %& ~ %'main.sig'])
-::         (send-simple:srv eyre-id payload)
+::  HTTP response helpers. Every send pokes server-road: the /sys/eyre
+::  intercept consumes a %send in the sending event, so a response never
+::  passes through the handler's binding grub. A request fiber answers
+::  with (send-simple:http-res:io eyre-id payload).
 ::
 ++  http-res
-  |_  main=road:tarball
+  |%
   ++  send
     |=  [eyre-id=@ta =eyre-update:nexus]
     =/  m  (fiber ,~)
@@ -2055,11 +2104,12 @@
     ^-  form:m
     (send eyre-id %kick ~)
   --
-::  Standard HTTP dispatcher loop for nexuses with /requests/ sub-dir.
-::  Spawns per-request processes, forwards responses, handles cancels.
+::  +http-dispatch: the request loop of a nexus that serves HTTP. Eyre
+::  pokes the bound grub once per request; each becomes a grub under
+::  /requests, named by its eyre id, that the nexus runs as its own
+::  fiber. A cancel culls that grub; an eyre action goes to the kernel.
 ::
 ++  http-dispatch
-  |=  label=@tas
   =/  m  (fiber ,~)
   ^-  form:m
   |-
@@ -2098,71 +2148,6 @@
     ?~  base  ~
     $(up (dec up), base (snip `path`base))
   [(weld resolved path.q.bend) name.q.bend]
-::  Usergroup registry helpers.
-::
-++  reg-road  `road:tarball`[%& %& /sys/ames %'registry']
-++  reg-blot  `blot:tarball`[/usergroups %registry-action]
-::
-++  reg-poke
-  |=  act=registry-action:nexus
-  =/  m  (fiber ,~)
-  ^-  form:m
-  (poke reg-road [reg-blot act])
-::
-++  reg-register
-  =/  m  (fiber ,~)
-  ^-  form:m
-  ;<  here=rail:tarball  bind:m  get-here-abs
-  (reg-poke [%register here path.here])
-::  +reg-register-at: register a caller-supplied rail (e.g. from its grant
-::  via here-abs:sh) instead of walking to root — lets a granted app
-::  register with no peek /. Niladic +reg-register stays for callers that
-::  want the trustless walk.
-++  reg-register-at
-  |=  here=rail:tarball
-  =/  m  (fiber ,~)
-  ^-  form:m
-  (reg-poke [%register here path.here])
-::
-++  reg-how
-  |=  [group=path =weir:nexus]
-  =/  m  (fiber ,~)
-  ^-  form:m
-  (reg-poke [%how group weir])
-::  The same three, soft. Registering with the usergroup machinery is an
-::  OPTIONAL road for most apps: refuse it and the app keeps every local
-::  feature and loses only the ability to publish itself for cross-ship
-::  reads. That promise is what these make keepable: the hard versions
-::  %fail the fiber on a veto, and a %fail annuls the failing INVOCATION
-::  — its state and darts — and leaves the fiber failed. Prior
-::  invocations stand (a write awaited through put:io is one), so this
-::  is not an event rollback; it is a fiber that dies at an optional
-::  step and never does the work after it.
-::
-::  Observed: an app proved its key road, poked itself %set-caps, wrote
-::  /caps, and then ran rise work that called +reg-register-at, which
-::  was vetoed. The fiber failed there, so the app never reached the
-::  state it reports from, and reported "not granted the key road" on a
-::  ship where that road WAS granted — the veto was for a road it had
-::  never declared, and nothing named it.
-::
-++  reg-poke-soft
-  |=  act=registry-action:nexus
-  =/  m  (fiber ,(unit tang))
-  ^-  form:m
-  (poke-soft reg-road [reg-blot act])
-::
-++  reg-register-at-soft
-  |=  here=rail:tarball
-  =/  m  (fiber ,(unit tang))
-  ^-  form:m
-  (reg-poke-soft [%register here path.here])
-::
-++  reg-how-soft
-  |=  [group=path =weir:nexus]
-  =/  m  (fiber ,(unit tang))
-  ^-  form:m
-  (reg-poke-soft [%how group weir])
 ::  Discovery (/sys/link) helpers.
 ::
 ::  An app is addressed by NAME, not by where it is installed: a name

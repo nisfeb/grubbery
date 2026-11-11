@@ -10,7 +10,7 @@ source of truth.
 
 1. **Hold the source in-ship** — a forge repo instance
    (`/repos/grubbery.git_repo`) cloned from `gwbtc/grubbery` through
-   the github proxy (`/apps/github.github`, OAuth device flow).
+   the github proxy (`@github`, the forge's own /github, OAuth device flow).
 2. **Edit in the namespace** — forge's working-tree editor
    (`POST /api/src`), explorer, or MCP `edit_file` into
    `/repos/grubbery.git_repo/data/tree/...`.
@@ -53,7 +53,7 @@ source of truth.
 1. Fix the push-hang bug (`%fail` on crash-restart).
 2. Dry-run the full loop on a leaf repo (contacts or wallet):
    edit → deploy → check → commit → push, all in-ship.
-3. Clone `gwbtc/grubbery` as a forge repo (stock card on the landing
+3. Clone `gwbtc/grubbery` as a forge repo (recommended card on the landing
    page), wire a desk syncer at `desk/` → staging desk.
 4. Promote: staging desk → `%grubbery`, retire sync.sh, laptop becomes
    mirror.
