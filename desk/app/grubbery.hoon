@@ -8842,19 +8842,30 @@
   ::  a route belongs to the grub that bound it. Anyone who may poke
   ::  /sys/eyre could otherwise take over another app's route, unbind
   ::  it, or answer its requests. A handler owns the grubs under its
-  ::  own directory too: its per-request grubs live there and send.
+  ::  own directory too: its per-request grubs live there and send. A
+  ::  sender with make authority over the handler acts for it as well,
+  ::  as the shell does for the services it hosts.
   =/  owns
     |=  handler=rail:tarball
-    =((scag (lent path.handler) path.sender) path.handler)
-  ::  a binding held by a handler that no longer exists may be taken
-  ::  over, so an app that moved or was deleted cannot pin its route
+    ?|  =((scag (lent path.handler) path.sender) path.handler)
+        !?=([~ %|] (allowed-quiet %make sender `[%& handler]))
+    ==
+  ::  a binding may be taken over by a sender with make authority over
+  ::  the grub that holds it, by the same weir check a make there would
+  ::  pass. So a sandboxed app cannot take another app's route, but the
+  ::  shell, which runs unweired, takes a service's route back from the
+  ::  old instance it moved out of. A holder that no longer exists, or
+  ::  is banged and so cannot answer, never pins its route either.
   =/  may-bind
     |=  =binding:eyre
     =/  cur=(unit rail:tarball)  (~(get by bindings:get-server-state) binding)
-    ?|  ?=(~ cur)
-        =(sender u.cur)
-        ?=(~ (peek-grub-now u.cur))
-    ==
+    ?~  cur  &
+    ?:  =(sender u.cur)  &
+    ?~  (peek-grub-now u.cur)  &
+    =/  pro=(unit proc:fiber:nexus)
+      (~(get by proc:(fall (~(get of pool) path.u.cur) *pipe:nexus)) name.u.cur)
+    ?:  ?=([~ [%| *] *] pro)  &
+    !?=([~ %|] (allowed-quiet %make sender `[%& u.cur]))
   ::  the server-state grub is read per branch, not up front. %send
   ::  fires on every header, body chunk and kick, and it needs the
   ::  grub only to find the handler of a bound connection.
