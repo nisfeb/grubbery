@@ -228,6 +228,10 @@
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/tiles])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/inbox])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/tools])
+        ::  dist: /grubbery/mcp is the old MCP endpoint, kept as an alias
+        ::  of /grubbery/tools; clients configured on the old path keep
+        ::  working. Same length, so the endpoint's suffix is the same.
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/mcp])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/ball])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/explorer])
         http-dispatch:io
@@ -488,8 +492,9 @@
         ::  /grubbery/inbox[/<file>] → the notifications page
         ?:  ?=([%grubbery %inbox *] site)
           (serve-page:notifications rail)
-        ::  /grubbery/tools → the MCP endpoint and its page
-        ?:  ?=([%grubbery %tools *] site)
+        ::  /grubbery/tools → the MCP endpoint and its page (and the
+        ::  dist alias /grubbery/mcp)
+        ?:  ?=([%grubbery ?(%tools %mcp) *] site)
           (serve-request:mcp rail)
         ::  /grubbery/ball[/...] and /grubbery/explorer[/...] → the explorer:
         ::  the tree and its page
