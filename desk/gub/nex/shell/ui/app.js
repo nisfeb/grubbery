@@ -92,11 +92,11 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
           var g = document.createElement('button');
           g.className = 'hdr-btn';
           g.textContent = 'Review';
-          g.onclick = function(e) { e.stopPropagation(); location.href = md.url; };
+          g.onclick = function(e) { e.stopPropagation(); if (safeUrl(md.url)) location.href = md.url; };
           acts.appendChild(g);
           d.appendChild(acts);
           d.style.cursor = 'pointer';
-          d.onclick = function() { location.href = md.url; };
+          d.onclick = function() { if (safeUrl(md.url)) location.href = md.url; };
           el.appendChild(d);
           return;
         }
@@ -118,7 +118,7 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
           d.style.cursor = 'pointer';
           d.onclick = function() {
             if (!acked) bellAck(n.id);
-            if (md.url) window.open(md.url, '_blank');
+            if (md.url && safeUrl(md.url)) window.open(md.url, '_blank');
           };
         }
         el.appendChild(d);
@@ -198,7 +198,12 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
   function esc(s) {
     var d = document.createElement('div');
     d.textContent = s == null ? '' : String(s);
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  // urls from notifications, tiles and desks are remote: http(s), mailto or relative only
+  function safeUrl(u) {
+    var s = String(u || '').replace(/[\u0000-\u0020]/g, '');
+    return !/^[a-z][a-z0-9+.\-]*:/i.test(s) || /^(https?|mailto):/i.test(s);
   }
   bellFetch();
 
@@ -272,7 +277,7 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
     btn.onclick = function(e) { e.preventDefault(); e.stopPropagation(); viewTile(d, t.name); };
     acts.appendChild(btn);
     d.appendChild(acts);
-    if (t.href) {
+    if (t.href && safeUrl(t.href)) {
       var a = document.createElement('a');
       a.className = 'tile-link';
       a.href = t.href;
@@ -521,7 +526,7 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
       return c;
     }
     if (t.info) row('About', text(t.info));
-    if (t.href) {
+    if (t.href && safeUrl(t.href)) {
       var a = document.createElement('a');
       a.href = t.href;
       a.target = '_blank';
@@ -651,10 +656,11 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
 
   // -- get apps from ships --
   var peerGroups = [];
+  // quotes too: peer and desk values go into attributes
   function escP(s) {
     var d = document.createElement('div');
     d.textContent = (s == null) ? '' : String(s);
-    return d.innerHTML;
+    return d.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
   function peerSpin() {
     document.getElementById('peer-lists').innerHTML =
@@ -770,7 +776,7 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
         desks.forEach(function(d) {
           var src = d.source || '';
           var srcLabel = src ? ((src[0] === '~' ? 'foreign source: ' : 'local source: ') + src) : 'no source';
-          var url = d.url || ('/grubbery/desk/' + String(d.name).split('.')[0]);
+          var url = (d.url && safeUrl(d.url)) ? d.url : ('/grubbery/desk/' + String(d.name).split('.')[0]);
           var row = document.createElement('div');
           row.className = 'papp';
           var share = d.share || [];

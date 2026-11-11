@@ -1594,8 +1594,15 @@
 ::  handler's bumps. Shared by %data transfers and inline snaps.
 ::
 ++  merge-transfer-data
-  |=  got=silo:nexus
+  |=  [got=silo:nexus want=lobes:nexus]
   ^+  this
+  ::  only lobes a staged snap names are hashed and merged. A ship
+  ::  could otherwise send any amount of content we never asked for
+  ::  and have this event hash and sort all of it.
+  =.  got
+    ^-  silo:nexus
+    :-  (malt (skim ~(tap by nouns.got) |=([k=nobe:nexus *] (~(has in nouns.want) k))))
+    (malt (skim ~(tap by jects.got) |=([k=jobe:nexus *] (~(has in jects.want) k))))
   =/  good-nouns=(list [=nobe:nexus =noun])
     %+  murn  ~(tap by nouns.got)
     |=  [=nobe:nexus refs=@ud =noun]
@@ -1765,7 +1772,7 @@
     ::  the want/data legs are skipped entirely.
     ?:  ?=(^ data.resp)
       ~?  dbg  [%snap-inline-from src]
-      (merge-transfer-data u.data.resp)
+      (merge-transfer-data u.data.resp refs.u.snap.resp)
     =/  missing=lobes:nexus
       :-  (~(dif in jects.refs.u.snap.resp) ~(key by jects.silo))
       (~(dif in nouns.refs.u.snap.resp) ~(key by nouns.silo))
@@ -1791,7 +1798,18 @@
     ::
       %data
     ~?  dbg  [%data-received-from src]
-    (merge-transfer-data silo.resp)
+    ::  a %want went out only for a snap staged on a peek to this ship:
+    ::  what those snaps name is all the data we asked this ship for
+    =/  want=lobes:nexus
+      %+  roll  ~(val by peeks.remo)
+      |=  [pk=peek:remo:nexus acc=lobes:nexus]
+      ?.  &(=(ship.pk src) ?=(^ snap.pk))  acc
+      :-  (~(uni in jects.acc) jects.refs.u.snap.pk)
+      (~(uni in nouns.acc) nouns.refs.u.snap.pk)
+    ?:  &(=(~ jects.want) =(~ nouns.want))
+      ~?  dbg  [%data-unsolicited src]
+      this
+    (merge-transfer-data silo.resp want)
     ::
       %veto
     ::  Remote peek was blocked by weir. Discharge matching peeks.
@@ -2008,49 +2026,57 @@
 ++  set-gain-lane
   |=  [=lane:tarball flag=?]
   ^+  this
-  ?-    -.lane
-      %&
-    ::  File: set gain on the leaf ject at this rail
-    =/  here=rail:tarball  p.lane
-    =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
-      (~(get of born) path.here)
-    ?~  node  this
-    =/  fh=(unit hist:nexus)  (~(get by file.u.node) name.here)
-    ?~  fh  this
-    =/  got=(unit [key=cass:clay val=entry:hist:nexus])
-      (ram:hon:hist:nexus u.fh)
-    ?~  got  this
-    =/  jot  (~(get by jects.silo) lobe.pace.val.u.got)
-    ?~  jot  this
-    ?.  ?=(%leaf -.ject.u.jot)  this
-    ?:  =(gain.leaf.ject.u.jot flag)  this
-    ::  Rewrite leaf ject with new gain flag
-    =/  new-leaf=leaf:nexus  leaf.ject.u.jot(gain flag)
-    =.  silo  (~(drop-ject si:nexus silo) lobe.pace.val.u.got)
-    =/  [new-jobe=jobe:nexus new-silo=silo:nexus]
-      (~(put-ject si:nexus silo) [%leaf new-leaf])
-    =.  silo  new-silo
-    ::  Update hist to point to new ject lobe
-    =/  =pace:hist:nexus  ?:(flag [%firm new-jobe] [%temp new-jobe])
-    =/  new-hist=hist:nexus
-      (put-pace:hist:nexus u.fh key.u.got pace)
-    =.  this  (put-born here new-hist)
-    this
-      %|
-    ::  Directory: set the DIRECTORY'S OWN gain -- that is the policy
-    ::  new files inherit (+fold-gain reads it) -- then sweep what is
-    ::  already inside, so existing files match the new policy too.
-    =.  this  (set-fold-gain p.lane flag)
-    =/  sub-ball=ball:tarball  (peek-ball-now p.lane)
-    =/  entries=(list [pax=path lp=lump:tarball])  ~(tap of sub-ball)
-    |-
-    ?~  entries  this
-    =/  files=(list @ta)  ~(tap in ~(key by contents.lp.i.entries))
-    |-
-    ?~  files  ^$(entries t.entries)
-    =.  this  (set-gain-lane &+[(weld p.lane pax.i.entries) i.files] flag)
-    $(files t.files)
-  ==
+  ::  Directory: set the DIRECTORY'S OWN gain -- that is the policy
+  ::  new files inherit (+fold-gain reads it) -- then sweep what is
+  ::  already inside, so existing files match the new policy too.
+  =?  this  ?=(%| -.lane)  (set-fold-gain p.lane flag)
+  ::  Each file's leaf ject is rewritten with the new gain flag, then
+  ::  the trees roll up and notify, as any write does. Without the
+  ::  rollup a parent tree kept naming the old leaf, so the file and its
+  ::  directory disagreed and nobody watching heard of it. The trees
+  ::  roll up once per directory, deepest first, not once per file.
+  =/  rails=(list rail:tarball)
+    ?:  ?=(%& -.lane)  ~[p.lane]
+    %+  turn  ~(tap ba:tarball (peek-ball-now p.lane))
+    |=([=rail:tarball *] [(weld p.lane path.rail) name.rail])
+  =|  done=(list rail:tarball)
+  |-
+  ?^  rails
+    =/  nex=(unit _this)  (set-gain-leaf i.rails flag)
+    ?~  nex  $(rails t.rails)
+    =.  this  u.nex
+    $(rails t.rails, done [i.rails done])
+  =/  dirs=(list path)
+    %+  sort  ~(tap in (silt (turn done |=(r=rail:tarball path.r))))
+    |=([a=path b=path] (gth (lent a) (lent b)))
+  =|  bumped=(set lane:tarball)
+  |-
+  ?^  dirs
+    =^  bum=(set lane:tarball)  this  (record-trees-lanes i.dirs)
+    $(dirs t.dirs, bumped (~(uni in bumped) bum))
+  (notify-lanes (~(gas in bumped) (turn done |=(r=rail:tarball &+r))))
+::  +set-gain-leaf: rewrite one file's leaf ject with a gain flag, in
+::  place in its hist. ~ when there is nothing to change.
+::
+++  set-gain-leaf
+  |=  [here=rail:tarball flag=?]
+  ^-  (unit _this)
+  =/  fh=(unit hist:nexus)  (get-born here)
+  ?~  fh  ~
+  =/  got=(unit [key=cass:clay val=entry:hist:nexus])
+    (ram:hon:hist:nexus u.fh)
+  ?~  got  ~
+  =/  jot  (~(get by jects.silo) lobe.pace.val.u.got)
+  ?~  jot  ~
+  ?.  ?=(%leaf -.ject.u.jot)  ~
+  ?:  =(gain.leaf.ject.u.jot flag)  ~
+  ::  the new leaf goes in before the old ref is dropped: dropping
+  ::  first takes the content noun with a leaf nothing else holds
+  =^  new-jobe=jobe:nexus  silo
+    (~(put-ject si:nexus silo) [%leaf leaf.ject.u.jot(gain flag)])
+  =.  silo  (~(drop-ject si:nexus silo) lobe.pace.val.u.got)
+  =/  =pace:hist:nexus  ?:(flag [%firm new-jobe] [%temp new-jobe])
+  `(put-born here (put-pace:hist:nexus u.fh key.u.got pace))
 ::  Promote current hist entry to %firm at a rail, with optional tags.
 ::
 ++  firm-hist
@@ -5063,13 +5089,16 @@
     (fall (~(get by dir.existing-tree) child-name) [*jobe:nexus ~])
   =/  new-tree=tree:nexus
     existing-tree(dir (~(put by dir.existing-tree) child-name old-entry(weir weir)))
+  =/  old-born=born:nexus  born
   =/  [* new-born=born:nexus new-silo=silo:nexus]
     (put-tree:nexus born silo peak now.bowl parent node new-tree)
   =.  born  new-born
   =.  silo  new-silo
-  ::  Record tree from parent up, notify
-  =/  old-born=born:nexus  born
-  =.  this  (record-trees parent)
+  ::  the parent's tree is already the new one, so record from the
+  ::  grandparent up: a walk from the parent finds its hash unchanged
+  ::  and stops, leaving every ancestor naming the old tree. Notify
+  ::  against the born from before the write.
+  =?  this  ?=(^ parent)  (record-trees (snip `path`parent))
   =.  this  (gage %set-weir-notify |.((notify old-born)))
   ::  Re-check subscriptions from watchers under this weir
   (audit-weir dest)
@@ -7527,6 +7556,14 @@
 ++  route-http
   |=  [eyre-id=@ta req=inbound-request:eyre]
   ^+  this
+  ::  every owner check downstream asks src == our. Eyre on our kelvins
+  ::  already sends a guest identity for a request with no session, but
+  ::  an older or forked Eyre sends our own ship for every request. So
+  ::  an unauthenticated request never reaches a handler as our: it
+  ::  goes on as a fresh comet-sized guest, as Eyre's own guests do.
+  =/  who=@p
+    ?.  &(=(src.bowl our.bowl) !authenticated.req)  src.bowl
+    (end 7 (shas %grubbery-guest eny.bowl))
   =/  [site=path args=quay:eyre]  (parse-url:http-utils url.request.req)
   ::  every owner gate downstream asks only src == our, which the
   ::  session cookie decides, and a browser sends that cookie on a write
@@ -7541,10 +7578,10 @@
     %+  give-simple-payload:app:server  eyre-id
     (cross-origin-forbidden:http-utils u.cross)
   ?+    site
-    (forward-http eyre-id req site)
+    (forward-http eyre-id who req site)
     ::
       [%grubbery %push *]
-    (handle-push-http eyre-id src.bowl req t.t.site args)
+    (handle-push-http eyre-id who req t.t.site args)
     ::
       [%grubbery %api *]
     ::  AUTHORITY: the kernel gates exactly what the kernel itself does.
@@ -7574,7 +7611,7 @@
       ?~  jump  [& this]
       =/  dest=(unit lane:tarball)  (ball-op-dest endpoint t.site-rest)
       ?~  dest  [& this]
-      =^  caller=rail:tarball  this  (asker-rail src.bowl)
+      =^  caller=rail:tarball  this  (asker-rail who)
       [(asker-allowed caller u.jump u.dest) this]
     ?.  gated
       %-  emit-cards
@@ -7590,11 +7627,11 @@
     ::  make+cull cascade, no permanent event-log record per read.
     ::
     =/  handled=(unit (list card:agent:gall))
-      (serve-api-read-sync eyre-id src.bowl req)
+      (serve-api-read-sync eyre-id who req)
     ?^  handled
       (emit-cards u.handled)
     ::  needs a fiber: materialize the request grub as before
-    (make /sys/eyre [%& /sys/eyre/requests eyre-id] %.n %.n [%| [[/ %http-request] [src.bowl req]] ~])
+    (make /sys/eyre [%& /sys/eyre/requests eyre-id] %.n %.n [%| [[/ %http-request] [who req]] ~])
   ==
 ::  +cross-site-write: the fetch metadata of a write from another site
 ::  that carries the owner's session, or ~ to let it through. A guest
@@ -8041,7 +8078,7 @@
 ::  bound handler, recording the connection; 404 if nothing matches.
 ::
 ++  forward-http
-  |=  [eyre-id=@ta req=inbound-request:eyre site=path]
+  |=  [eyre-id=@ta who=@p req=inbound-request:eyre site=path]
   ^+  this
   =/  match=(unit [=binding:eyre handler=rail:tarball])
     (find-eyre-binding bindings:get-server-state site)
@@ -8054,7 +8091,7 @@
   ::  recording the connection is agent state only. this runs on every
   ::  inbound request, so it must never reach save-server-state.
   =.  conns  (~(put by conns) eyre-id binding.u.match)
-  (poke ~ handler.u.match [[/ %handle-http-request] [eyre-id src.bowl req]])
+  (poke ~ handler.u.match [[/ %handle-http-request] [eyre-id who req]])
 ::
 ++  find-eyre-binding
   |=  [bindings=(map binding:eyre rail:tarball) site=path]
@@ -8802,9 +8839,25 @@
   |=  [sender=rail:tarball =wire vaz=vase]
   ^+  this
   =/  act=eyre-action:nexus  !<(eyre-action:nexus vaz)
+  ::  a route belongs to the grub that bound it. Anyone who may poke
+  ::  /sys/eyre could otherwise take over another app's route, unbind
+  ::  it, or answer its requests. A handler owns the grubs under its
+  ::  own directory too: its per-request grubs live there and send.
+  =/  owns
+    |=  handler=rail:tarball
+    =((scag (lent path.handler) path.sender) path.handler)
+  ::  a binding held by a handler that no longer exists may be taken
+  ::  over, so an app that moved or was deleted cannot pin its route
+  =/  may-bind
+    |=  =binding:eyre
+    =/  cur=(unit rail:tarball)  (~(get by bindings:get-server-state) binding)
+    ?|  ?=(~ cur)
+        =(sender u.cur)
+        ?=(~ (peek-grub-now u.cur))
+    ==
   ::  the server-state grub is read per branch, not up front. %send
-  ::  fires on every header, body chunk and kick, and it needs nothing
-  ::  from the grub.
+  ::  fires on every header, body chunk and kick, and it needs the
+  ::  grub only to find the handler of a bound connection.
   ?-    -.act
       %bind
     ::  NB: avoid dots in binding paths. Eyre parses a dotted final
@@ -8812,6 +8865,10 @@
     ::  bindings against the STRIPPED path, so a binding ending in
     ::  a dotted segment never matches a slash-less URL (it falls
     ::  through to docket's catch-all). Bind dot-free paths.
+    ::  the handler is the sender: +bind-http names its own rail
+    ?.  &(=(sender handler.act) (may-bind binding.act))
+      ~&  >>  [%eyre-bind-refused sender path.binding.act]
+      this
     =/  st=server-state:nexus  get-server-state
     =.  bindings.st  (~(put by bindings.st) binding.act handler.act)
     =.  this  (save-server-state st)
@@ -8821,15 +8878,38 @@
     ::  bind requests to the SENDER — the kernel already knows who poked,
     ::  so the caller needn't walk to root (get-here-abs) to self-report a
     ::  handler rail. This is the common case: a nexus serving its own UI.
+    ?.  (may-bind binding.act)
+      ~&  >>  [%eyre-bind-refused sender path.binding.act]
+      this
     =/  st=server-state:nexus  get-server-state
     =.  bindings.st  (~(put by bindings.st) binding.act sender)
     =.  this  (save-server-state st)
     (emit-card [%pass /eyre-bind %arvo %e %connect binding.act dap.bowl])
   ::
       %unbind
+    =/  cur=(unit rail:tarball)
+      (~(get by bindings:get-server-state) binding.act)
+    ?:  &(?=(^ cur) !(owns u.cur))
+      ~&  >>  [%eyre-unbind-refused sender path.binding.act]
+      this
     (drop-bindings ~[binding.act])
   ::
       %send
+    ::  only the handler of a bound connection answers it. A /grubbery/api
+    ::  request is no bound connection: its own request grub answers. A
+    ::  send on no connection at all is quietly dropped: a cancel can
+    ::  land before a request fiber's last send, and Eyre has no one to
+    ::  give it to anyway.
+    =/  bid=(unit binding:eyre)  (~(get by conns) eyre-id.act)
+    ?~  bid
+      ?.  =(sender [/sys/eyre/requests eyre-id.act])
+        ~?  >>  dbg  [%eyre-send-no-conn sender eyre-id.act]
+        this
+      (emit-cards (eyre-response-cards eyre-id.act eyre-update.act))
+    =/  hand=(unit rail:tarball)  (~(get by bindings:get-server-state) u.bid)
+    ?.  &(?=(^ hand) (owns u.hand))
+      ~&  >>  [%eyre-send-refused sender eyre-id.act]
+      this
     =/  crds=(list card)
       (eyre-response-cards eyre-id.act eyre-update.act)
     ::  %kick and %simple end the connection, so forget it. %header and
@@ -9224,7 +9304,7 @@
   ::  and the tree read (%ct, which clay-tree issues and which crashes the
   ::  same way on a missing desk path); a %cy or %cs of a directory has no
   ::  file and goes through as asked
-  ?:  &(?=(%cx %ct) !.^(? %cu at))
+  ?:  &(?=(?(%cx %ct) i.pat) !.^(? %cu at))
     (fail "no such file")
   ?:  &(=('g' vane) !=(%gu i.pat) !.^(? %gu /(scot %p our.bowl)/[i.t.pat]/(scot %da now.bowl)/$))
     (fail "no such agent")
