@@ -3526,6 +3526,8 @@
   ?.  ?=([%file *] wv)  (pure:m ~)
   (pure:m (mole |.(!<(json (need-vase:tarball sang.wv)))))
 ::  +road-strs: the string list for one category of a weir.json ask.
+::  Every ask and grant is compared, and every grant narrowed, through
+::  here, so each road comes out in the shell's current spelling.
 ::
 ++  road-strs
   |=  [ask=json cat=@t]
@@ -3536,10 +3538,25 @@
   ::  a line is either a bare road string or {road, why}
   %+  murn  p.u.v
   |=  j=json
-  ?:  ?=(%s -.j)  `p.j
+  ^-  (unit @t)
+  ?:  ?=(%s -.j)  `(canon-road p.j)
   ?.  ?=([%o *] j)  ~
   =/  r  (~(get by p.j) 'road')
-  ?.(?=([~ %s *] r) ~ `p.u.r)
+  ?.(?=([~ %s *] r) ~ `(canon-road p.u.r))
+::  +canon-road: a road string in the shell's old spelling,
+::  /apps/shell.shell, respelled /apps/shell. The kernel already reads
+::  the old spelling as the new place (+canon-lane), but apps still ask
+::  in it, and an approval recorded either way must match either way.
+::
+++  canon-road
+  |=  t=@t
+  ^-  @t
+  =/  old=@t  '/apps/shell.shell'
+  =/  n=@ud  (met 3 old)
+  ?.  =(old (end [3 n] t))  t
+  =/  rest=@t  (rsh [3 n] t)
+  ?.  |(=(0 rest) =('/' (end 3 rest)))  t
+  (cat 3 '/apps/shell' rest)
 ::  +narrow-to-ask: the granted roads that the app's own ask declares, per
 ::  category, as bare road strings. Every other key of the grant (the
 ::  usergroups and name shares Permits sends) passes through as it came.

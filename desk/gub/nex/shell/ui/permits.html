@@ -234,7 +234,9 @@
       });
       return order.sort(function(x,y){ return (x.desk?0:1)-(y.desk?0:1); });
     }
-    function roadOf(it){ return typeof it==='string'?it:(it&&it.road)||''; }
+    // the shell's old spelling, /apps/shell.shell, is the shell where it lives
+    // now; apps still ask in it, so a road reads the same either way
+    function roadOf(it){ var r=typeof it==='string'?it:(it&&it.road)||''; return r.replace(/^\/apps\/shell\.shell(?=\/|$)/,'/apps/shell'); }
     function whyOf(it){ return typeof it==='string'?'':(it&&it.why)||''; }
     function optOf(it){ return typeof it==='object'&&it&&it.optional; }
     function sameRoads(a,b){ a=(a||[]).map(roadOf).slice().sort(); b=(b||[]).map(roadOf).slice().sort(); if(a.length!==b.length)return false; for(var i=0;i<a.length;i++)if(a[i]!==b[i])return false; return true; }
@@ -307,7 +309,7 @@
       return base?base+suf:'';
     }
     // roads presently in force on the weir (active or unmanaged in the overlay)
-    function liveRoads(app){ var w=weirsState[app]||{}, s={}; ['poke','peek','make'].forEach(function(c){ (w[c]||[]).forEach(function(r){ if(r.status==='active'||r.status==='unmanaged')s[r.road]=true; }); }); return s; }
+    function liveRoads(app){ var w=weirsState[app]||{}, s={}; ['poke','peek','make'].forEach(function(c){ (w[c]||[]).forEach(function(r){ if(r.status==='active'||r.status==='unmanaged')s[roadOf(r.road)]=true; }); }); return s; }
     // ---- consent checklist ----
     function checklistHTML(a){
       var prior=approvedState[a.app], gset=null, pdset=null;

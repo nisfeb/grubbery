@@ -19,8 +19,11 @@
 ::    roads, this path has no data yet and the tools report an empty vault for
 ::    the same reason. That window is the upgrade prompt's length and is
 ::    accepted; the permanent version of it is not.
+::
+::    The shell itself moved, from /apps/shell.shell to /apps/shell, and this
+::    follows it for the same reason.
 ++  base
-  `path`/apps/'shell.shell'/desks/'lattice.desk'/desk/data/'lattice.lattice_app'
+  `path`/apps/shell/desks/'lattice.desk'/desk/data/'lattice.lattice_app'
 ::  +read-vault: every live knowledge entry, keyed by its path-like key.
 ::
 ++  read-vault

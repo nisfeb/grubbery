@@ -960,6 +960,74 @@
     ?:  =(from (scag n `tape`r))  (weld to (go (slag n `tape`r)))
     [i.r (go t.r)]
   --
+::  +canon-lane: /apps/shell.shell, the shell's old spelling, is the
+::  shell where it lives now. +migrate-shell moves the shell, but apps,
+::  their asks and the weirs sanded from those asks still spell the old
+::  place, and so do peers on an older grubbery. Every lane a dart, a
+::  weir road or a peer's request names is read through here, so the
+::  old spelling reaches the place the new one does. Where the move was
+::  refused the old shell is still a real place, and its spelling holds.
+::
+++  canon-lane
+  |=  =lane:tarball
+  ^-  lane:tarball
+  =/  pax=path  ?-(-.lane %& path.p.lane, %| p.lane)
+  ?.  ?=([%apps @ *] pax)  lane
+  ?.  =('shell.shell' i.t.pax)  lane
+  ?:  (~(has in folds:(live-children /apps)) 'shell.shell')  lane
+  =/  new=path  [%apps %shell t.t.pax]
+  ?-(-.lane %& [%& new name.p.lane], %| [%| new])
+::  +peer-held: a peer names, in the old spelling, something of the
+::  shell's other than an app's data: a desk's code or version, or the
+::  storefront. Only an older grubbery does, and what lives there now
+::  needs the new kernel, so it stays refused, as it was before the old
+::  spelling was read, until that ship's own grubbery moves its shell
+::  and respells its sources. App data (desks/<d>/desk/data) it reaches.
+::
+++  peer-held
+  |=  =lane:tarball
+  ^-  ?
+  =/  pax=path  ?-(-.lane %& path.p.lane, %| p.lane)
+  ?&  !=(lane (canon-lane lane))
+      !?=([%apps @ %desks @ %desk %data *] pax)
+  ==
+::  +canon-weir: a weir whose roads are read through +canon-lane
+::
+++  canon-weir
+  |=  =weir:nexus
+  ^-  weir:nexus
+  =/  one
+    |=  r=road:tarball
+    ^-  road:tarball
+    ?.  ?=(%& -.r)  r
+    [%& (canon-lane p.r)]
+  =/  fix
+    |=  roads=(set road:tarball)
+    ^-  (set road:tarball)
+    ?.  (~(any in roads) |=(r=road:tarball !=(r (one r))))  roads
+    (~(run in roads) one)
+  [(fix make.weir) (fix poke.weir) (fix peek.weir)]
+::  +canon-api-url: an api url naming the shell by its old spelling
+::  (/grubbery/api/<endpoint>/apps/shell.shell/...) names it where it
+::  lives now, before anything parses it. Apps' pages still keep their
+::  beacons at the old spelling.
+::
+++  canon-api-url
+  |=  url=@t
+  ^-  @t
+  =/  t=tape  (trip url)
+  =/  pre=tape  "/grubbery/api/"
+  ?.  =(pre (scag (lent pre) t))  url
+  =/  cut=(unit @ud)  (find "/" (slag (lent pre) t))
+  ?~  cut  url
+  =/  at=@ud  (add (lent pre) u.cut)
+  =/  old=tape  "/apps/shell.shell"
+  =/  tail=tape  (slag at t)
+  ?.  =(old (scag (lent old) tail))  url
+  =/  after=tape  (slag (lent old) tail)
+  ?.  ?~(after & |(=('/' i.after) =('?' i.after)))  url
+  ?:  (~(has in folds:(live-children /apps)) 'shell.shell')  url
+  (crip :(weld (scag at t) "/apps/shell" after))
 ++  cold-start
   ^-  _this
   ::  every step is gauged: under +mem each prints the loom on the way in,
@@ -1428,14 +1496,19 @@
   |=  [caller=rail:tarball req=load:remo:nexus]
   ^+  this
   ?>  ?=(%peek +<.req)
+  ::  answered in the peer's own spelling, which is how it matches the
+  ::  answer to its peek; read where that spelling leads (+canon-lane)
   =/  dest-lane=lane:tarball  dest.req
-  ?:  ?=([~ %|] (allowed %peek caller `dest-lane))
+  =/  at=lane:tarball  (canon-lane dest-lane)
+  ?:  ?|  (peer-held dest-lane)
+          ?=([~ %|] (allowed %peek caller `dest-lane))
+      ==
     (respond-transfer %peek [wire.req %veto dest-lane])
   =/  snap=(unit snap:remo:nexus)
     =/  cas-pace=(unit [=cass:clay =pace:hist:nexus])
-      ?-  -.dest-lane
+      ?-  -.at
           %&
-        =/  r=rail:tarball  p.dest-lane
+        =/  r=rail:tarball  p.at
         =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
           (~(get of born) path.r)
         ?~  node  ~
@@ -1451,7 +1524,7 @@
         ?~  cp  ~
         (some [cass=cass.u.cp pace=pace.u.cp])
           %|
-        =/  dest=fold:tarball  p.dest-lane
+        =/  dest=fold:tarball  p.at
         =/  sub-born=born:nexus  (~(dip of born) dest)
         ?~  fil.sub-born  ~
         =/  sk=hist:nexus  fold.u.fil.sub-born
@@ -1515,7 +1588,9 @@
   |=  [caller=rail:tarball req=load:remo:nexus]
   ^+  this
   ?>  ?=(%keep +<.req)
-  ?:  ?=([~ %|] (allowed %peek caller `dest.req))
+  ?:  ?|  (peer-held dest.req)
+          ?=([~ %|] (allowed %peek caller `dest.req))
+      ==
     this
   (keep caller dest.req wire.req)
 ::  process-drop: remove the caller as a remote watcher.
@@ -1710,8 +1785,10 @@
 ++  keep
   |=  [watcher=rail:tarball target=lane:tarball =wire]
   ^+  this
+  ::  kept, and answered, in the peer's spelling; +notify-lanes reads it
+  ::  through +canon-lane
   =.  this  (sub-put target watcher wire ~)
-  =/  =wave:nexus  (wave-at:nexus born target)
+  =/  =wave:nexus  (wave-at:nexus born (canon-lane target))
   =/  resp=intake:remo:nexus
     [wire target wave]
   =.  cards
@@ -3625,30 +3702,33 @@
   |-
   ?~  watched  this
   =/  [target=lane:tarball watchers=(map rail:tarball [=wire blot=(unit blot:tarball)])]  i.watched
+  ::  a watcher keeps the spelling it asked in, and is told in it; what
+  ::  changed is matched where that spelling leads (+canon-lane)
+  =/  real=lane:tarball  (canon-lane target)
   ::  Find all changed lanes that are inside this target (or equal to target)
   =/  relevant=(set lane:tarball)
     %-  ~(gas in *(set lane:tarball))
     %+  murn  ~(tap in changed)
     |=  chg=lane:tarball
     ^-  (unit lane:tarball)
-    ?-    -.target
+    ?-    -.real
         ::  File target: only exact match counts
         %&
-      ?.  &(?=(%& -.chg) =(p.chg p.target))  ~
+      ?.  &(?=(%& -.chg) =(p.chg p.real))  ~
       `chg
         ::  Dir target: changed lane must be under target dir
         %|
       ?-  -.chg
         ::  Changed file: file's dir must be under target dir
-        %&  ?~((decap:tarball p.target path.p.chg) ~ `chg)
+        %&  ?~((decap:tarball p.real path.p.chg) ~ `chg)
         ::  Changed dir: must be under or equal to target dir
-        %|  ?~((decap:tarball p.target p.chg) ~ `chg)
+        %|  ?~((decap:tarball p.real p.chg) ~ `chg)
       ==
     ==
   ::  Skip if nothing relevant changed
   ?:  =(~ relevant)  $(watched t.watched)
   ::  Build wavefront for relevant lanes, relativized to target
-  =/  =wave:nexus  (wave-at:nexus born target)
+  =/  =wave:nexus  (wave-at:nexus born real)
   ::  Send wavefront to each watcher
   =.  this
     %-  ~(rep by watchers)
@@ -3896,7 +3976,8 @@
   ^-  [jump:nexus (unit lane:tarball)]
   ?+    -.dart  [%peek ~]          :: system darts: no dest, always allowed
       %node                        :: %node darts target a file/dir
-    =/  dest-lane=(unit lane:tarball)  (lane-from-road:tarball [%& here] road.dart)
+    =/  dest-lane=(unit lane:tarball)
+      (bind (lane-from-road:tarball [%& here] road.dart) canon-lane)
     :_  dest-lane
     ?-  -.load.dart
       ?(%peek %keep %drop %seek %peep %code %born)  %peek  :: read operations
@@ -5196,15 +5277,15 @@
   ^-  filt:nexus
   ::  No destination (%kept): crosses no boundary, no weir has jurisdiction
   ?~  dest  ~
-  =/  gov=(unit fold:tarball)  (nearest-governor here dest)
-  =/  dest-lane=lane:tarball  u.dest
+  =/  dest-lane=lane:tarball  (canon-lane u.dest)
+  =/  gov=(unit fold:tarball)  (nearest-governor here `dest-lane)
   =|  =filt:nexus
   |-
   ::  Reached governor - stop (don't check its weir)
   ?:  &(?=(^ gov) =(path.here u.gov))
     filt
   ::  Check weir at current location (stored on parent's tree dir entry)
-  =/  weir-here=(unit weir:nexus)  (peek-weir path.here)
+  =/  weir-here=(unit weir:nexus)  (bind (peek-weir path.here) canon-weir)
   =/  next=filt:nexus
     (next-filt:nexus filt (filter:nexus jump path.here dest-lane weir-here))
   ?:  ?=([~ %|] next)
@@ -7562,6 +7643,7 @@
 ++  route-http
   |=  [eyre-id=@ta req=inbound-request:eyre]
   ^+  this
+  =.  url.request.req  (canon-api-url url.request.req)
   ::  every owner check downstream asks src == our. Eyre on our kelvins
   ::  already sends a guest identity for a request with no session, but
   ::  an older or forked Eyre sends our own ship for every request. So
@@ -8864,7 +8946,8 @@
   =/  txt
     |=  =road:tarball
     ^-  (unit @t)
-    =/  ln=(unit lane:tarball)  (lane-from-road:tarball [%& here] road)
+    =/  ln=(unit lane:tarball)
+      (bind (lane-from-road:tarball [%& here] road) canon-lane)
     ?~  ln  ~
     =/  [pax=path fil=(unit @ta)]
       ?-(-.u.ln %& [path.p.u.ln `name.p.u.ln], %| [p.u.ln ~])
