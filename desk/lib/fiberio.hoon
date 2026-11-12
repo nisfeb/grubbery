@@ -2073,7 +2073,11 @@
 ::  with (send-simple:http-res:io eyre-id payload).
 ::
 ++  http-res
-  |%
+  ::  dist: a door again, as on the dist kernel, so an app that binds it
+  ::  to a road (~(. http-res:io road)) still builds. The road is not
+  ::  used: every send goes to server-road. develop's spelling,
+  ::  send-simple:http-res:io, reads the same arms.
+  |_  main=road:tarball
   ++  send
     |=  [eyre-id=@ta =eyre-update:nexus]
     =/  m  (fiber ,~)
@@ -2148,6 +2152,103 @@
     ?~  base  ~
     $(up (dec up), base (snip `path`base))
   [(weld resolved path.q.bend) name.q.bend]
+::  dist: the registry helpers, kept for apps built against the dist
+::  kernel. develop removed the registry (38e91c9): an app now states
+::  the groups it opens its own roads into in the groups.json at its
+::  root, and the user approves each group on Permits. +reg-how writes
+::  that file for the app. Registering is no longer a step, so the
+::  +reg-register arms succeed and do nothing. Drop these once the apps
+::  write groups.json themselves.
+::
+++  reg-road  `road:tarball`[%& %& /sys/ames %'registry']
+++  reg-register
+  =/  m  (fiber ,~)
+  ^-  form:m
+  (pure:m ~)
+++  reg-register-at
+  |=  here=rail:tarball
+  =/  m  (fiber ,~)
+  ^-  form:m
+  (pure:m ~)
+++  reg-register-at-soft
+  |=  here=rail:tarball
+  =/  m  (fiber ,(unit tang))
+  ^-  form:m
+  (pure:m ~)
+++  reg-how
+  |=  [group=path =weir:nexus]
+  =/  m  (fiber ,~)
+  ^-  form:m
+  ;<  err=(unit tang)  bind:m  (reg-how-soft group weir)
+  ?~  err  (pure:m ~)
+  ~|(%reg-how-failed (mean u.err))
+::  +reg-how-soft: set .group's roads in the caller's app's groups.json.
+::  The app's root is the nearest directory above the caller holding a
+::  weir.json. Roads must be absolute and inside that root; they are
+::  written relative to it, /dir/ for a directory, /dir/file for a file.
+::
+++  reg-how-soft
+  |=  [group=path =weir:nexus]
+  =/  m  (fiber ,(unit tang))
+  ^-  form:m
+  ;<  here=rail:tarball  bind:m  get-here-abs
+  ;<  root=(unit path)  bind:m  (app-root path.here)
+  ?~  root  (pure:m `~[leaf+"reg-how: no weir.json above {(spud path.here)}"])
+  =/  txt
+    |=  =road:tarball
+    ^-  (unit @t)
+    ?.  ?=(%& -.road)  ~
+    =/  [pax=path fil=(unit @ta)]
+      ?-  -.p.road
+        %&  [path.p.p.road `name.p.p.road]
+        %|  [p.p.road ~]
+      ==
+    ?.  =(u.root (scag (lent u.root) pax))  ~
+    =/  sub=path  (slag (lent u.root) pax)
+    ?^  fil  `(crip (spud (snoc sub u.fil)))
+    ?~  sub  `'/'
+    `(crip (weld (spud sub) "/"))
+  =/  arr
+    |=  roads=(set road:tarball)
+    ^-  (unit json)
+    =/  got=(list (unit @t))  (turn ~(tap in roads) txt)
+    ?.  (levy got |=(u=(unit @t) ?=(^ u)))  ~
+    `a+(turn (murn got same) |=(t=@t s+t))
+  =/  mk  (arr make.weir)
+  =/  pk  (arr poke.weir)
+  =/  pe  (arr peek.weir)
+  ?.  &(?=(^ mk) ?=(^ pk) ?=(^ pe))
+    (pure:m `~[leaf+"reg-how: a road is relative or outside {(spud u.root)}"])
+  ;<  cur=(unit json)  bind:m  (peek-as [%& %& u.root %'groups.json'] ,json)
+  =/  obj=(map @t json)  ?.(?=([~ %o *] cur) ~ p.u.cur)
+  =/  ent=json  (pairs:enjs:format ~[['make' u.mk] ['poke' u.pk] ['peek' u.pe]])
+  =/  new=json  [%o (~(put by obj) (spat group) ent)]
+  ?:  =(`new cur)  (pure:m ~)
+  ;<  =wire  bind:m  (nonce /make)
+  =/  =road:tarball  [%& %& u.root %'groups.json']
+  ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n |+[[[/ %json] new] ~])
+  |=  input
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %veto *]
+    [%done `(veto-error dart.u.in)]
+      [~ %made * *]
+    ?.  =(wire wire.u.in)
+      [%skip ~]
+    [%done err.u.in]
+  ==
+::  +app-root: the nearest directory at or above .pax holding a weir.json
+::
+++  app-root
+  |=  pax=path
+  =/  m  (fiber ,(unit path))
+  ^-  form:m
+  |-  ^-  form:m
+  ;<  has=?  bind:m  (peek-exists [%& %& pax %'weir.json'])
+  ?:  has  (pure:m `pax)
+  ?~  pax  (pure:m ~)
+  $(pax (snip `path`pax))
 ::  Discovery (/sys/link) helpers.
 ::
 ::  An app is addressed by NAME, not by where it is installed: a name
