@@ -1237,10 +1237,12 @@
     =/  v  (~(get by p.entry) 'groups')
     ?.  ?=([~ %a *] v)  ~
     (sy (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j))))
-  ?:  =(~ granted)  (pure:m ~)
+  =/  legacy=?  (legacy-groups entry)
+  ?:  &(=(~ granted) !legacy)  (pure:m ~)
   ;<  gv=(unit json)  bind:m  (peek-as:io [%& %& app %'groups.json'] ,json)
   ?~  gv  (pure:m ~)
   ?.  ?=(%o -.u.gv)  (pure:m ~)
+  =?  granted  legacy  ~(key by p.u.gv)
   =/  strs
     |=  [g=json k=@t]
     ^-  (list @t)
@@ -2429,7 +2431,23 @@
   ?~  ap  %.n
   ?.  ?=(%o -.u.ap)  %.n
   =/  dec=json  (fall (~(get by p.u.ap) 'declared') [%o ~])
+  ::  a legacy approval stands for the groups the app asks (+legacy-groups)
+  =?  dec  &((legacy-groups u.ap) ?=(%o -.dec) ?=(%o -.ask))
+    [%o (~(put by p.dec) 'groups' (fall (~(get by p.ask) 'groups') [%a ~]))]
   (asks-match ask dec)
+::  +legacy-groups: an approval recorded before the shell asked about
+::  usergroups carries no groups at all. Its app opened its roads to
+::  groups itself, through the registry its grant let it poke, and the
+::  kernel's reg-how compat keeps those roads in its groups.json. So the
+::  groups it names there stand granted, as they did before the upgrade.
+::  An approval that has a groups key, empty or not, is the user's word.
+::
+++  legacy-groups
+  |=  entry=json
+  ^-  ?
+  ?.  ?=(%o -.entry)  |
+  ?:  (~(has by p.entry) 'groups')  |
+  (lien (road-strs entry 'poke') |=(t=@t =('/sys/ames/registry' t)))
 ::  +is-notified: have we already surfaced a banner for THIS exact ask? A
 ::  changed ask (new roads) fails the match and notifies afresh.
 ::
