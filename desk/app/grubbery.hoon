@@ -3371,7 +3371,8 @@
   =/  upd-ball=ball:tarball
     ?~  nex  sub-ball
     =/  =bole:tarball  (on-load:u.nex sub-ball)
-    =/  restored-pulp=pulp:tarball  (fall fil.bole *pulp:tarball)
+    =/  restored-pulp=pulp:tarball
+      (keep-groups sub-ball (fall fil.bole *pulp:tarball))
     =.  bole  bole(fil `restored-pulp(neck parent-neck, weir parent-weir))
     (validate-bole here bole)
   ::  Enforce parent weir and parent neck on ball.
@@ -3390,6 +3391,22 @@
     ^$(here (snoc here kid-name), sub-ball kid-ball)
   =.  dir.sub-ball  (~(put by dir.sub-ball) kid-name new-kid-ball)
   $(kids t.kids)
+::  +keep-groups: groups.json at a nexus root is the kernel's, written
+::  for the app by +handle-reg-how, so its on-load does not list it.
+::  Dropped by a load, it would close the app's groups and reopen its
+::  ask on Permits until the app registered again, on every reload.
+::
+++  keep-groups
+  |=  [old=ball:tarball new=pulp:tarball]
+  ^-  pulp:tarball
+  ?~  fil.old  new
+  ?:  (~(has by contents.new) %'groups.json')  new
+  =/  got  (~(get by contents.u.fil.old) %'groups.json')
+  ?~  got  new
+  %=  new
+    contents  %+  ~(put by contents.new)  %'groups.json'
+              [[p.sang.u.got (sang-noun:tarball sang.u.got)] gain.u.got]
+  ==
 ::  Reload a single nexus at dest (re-run on-load)
 ::
 ++  reload-nexus
@@ -3431,7 +3448,8 @@
     (bang-nexus dest p.load-res)
   =/  upd-bole=bole:tarball  p.load-res
   ::  Enforce parent weir and parent neck on bole
-  =/  restored-pulp=pulp:tarball  (fall fil.upd-bole *pulp:tarball)
+  =/  restored-pulp=pulp:tarball
+    (keep-groups old-sub (fall fil.upd-bole *pulp:tarball))
   =.  upd-bole
     upd-bole(fil `restored-pulp(neck parent-neck, weir parent-weir))
   ::  Put results back — load-ball-changes writes bole and does bookkeeping
