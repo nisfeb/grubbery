@@ -2114,6 +2114,9 @@
 ::  fiber. A cancel culls that grub; an eyre action goes to the kernel.
 ::
 ++  http-dispatch
+  ::  dist: takes a label, as on the dist kernel, where every app calls
+  ::  (http-dispatch:io %name). The label is not used.
+  |=  label=@tas
   =/  m  (fiber ,~)
   ^-  form:m
   |-

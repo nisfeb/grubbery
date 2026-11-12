@@ -65,7 +65,7 @@
           [~ %'web.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%github/web: failed")
         ;<  ~  bind:m  (bind-http-self:io [~ /grubbery/github])
-        http-dispatch:io
+        (http-dispatch:io %github)
           [[%requests ~] @]
         ;<  ~  bind:m  (rise-wait:io prod "%github/req: failed")
         (serve name.rail)

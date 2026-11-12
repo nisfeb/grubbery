@@ -134,7 +134,7 @@
           [~ %'main.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%forge main: failed")
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/forge])
-        http-dispatch:io
+        (http-dispatch:io %forge)
           ::
           [[%requests ~] @]
         ;<  ~  bind:m  (rise-wait:io prod "%forge request: failed")

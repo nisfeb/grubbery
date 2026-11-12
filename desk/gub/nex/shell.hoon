@@ -234,7 +234,7 @@
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/mcp])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/ball])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/explorer])
-        http-dispatch:io
+        (http-dispatch:io %shell)
           ::  explorer/sessions/<name>.json: a gmux workspace the ship keeps;
           ::  lib/shell/explorer runs the session's poke loop
           ::
