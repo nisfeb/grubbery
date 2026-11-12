@@ -13,7 +13,7 @@
 ::
 ::    /<  nw  /lib/nexus-web.hoon
 ::    ...
-::    ++  web           ~(. web:nw [%| 1 %& ~ %'web.sig'])
+::    ++  reply         reply:web:nw
 ::    ++  reply         reply:web
 ::    ++  send-json     send-json:web
 ::    ++  serve-static  serve-static:web
@@ -96,28 +96,46 @@
   ?:  =(0 up)  base
   ?~  base  ~
   $(up (dec up), base (snip `path`base))
-::  +web: eyre replies through the nexus's web.sig road
+::  +web: eyre replies, a step above +http-res:io.
 ::
 ++  web
-  |_  road=road:tarball
-  ++  srv  ~(. http-res:io road)
+  |%
   ++  reply
     |=  [eyre-id=@ta code=@ud msg=@t]
-    (send-simple:srv eyre-id [[code ~] `(as-octs:mimes:html msg)])
+    (send-simple:http-res:io eyre-id [[code ~] `(as-octs:mimes:html msg)])
   ++  send-json
     |=  [eyre-id=@ta jon=json]
     =/  bod=octs  (as-octs:mimes:html (en:json:html jon))
-    (send-simple:srv eyre-id [[200 ['content-type' 'application/json'] ~] `bod])
-  ::  +serve-static: a %mime file at the nexus root, index.html by default
+    (send-simple:http-res:io eyre-id [[200 ['content-type' 'application/json'] ~] `bod])
+  ::  +serve-file: a %mime grub of this nexus as the response, named by
+  ::  its dir under the nexus root and its filename, or a 404. Called
+  ::  from a request fiber, one dir below the root.
+  ::
+  ++  serve-file
+    |=  [eyre-id=@ta dir=path filename=@ta]
+    =/  m  (fiber:fiber:nexus ,~)
+    ^-  form:m
+    ;<  v=view:nexus  bind:m  (peek:io [%| 1 %& dir filename] `[/ %mime])
+    ?.  ?=([%file *] v)  (reply eyre-id 404 'Not found')
+    =/  =mime  !<(mime (need-vase:tarball sang.v))
+    (send-simple:http-res:io eyre-id (mime-response:http-utils mime))
+  ::  +serve-static: a file at the nexus root, index.html by default
   ::
   ++  serve-static
     |=  [eyre-id=@ta suffix=path]
+    (serve-file eyre-id / ?~(suffix 'index.html' i.suffix))
+  ::  +send-to-kernel: a file of this nexus is the kernel's to serve, at
+  ::  /grubbery/api/peek under its absolute path, which its link name
+  ::  finds. A 307 keeps the browser's url and is transparent to fetch
+  ::  and script tags. The kernel answers 404 for a file it does not have.
+  ::
+  ++  send-to-kernel
+    |=  [eyre-id=@ta name=@t file=path]
     =/  m  (fiber:fiber:nexus ,~)
     ^-  form:m
-    =/  filename=@ta  ?~(suffix 'index.html' i.suffix)
-    ;<  v=view:nexus  bind:m  (peek:io [%| 1 %& ~ filename] `[/ %mime])
-    ?.  ?=([%file *] v)  (reply eyre-id 404 'Not found')
-    =/  =mime  !<(mime (need-vase:tarball sang.v))
-    (send-simple:srv eyre-id (mime-response:http-utils mime))
+    ;<  root=(unit lane:tarball)  bind:m  (resolve-link:io name)
+    ?.  ?=([~ %| *] root)  (reply eyre-id 404 'Not found')
+    =/  loc=@t  (crip "/grubbery/api/peek{(spud p.u.root)}{(spud file)}")
+    (send-simple:http-res:io eyre-id [[307 ~[['location' loc]]] ~])
   --
 --

@@ -3,91 +3,125 @@
 ::  Provides request fiber logic for /grubbery/api/* endpoints.
 ::  Used by root nexus on-file for /sys/eyre/requests/ fibers.
 ::
+::  The endpoints are the darts: peek, poke, make, cull, sand, keep,
+::  born. A path's trailing slash names the fold at it, its absence the
+::  grub. Every read but the tarball is answered inline by
+::  +serve-api-read-sync in the kernel; what remains here is the half
+::  that needs a fiber — writes, pokes, uploads and the keep stream.
+::
 /+  nexus, tarball, server, multipart, http-utils, html-utils,
     json-utils, zlib, bytestream, io=fiberio
 |%
 ::  HTTP response helper — pokes /sys/eyre/main.server-state
 ::
-++  srv  ~(. http-res:io &+&+[/sys/eyre %'main.server-state'])
 ::  +dispatch: entry point for request fibers
 ::
 ++  dispatch
   |=  [eyre-id=@ta src=@p req=inbound-request:eyre site=path args=quay:eyre]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  our=@p  bind:m  get-our:io
-  ?.  =(src our)
-    (send-error eyre-id 403 'Forbidden')
+  ::  No src == our check. Authority was decided in +route-http from the
+  ::  asker's own position (+asker-rail) before this request grub existed,
+  ::  and it cannot be re-decided here: a request grub lives at
+  ::  /sys/eyre/requests, so these darts originate under eyre's authority,
+  ::  not the asker's. A blanket 403 here makes every foreign weir dead
+  ::  code.
   ?>  ?=([%grubbery %api *] site)
   =/  rest=path  t.t.site
-  ::  Route by first segment: file, kids, tree, tar, dir
+  ::  one endpoint per dart: peek, poke, make, cull, sand, keep, born
   ?~  rest
-    (send-error eyre-id 400 'Missing endpoint: file, kids, tree, tar, dir')
+    (send-error eyre-id 400 'Missing endpoint: peek, poke, make, cull, sand, keep, born')
   =/  endpoint=@tas  i.rest
-  =/  api-path=path  t.rest
+  ::  the trailing slash names the fold at that path
+  =/  raw-path=path  t.rest
+  =/  slashed=?  ?&(?=(^ raw-path) =('' (rear raw-path)))
+  =/  api-path=path  ?.(slashed raw-path (snip `path`raw-path))
+  =/  as=@t  (fall (get-key:kv:html-utils 'as' args) '')
+  =/  ct=(unit @t)  (get-header:http 'content-type' header-list.request.req)
+  =/  multipart=?
+    ?~(ct %.n ?=(^ (find "multipart/form-data" (trip u.ct))))
+  ::  a mime grub's content type is the one the writer sent. Nothing is
+  ::  inferred from the name: blot and neck are said outright, and a body
+  ::  with no Content-Type is bytes, which is what octet-stream means.
+  =/  content-type=path  (mime-type ct)
   ?+    [method.request.req endpoint]
       (send-error eyre-id 405 'Method Not Allowed')
-  ::  GET /file/... — peek file, convert to mime
-      [%'GET' %file]   (serve-file-peek eyre-id api-path args)
-  ::  GET /kids/... — immediate children (files + subdirs)
-      [%'GET' %kids]   (serve-kids eyre-id api-path)
-  ::  GET /tree/... — recursive tree with marks
-      [%'GET' %tree]   (serve-tree eyre-id api-path)
-  ::  GET /tar/...  — tarball download
-      [%'GET' %tar]    (serve-tar eyre-id api-path)
-  ::  PUT /file/... — create file
-      [%'PUT' %file]   (serve-file-make eyre-id api-path args body.request.req)
-  ::  PUT /dir/...  — create directory
-      [%'PUT' %dir]    (serve-dir-make eyre-id api-path)
-  ::  POST /poke/... — poke file process
-      [%'POST' %poke]   (serve-post eyre-id api-path args body.request.req %poke)
-  ::  POST /over/... — overwrite file content
-      [%'POST' %over]   (serve-post eyre-id api-path args body.request.req %over)
+  ::  GET /peek/... — every rendering but the tarball is answered inline by
+  ::  +serve-api-read-sync, which gates runnable content-types behind
+  ::  +serve-sandbox. There is deliberately no fiber-side twin of those: a
+  ::  second serve arm is a second place for that gate to be forgotten.
+      [%'GET' %peek]
+    ?.  =('tar' as)  (send-error eyre-id 400 'Unknown rendering')
+    (serve-tar eyre-id api-path)
+  ::  POST /poke/... — poke a grub
+      [%'POST' %poke]   (serve-post eyre-id api-path args body.request.req content-type %poke)
+  ::  PUT /make/... — make a grub, a fold (trailing slash), or a whole
+  ::  upload (multipart body); ?force=1 overwrites what is already there
+      [%'PUT' %make]
+    ?:  multipart  (serve-upload eyre-id api-path req)
+    ?:  slashed    (serve-dir-make eyre-id api-path body.request.req)
+    ?:  =('1' (fall (get-key:kv:html-utils 'force' args) ''))
+      (serve-post eyre-id api-path args body.request.req content-type %over)
+    (serve-file-make eyre-id api-path args body.request.req content-type)
+  ::  DELETE /cull/... — cull a grub or a fold
+      [%'DELETE' %cull]
+    ?:  |(slashed ?=(~ api-path))  (serve-dir-cull eyre-id api-path)
+    ;<  exists=?  bind:m  (peek-exists:io [%& %& (snip `path`api-path) (rear api-path)])
+    ?:  exists  (serve-file-cull eyre-id api-path)
+    (serve-dir-cull eyre-id api-path)
+  ::  PUT /sand/... — set a fold's weir from a JSON body
+      [%'PUT' %sand]     (serve-weir-put eyre-id api-path body.request.req)
+  ::  DELETE /sand/... — clear a fold's weir
+      [%'DELETE' %sand]  (serve-weir-del eyre-id api-path)
   ::  GET /keep/... — SSE stream of changes
-      [%'GET' %keep]    (serve-keep eyre-id api-path args req)
-  ::  DELETE /file/... — delete file
-      [%'DELETE' %file]  (serve-file-cull eyre-id api-path)
-  ::  DELETE /dir/...  — delete directory
-      [%'DELETE' %dir]   (serve-dir-cull eyre-id api-path)
-  ::  GET /sand/...    — get directory permissions as JSON
-      [%'GET' %sand]     (serve-sand-peek eyre-id api-path)
-  ::  GET /weir/...    — get single directory weir as JSON
-      [%'GET' %weir]     (serve-weir-peek eyre-id api-path)
-  ::  PUT /weir/...    — replace weir with JSON body
-      [%'PUT' %weir]     (serve-weir-put eyre-id api-path body.request.req)
-  ::  DELETE /weir/... — clear weir
-      [%'DELETE' %weir]  (serve-weir-del eyre-id api-path)
-  ::  POST /upload/... — multipart file/directory upload
-      [%'POST' %upload]  (serve-upload eyre-id api-path req)
+      [%'GET' %keep]     (serve-keep eyre-id api-path args req)
   ==
+::  +mime-type: the Content-Type a request sent, as a mime path.
+::    Parameters (charset and friends) are dropped; an absent or
+::    unreadable header is octet-stream, the honest answer for bytes
+::    whose writer said nothing about them.
+::
+++  mime-type
+  |=  ct=(unit @t)
+  ^-  path
+  ?~  ct  /application/octet-stream
+  =/  txt=tape  (trip u.ct)
+  =/  cut=(unit @ud)  (find ";" txt)
+  =/  bare=tape  ?~(cut txt (scag u.cut txt))
+  =/  slash=(unit @ud)  (find "/" bare)
+  ?~  slash  /application/octet-stream
+  =/  before=tape  (scag u.slash bare)
+  =/  after=tape   (slag +(u.slash) bare)
+  ?:  |(?=(~ before) ?=(~ after))  /application/octet-stream
+  ~[(crip before) (crip after)]
 ::  +send-error: respond with HTTP error
 ::
 ++  send-error
   |=  [eyre-id=@ta code=@ud msg=@t]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  (send-simple:srv eyre-id [[code ~] `(as-octs:mimes:html msg)])
+  (send-simple:http-res:io eyre-id [[code ~] `(as-octs:mimes:html msg)])
 ::  +send-ok: respond with 200 and message
 ::
 ++  send-ok
   |=  [eyre-id=@ta msg=@t]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html msg)])
+  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html msg)])
 ::  +send-created: respond with 201 Created
 ::
 ++  send-created
   |=  eyre-id=@ta
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  (send-simple:srv eyre-id [[201 ~] `(as-octs:mimes:html 'Created')])
+  (send-simple:http-res:io eyre-id [[201 ~] `(as-octs:mimes:html 'Created')])
 ::  +send-mime: respond with 200 and mime body
 ::
 ++  send-mime
   |=  [eyre-id=@ta =mime]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  (send-simple:srv eyre-id (mime-response:http-utils mime))
+  (send-simple:http-res:io eyre-id (mime-response:http-utils mime))
 ::  +maybe-convert: optionally convert cage through ?blot= param
 ::    Returns ~ on error (error response already sent).
 ::    blot-param is a path-encoded blot, e.g. "/json" or "/wallet/wallet"
@@ -121,7 +155,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   =/  bod=octs  (as-octs:mimes:html (en:json:html json))
-  (send-simple:srv eyre-id (mime-response:http-utils [/application/json bod]))
+  (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
 ::  +peek-root: peek the root ball
 ::
 ++  peek-root
@@ -131,64 +165,7 @@
   ?.  ?=([%ball *] root-view)
     (pure:m ~)
   (pure:m `ball.root-view)
-::  +serve-file-peek: GET /file — peek grub, convert to mime
-::
-++  serve-file-peek
-  |=  [eyre-id=@ta api-path=path args=(list [key=@t value=@t])]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ?~  api-path
-    (send-error eyre-id 400 'File path required')
-  ;<  root=(unit ball:tarball)  bind:m  peek-root
-  ?~  root
-    (send-error eyre-id 500 'Peek failed')
-  =/  parent=path  (snip `path`api-path)
-  =/  name=@ta  (rear api-path)
-  =/  parent-ball=ball:tarball  (~(dip ba:tarball u.root) parent)
-  =/  content-data=(unit [=sang:tarball gain=? bang=(unit tang)])
-    ?~  fil.parent-ball  ~
-    (~(get by contents.u.fil.parent-ball) name)
-  ?~  content-data
-    (send-error eyre-id 404 'Not found')
-  =/  =sage:tarball  (need-sage:tarball sang.u.content-data)
-  =/  blot-param=(unit @t)  (get-key:kv:html-utils 'blot' args)
-  ;<  converted=(unit sage:tarball)  bind:m  (maybe-convert eyre-id sage blot-param)
-  ?~  converted  (pure:m ~)
-  ;<  =mime  bind:m  (sage-to-mime:io u.converted)
-  (send-mime eyre-id mime)
-::  +serve-kids: GET /kids — immediate children (files + subdirs)
-::
-++  serve-kids
-  |=  [eyre-id=@ta api-path=path]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ;<  root=(unit ball:tarball)  bind:m  peek-root
-  ?~  root
-    (send-error eyre-id 500 'Peek failed')
-  =/  sub=(unit ball:tarball)  (~(dap ba:tarball u.root) api-path)
-  ?~  sub
-    (send-error eyre-id 404 'Not found')
-  =/  files=(list @ta)  (~(lis ba:tarball u.sub) /)
-  =/  subs=(list @ta)   (~(lss ba:tarball u.sub) /)
-  %+  send-json  eyre-id
-  %-  pairs:enjs:format
-  :~  ['files' [%a (turn files |=(n=@ta s+n))]]
-      ['dirs' [%a (turn subs |=(n=@ta s+n))]]
-  ==
-::  +serve-tree: GET /tree — recursive tree with marks
-::
-++  serve-tree
-  |=  [eyre-id=@ta api-path=path]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ;<  root=(unit ball:tarball)  bind:m  peek-root
-  ?~  root
-    (send-error eyre-id 500 'Peek failed')
-  =/  sub=(unit ball:tarball)  (~(dap ba:tarball u.root) api-path)
-  ?~  sub
-    (send-error eyre-id 404 'Not found')
-  (send-json eyre-id (tree-to-json:tarball (ball-to-tree:tarball u.sub)))
-::  +serve-tar: GET /tar — tarball download
+::  +serve-tar: GET /peek?as=tar — tarball download
 ::
 ++  serve-tar
   |=  [eyre-id=@ta api-path=path]
@@ -213,11 +190,16 @@
     :~  ['content-type' 'application/x-tar']
         ['content-disposition' (crip "attachment; filename=\"{dir-name}.tar\"")]
     ==
-  (send-simple:srv eyre-id [[200 headers] `tar-data])
-::  +serve-file-make: PUT /file — create file
+  (send-simple:http-res:io eyre-id [[200 headers] `tar-data])
+::  +serve-file-make: PUT /make — make a grub
 ::
 ++  serve-file-make
-  |=  [eyre-id=@ta api-path=path args=(list [key=@t value=@t]) body=(unit octs)]
+  |=  $:  eyre-id=@ta
+          api-path=path
+          args=(list [key=@t value=@t])
+          body=(unit octs)
+          content-type=path
+      ==
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?~  api-path
@@ -230,32 +212,57 @@
   ?:  exists
     (send-error eyre-id 409 'Already exists')
   =/  blot-param=(unit @t)  (get-key:kv:html-utils 'blot' args)
-  =/  mime-sage=sage:tarball  [[/ %mime] !>(`mime`[/application/octet-stream u.body])]
+  =/  mime-sage=sage:tarball  [[/ %mime] !>(`mime`[content-type u.body])]
   ;<  converted=(unit sage:tarball)  bind:m  (maybe-convert eyre-id mime-sage blot-param)
   ?~  converted  (pure:m ~)
   ;<  ~  bind:m  (make:io road [%| [p.u.converted q.q.u.converted] ~])
   (send-created eyre-id)
-::  +serve-dir-make: PUT /dir — create directory
+::  +serve-dir-make: PUT /make/<dir>/ — make a fold, with its payload
 ::
 ++  serve-dir-make
-  |=  [eyre-id=@ta api-path=path]
+  |=  [eyre-id=@ta api-path=path body=(unit octs)]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?~  api-path
     (send-error eyre-id 400 'Directory path required')
-  =/  dir-name=@ta  (rear api-path)
-  =/  dir-path=path  (snoc (snip `path`api-path) dir-name)
-  =/  =road:tarball  [%& %| dir-path]
+  =/  =road:tarball  [%& %| api-path]
   ;<  exists=?  bind:m  (peek-exists:io road)
   ?:  exists
     (send-error eyre-id 409 'Already exists')
-  =/  init-bole=bole:tarball  [`[~ ~ %.n ~] ~]
-  ;<  ~  bind:m  (make:io road &+init-bole)
+  ::  a fold's payload is what the dart carries: which nexus runs here
+  ::  (neck), the weir it runs under, and whether writes are kept (gain).
+  ::  A mount and its sandbox are one dart, so a nexus never exists for
+  ::  an event without the weir that confines it.
+  =/  jon=json
+    ?~  body  [%o ~]
+    (fall (de:json:html q.u.body) [%o ~])
+  =/  fields=(map @t json)  ?.(?=([%o *] jon) ~ p.jon)
+  =/  neck=(unit neck:tarball)
+    =/  n=(unit json)  (~(get by fields) 'neck')
+    ?.  ?=([~ %s *] n)  ~
+    =/  p=path  (stab p.u.n)
+    ?~  p  ~
+    `[(snip `path`p) (rear p)]
+  =/  weir=(unit weir:nexus)
+    =/  w=(unit json)  (~(get by fields) 'weir')
+    ?~  w  ~
+    =/  parsed=(each weir:nexus tang)  (mule |.((weir-from-json:nexus u.w)))
+    ?:(?=(%| -.parsed) ~ `p.parsed)
+  =/  gain=?
+    =/  g=(unit json)  (~(get by fields) 'gain')
+    ?=([~ %b %&] g)
+  ;<  ~  bind:m  (make:io road &+[`[neck weir gain ~] ~])
   (send-created eyre-id)
-::  +serve-post: POST /poke, /over — send dart to file
+::  +serve-post: POST /poke, PUT /make?force=1 — send the dart to a grub
 ::
 ++  serve-post
-  |=  [eyre-id=@ta api-path=path args=(list [key=@t value=@t]) body=(unit octs) op=?(%poke %over)]
+  |=  $:  eyre-id=@ta
+          api-path=path
+          args=(list [key=@t value=@t])
+          body=(unit octs)
+          content-type=path
+          op=?(%poke %over)
+      ==
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?~  api-path
@@ -267,7 +274,7 @@
   ?.  exists
     (send-error eyre-id 404 'Not found')
   =/  blot-param=(unit @t)  (get-key:kv:html-utils 'blot' args)
-  =/  mime-sage=sage:tarball  [[/ %mime] !>(`mime`[/application/octet-stream u.body])]
+  =/  mime-sage=sage:tarball  [[/ %mime] !>(`mime`[content-type u.body])]
   ;<  converted=(unit sage:tarball)  bind:m  (maybe-convert eyre-id mime-sage blot-param)
   ?~  converted  (pure:m ~)
   ;<  ~  bind:m
@@ -276,7 +283,7 @@
       %over  (over:io road [p.u.converted q.q.u.converted])
     ==
   (send-ok eyre-id 'OK')
-::  +serve-file-cull: DELETE /file — delete file
+::  +serve-file-cull: DELETE /cull — cull a grub
 ::
 ++  serve-file-cull
   |=  [eyre-id=@ta api-path=path]
@@ -290,7 +297,7 @@
     (send-error eyre-id 404 'Not found')
   ;<  ~  bind:m  (cull:io road)
   (send-ok eyre-id 'Deleted')
-::  +serve-dir-cull: DELETE /dir — delete directory
+::  +serve-dir-cull: DELETE /cull/<dir>/ — cull a fold
 ::
 ++  serve-dir-cull
   |=  [eyre-id=@ta api-path=path]
@@ -319,7 +326,7 @@
       (make:io dir-road &+[`[~ ~ %.n ~] ~])
     (ensure-parents next t.segments)
   (ensure-parents next t.segments)
-::  +serve-upload: POST /upload — multipart file/directory upload
+::  +serve-upload: PUT /make with a multipart body — upload files or a tree
 ::
 ++  serve-upload
   |=  [eyre-id=@ta tree-path=path req=inbound-request:eyre]
@@ -329,26 +336,10 @@
     (de-request:multipart header-list.request.req body.request.req)
   ?~  parts
     (send-error eyre-id 400 'Invalid multipart data')
-  ::  Build mime->mark tubes for uploaded file extensions
-  =/  exts=(set @ta)
-    %-  ~(gas in *(set @ta))
-    %+  murn  u.parts
-    |=  [field-name=@t =part:multipart]
-    ?.  =('file' field-name)  ~
-    ?~  file.part  ~
-    (parse-extension:tarball u.file.part)
-  ;<  conversions=(map bars:tarball tube:clay)  bind:m
-    =/  m  (fiber:fiber:nexus ,(map bars:tarball tube:clay))
-    =/  ext-list=(list @ta)  ~(tap in exts)
-    =|  convs=(map bars:tarball tube:clay)
-    |-  ^-  form:m
-    ?~  ext-list  (pure:m convs)
-    =/  =bars:tarball  [[/ %mime] [/ i.ext-list]]
-    ;<  tube=(unit tube:clay)  bind:m
-      (get-tube:io [%& %| /code] bars)
-    =?  convs  ?=(^ tube)
-      (~(put by convs) bars u.tube)
-    $(ext-list t.ext-list)
+  ::  An upload is mime in, mime out. A name is not a declaration: a blot
+  ::  is said outright with ?blot=, and converting by extension put marked
+  ::  grubs where only mime belongs — a forge repo tree takes nothing else,
+  ::  so uploads into one vanished with a 201 in hand.
   ::  Process each file part directly
   =|  created=(list @t)
   =/  remaining  u.parts
@@ -360,7 +351,7 @@
           ['created' [%a (turn (flop created) |=(n=@t s+n))]]
       ==
     =/  bod=octs  (as-octs:mimes:html (en:json:html response))
-    (send-simple:srv eyre-id [[201 ~[['content-type' 'application/json']]] `bod])
+    (send-simple:http-res:io eyre-id [[201 ~[['content-type' 'application/json']]] `bod])
   =/  [field-name=@t file-part=part:multipart]  i.remaining
   ?.  =('file' field-name)
     $(remaining t.remaining)
@@ -381,16 +372,7 @@
   =/  file-mime=mime
     :_  body.file-part
     (fall type.file-part /application/octet-stream)
-  =/  mime-sage=sage:tarball  [[/ %mime] !>(file-mime)]
-  =/  ext=(unit @ta)  (parse-extension:tarball file-name)
-  =/  final-sage=sage:tarball
-    ?~  ext  mime-sage
-    =/  =bars:tarball  [[/ %mime] [/ u.ext]]
-    =/  tube=(unit tube:clay)  (~(get by conversions) bars)
-    ?~  tube  mime-sage
-    =/  result=(each vase tang)  (mule |.((u.tube q.mime-sage)))
-    ?:  ?=(%| -.result)  mime-sage
-    [[/ u.ext] p.result]
+  =/  final-sage=sage:tarball  [[/ %mime] !>(file-mime)]
   ::  Ensure parent dirs exist
   ;<  ~  bind:m  (ensure-parents tree-path file-parent)
   ::  Create or overwrite file — keep full filename
@@ -401,28 +383,7 @@
     $(remaining t.remaining, created [filename-raw created])
   ;<  ~  bind:m  (make:io road |+[[p.final-sage q.q.final-sage] ~])
   $(remaining t.remaining, created [filename-raw created])
-::  +serve-sand-peek: GET /sand — directory permissions as JSON
-::
-++  serve-sand-peek
-  |=  [eyre-id=@ta api-path=path]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ;<  dir-view=view:nexus  bind:m  (peek:io [%& %| api-path] ~)
-  ?.  ?=([%ball *] dir-view)
-    (send-error eyre-id 404 'Not found')
-  (send-json eyre-id (ball-weirs-to-json:nexus ball.dir-view))
-::  +serve-weir-peek: GET /weir — single directory weir as JSON
-::
-++  serve-weir-peek
-  |=  [eyre-id=@ta api-path=path]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ;<  dir-view=view:nexus  bind:m  (peek:io [%& %| api-path] ~)
-  ?.  ?=([%ball *] dir-view)
-    (send-error eyre-id 404 'Not found')
-  =/  =weir:nexus  (fall ?~(fil.ball.dir-view ~ weir.u.fil.ball.dir-view) *weir:nexus)
-  (send-json eyre-id (weir-to-json:nexus weir))
-::  +serve-weir-put: PUT /weir — replace weir from JSON body
+::  +serve-weir-put: PUT /sand — set a fold's weir from a JSON body
 ::
 ++  serve-weir-put
   |=  [eyre-id=@ta api-path=path body=(unit octs)]
@@ -439,7 +400,7 @@
     (send-error eyre-id 400 'Invalid weir JSON')
   ;<  ~  bind:m  (sand:io [%& %| api-path] `p.parsed)
   (send-ok eyre-id 'OK')
-::  +serve-weir-del: DELETE /weir — clear weir
+::  +serve-weir-del: DELETE /sand — clear a fold's weir
 ::
 ++  serve-weir-del
   |=  [eyre-id=@ta api-path=path]
@@ -447,7 +408,7 @@
   ^-  form:m
   ;<  ~  bind:m  (sand:io [%& %| api-path] ~)
   (send-ok eyre-id 'Deleted')
-::  +serve-keep: GET /keep — SSE stream of changes
+::  +serve-keep: GET /keep — SSE stream of changes at a road
 ::
 ++  serve-keep
   |=  [eyre-id=@ta api-path=path args=(list [key=@t value=@t]) req=inbound-request:eyre]
@@ -458,7 +419,7 @@
   =/  blot-param=(unit @t)  (get-key:kv:html-utils 'blot' args)
   ::  Send SSE response header
   ;<  ~  bind:m
-    (send-header:srv eyre-id sse-header:http-utils)
+    (send-header:http-res:io eyre-id sse-header:http-utils)
   ::  Determine road: check if api-path points to a file
   =/  file-road=(unit road:tarball)
     ?~  api-path  ~
@@ -492,7 +453,7 @@
     =/  data=wain  (to-wain:format u.body)
     =/  =sse-event:http-utils  [`id `event-name data]
     ;<  ~  bind:m
-      (send-data:srv eyre-id `(sse-encode:http-utils ~[sse-event]))
+      (send-data:http-res:io eyre-id `(sse-encode:http-utils ~[sse-event]))
     $(lanes t.lanes)
   ::  Track seen lanes for new vs upd detection
   =/  prev=wave:nexus  init
@@ -505,7 +466,7 @@
   ?-    -.nw
       %wake
     ;<  ~  bind:m
-      (send-data:srv eyre-id `sse-keep-alive:http-utils)
+      (send-data:http-res:io eyre-id `sse-keep-alive:http-utils)
     ;<  now=@da  bind:m  get-time:io
     ;<  ~  bind:m  (send-wait:io (add now ~s30))
     $
@@ -535,13 +496,13 @@
       =/  data=wain  (to-wain:format u.body)
       =/  =sse-event:http-utils  [`id `event-name data]
       ;<  ~  bind:m
-        (send-data:srv eyre-id `(sse-encode:http-utils ~[sse-event]))
+        (send-data:http-res:io eyre-id `(sse-encode:http-utils ~[sse-event]))
       $(lanes t.lanes)
     ::  File gone — send delete event
     =/  event-name=@t  (crip "del {(trip lane-path)}")
     =/  =sse-event:http-utils  [`id `event-name ~['']]
     ;<  ~  bind:m
-      (send-data:srv eyre-id `(sse-encode:http-utils ~[sse-event]))
+      (send-data:http-res:io eyre-id `(sse-encode:http-utils ~[sse-event]))
     $(lanes t.lanes)
   ==
 ::  +send-old-dir: send "old" SSE events for all files in a ball
@@ -571,7 +532,7 @@
     =/  data=wain  (to-wain:format u.body)
     =/  =sse-event:http-utils  [`id `event-name data]
     ;<  ~  bind:m
-      (send-data:srv eyre-id `(sse-encode:http-utils ~[sse-event]))
+      (send-data:http-res:io eyre-id `(sse-encode:http-utils ~[sse-event]))
     $(files t.files)
   ::  Recurse into subdirectories
   =/  dirs=(list [@ta ball:tarball])  ~(tap by dir.b)

@@ -15,7 +15,8 @@
 ::                    xfer/[id] [%pending xreq] -> [%done octs]/[%fail tang]
 ::
 ::  Flow (both kinds): keep the lifecycle grub's road FIRST, then poke
-::  main.sig; read the result on news, then drop. The claw/api pattern.
+::  main.sig; read the result on news, then drop. The lifecycle-grub
+::  pattern the anthropic and openrouter proxies share.
 ::
 /&  man      ../man/github/readme.md
 /<  ui-html  github/index.html
@@ -28,14 +29,6 @@
     ++  on-load
       |=  =ball:tarball
       ^-  bole:tarball
-      =/  tile=json
-        %-  pairs:enjs:format
-        :~  title+s+'GitHub'
-            info+s+'The ship\'s GitHub proxy'
-            color+s+'#24292f'
-            image+s+'/grubbery/tiles/icon/github.github'
-            href+s+'/grubbery/github'
-        ==
       =/  default-config=json
         %-  pairs:enjs:format
         :~  ['token' s+'']
@@ -43,9 +36,7 @@
         ==
       %+  spin:loader  ball
       :~  (manifest:loader 0)
-          [%over %& [/ %'link.json'] [[/ %json] (pairs:enjs:format ~[['name' s+'github'] ['description' s+'Local structured proxy for GitHub']])]]
           [%over %& [/ %'weir.json'] [[/ %json] weir-json]]
-          [%over %& [/ %'tile.json'] [[/ %json] tile]]
           [%over %& [/ %'icon.svg'] [[/ %mime] ui-icon]]
           [%over %& [/ %'index.html'] [[/ %mime] ui-html]]
           [%over %& [/ %'app.js'] [[/ %mime] ui-js]]
@@ -74,7 +65,7 @@
           [~ %'web.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%github/web: failed")
         ;<  ~  bind:m  (bind-http-self:io [~ /grubbery/github])
-        (http-dispatch:io %github)
+        http-dispatch:io
           [[%requests ~] @]
         ;<  ~  bind:m  (rise-wait:io prod "%github/req: failed")
         (serve name.rail)
@@ -154,7 +145,7 @@
     ;<  ~  bind:m  (make:io xfer-road |+[[[/ %noun] `xlife`[%pending req.u.parsed]] ~])
     ;<  ~  bind:m  (gain:io xfer-road %.y)
     $
-  ~&  >>>  "%github: unrecognized poke mark"
+  ~&  >>>  [%github-unrecognized-poke mark=p.sage from=from]
   $
 ::  +run-call: execute one REST call. Reads its own pending request,
 ::  attaches auth from config, follows redirects, overwrites itself
@@ -179,6 +170,10 @@
   =/  body=(unit json)  (gets 'body')
   =/  account=@t
     (fall (bind (gets 'account') |=(=json ?>(?=(%s -.json) p.json))) '')
+  ::  an Accept the consumer asks for ('' = the REST default): a PR's
+  ::  diff, say, is the same path as its JSON with a different Accept
+  =/  accept=@t
+    (fall (bind (gets 'accept') |=(=json ?>(?=(%s -.json) p.json))) '')
   ;<  cfg=[api=@t accounts=(map @t @t)]  bind:m  read-config
   ::  the path is appended to the API base, so it must start a path: one
   ::  starting with '@' or '.' names another host, and the token with it
@@ -194,7 +189,7 @@
   =/  =request:http
     :^    (parse-method method)
         url
-      (gh-headers (pick-token accounts.cfg account))
+      (gh-headers (pick-token accounts.cfg account) accept)
     ?~  body  ~
     `(as-octs:mimes:html (en:json:html u.body))
   ;<  res=[code=@ud =octs]  bind:m  (fetch request)
@@ -427,7 +422,7 @@
     =/  a  (~(get by om) 'api')
     ?:(?=([~ %s *] a) p.u.a 'https://api.github.com')
   ;<  res=[code=@ud =octs]  bind:m
-    (fetch [%'GET' (cat 3 api '/user') (gh-headers token) ~])
+    (fetch [%'GET' (cat 3 api '/user') (gh-headers token '') ~])
   =/  login=@t
     ?.  =(200 code.res)  ''
     (jget (fall (de:json:html q.octs.res) *json) 'login')
@@ -510,20 +505,19 @@
 
 ::
 ++  gh-headers
-  |=  token=@t
+  |=  [token=@t accept=@t]
   ^-  (list [@t @t])
   %+  weld
     ?:  =('' token)  ~
     ~[['Authorization' (cat 3 'token ' token)]]
   :~  ['User-Agent' 'grubbery']
-      ['Accept' 'application/vnd.github.v3+json']
+      ['Accept' ?:(=('' accept) 'application/vnd.github.v3+json' accept)]
       ['Content-Type' 'application/json']
   ==
 ::
-++  web  ~(. web:nw [%| 1 %& ~ %'web.sig'])
-++  reply         reply:web
-++  send-json     send-json:web
-++  serve-static  serve-static:web
+++  reply         reply:web:nw
+++  send-json     send-json:web:nw
+++  serve-static  serve-static:web:nw
 ++  jget          jget:nw
 ++  jnum          jnum:nw
 ++  post-json     post-json:nw

@@ -4,6 +4,9 @@
 ::  at a code directory to mirror, anywhere in the namespace:
 ::    "~nec/apps/counter/desk/code"                (remote ship)
 ::    "/apps/foo.git_repo/data/tree/code"          (a checked-out repo)
+::    "@forge/repos/foo.git_repo/data/tree/code"   (by an app's name, resolved
+::                                                  through /sys/link, followed
+::                                                  as the name moves)
 ::  The desk mirrors whatever dir you point it at into its /desk/code;
 ::  it assumes NOTHING about the source's internal shape.
 ::
@@ -134,8 +137,6 @@
       ::
       [~ %'source.json']
     ;<  ~  bind:m  (rise-wait:io prod "%desk config: failed")
-    ;<  here=rail:tarball  bind:m  get-here-abs:io
-    ;<  ~  bind:m  (reg-register-at:io here)
     |-
     ;<  src-json=json  bind:m  (get-state-as:io ,json)
     =/  config=source-config  (json-to-source src-json)
@@ -150,7 +151,14 @@
     ::  the authored content version (never null), NOT the source's own root
     ::  version.json (its private follow-state, none of our business). The
     ::  road is KNOWN, so watch its EXACT road even before it exists.
-    =/  code-path=path           (parse-path code.u.config)
+    ;<  code-path=path  bind:m  (resolve-source code.u.config)
+    ::  a source by name follows the name too: when the link moves, the
+    ::  desk re-resolves and follows the code where it went
+    =/  link=(unit road:tarball)  (link-road code.u.config)
+    ;<  ~  bind:m
+      ?~  link  (pure:m ~)
+      ;<  *  bind:m  (keep:io /link u.link ~)
+      (pure:m ~)
     =/  code-road=road:tarball   [%& %| code-path]
     =/  ver-road=road:tarball    [%& %& code-path %'version.json']
     =/  ver-name=@ta             %'version.json'
@@ -177,11 +185,18 @@
       ;<  ~  bind:m  (sync-release ver-road code-road ver-name rail)
       $
         %poke
-      ::  config change: replace state, drop sub, restart
+      ::  config change: replace state, drop subs, restart
       =/  new-json=json  !<(json q.sage.res)
       ~?  dbg  [%source-config-change new-json]
       ;<  ~  bind:m  (replace:io new-json)
       ;<  ~  bind:m  (drop:io /ver ver-road)
+      ;<  ~  bind:m  ?~(link (pure:m ~) (drop:io /link u.link))
+      ^$
+        %moved
+      ::  the name points elsewhere now: drop subs, resolve again, follow
+      ~?  dbg  [%desk-source-moved code.u.config]
+      ;<  ~  bind:m  (drop:io /ver ver-road)
+      ;<  ~  bind:m  ?~(link (pure:m ~) (drop:io /link u.link))
       ^$
     ==
       ::  share.usergroups: the OPENING state. Poke {add|remove: <group>}
@@ -190,8 +205,6 @@
       ::
       [~ %'share.usergroups']
     ;<  ~  bind:m  (rise-wait:io prod "%desk share: failed")
-    ;<  here=rail:tarball  bind:m  get-here-abs:io
-    ;<  ~  bind:m  (reg-register-at:io here)
     |-
     ;<  cur=(set path)  bind:m  (get-state-as:io ,(set path))
     ;<  =sage:tarball  bind:m  take-poke:io
@@ -207,26 +220,9 @@
         =/  g=(unit path)  (rush p.u.rem stap)
         ?~(g cur (~(del in cur) u.g))
       cur
+    ::  the shell's listener on this grub opens the code to the groups
+    ::  named here; the desk itself grants nothing
     ;<  ~  bind:m  (replace:io new)
-    ::  re-assert the registration before granting. The registry lives in a
-    ::  grub this nexus does not own, so a registration can be gone without
-    ::  this fiber ever knowing — and a %how from an unregistered rail is
-    ::  REFUSED with a printf and nothing else, which makes the share appear
-    ::  to succeed while granting nobody anything. Registering is idempotent
-    ::  and costs one poke, so assert it on the path that depends on it
-    ::  rather than only once at rise.
-    ::
-    ::  SOFT, because a guard must not be able to break what it guards. As a
-    ::  hard poke this killed the fiber between +replace and +apply-share:
-    ::  the share set was committed, the shell listed the desk as shared, and
-    ::  no grant was ever applied — a worse failure than the one it prevents,
-    ::  and silent in exactly the same way.
-    ;<  err=(unit tang)  bind:m  (reg-register-at-soft:io here)
-    ::  say so if it was refused. The grant that follows will then be refused
-    ::  too, with a printf on the registry's side that this fiber never sees,
-    ::  so this line is the only place the desk itself can report it.
-    ~?  >>>  ?=(^ err)  [%desk-share-not-registered path.here]
-    ;<  ~  bind:m  (apply-share path.here ~(tap in cur) ~(tap in new))
     $
       ::  asks.sig: (re)compute the desk-level ask.json from the
       ::  children's weir.json asks. Recomputes once at rise (so a reload
@@ -362,10 +358,9 @@
     =/  cut=tape  (scag (fall (find "?" raw) (lent raw)) raw)
     =/  slashed=?  &(?=(^ cut) =('/' `@`(rear cut)))
     ?:  ?&(=('GET' method.request.req) ?=(~ suffix) !slashed)
-      =/  main-road  (nex-road:io rail [%& ~ %'main.sig'])
       =/  loc=@t  (crip (weld (spud prefix) "/"))
-      ;<  ~  bind:m  (~(send-header http-res:io main-road) eyre-id [301 ~[['location' loc]]])
-      ;<  ~  bind:m  (~(send-data http-res:io main-road) eyre-id ~)
+      ;<  ~  bind:m  (send-header:http-res:io eyre-id [301 ~[['location' loc]]])
+      ;<  ~  bind:m  (send-data:http-res:io eyre-id ~)
       (pure:m ~)
     ?:  =('POST' method.request.req)
       (handle-post eyre-id suffix req rail)
@@ -415,6 +410,7 @@
 +$  news-or-poke
   $%  [%news =wave:nexus]
       [%poke =sage:tarball]
+      [%moved ~]
   ==
 ::  a file lifted out of a ball, addressed relative to the peeked dir
 ::
@@ -422,7 +418,7 @@
 ::  born hist metadata, as returned by born:io
 ::
 +$  binfo  (list binfo-entry)
-+$  binfo-entry  [=cass:clay tags=(set @t) tomb=?]
++$  binfo-entry  [=cass:clay tags=(set @t)]
 ::
 ::  the OPENING state (which usergroups may peek the code) lives in the
 ::  share.usergroups grub, not here.
@@ -444,45 +440,6 @@
   ?:  =('' p.u.codp)  ~
   `[p.u.codp]
 ::
-::  +apply-share: register the follow weir with every group in the new
-::  share list, and clear it from groups that were dropped
-::
-::    The weir grants exactly what a follower needs to pull: the
-::    version file, the code tree, and the bill.
-::
-++  apply-share
-  |=  [nex-dir=path old=(list path) new=(list path)]
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  ::  what a follower needs to pull: peek the code tree and the version
-  ::  file (stable name — version.json). Stable roads, granted once — no
-  ::  re-apply when the code or version content changes.
-  =/  grant=weir:nexus
-    :+  ~  ~
-    %-  sy
-    :~  [%& %| (weld nex-dir /desk/code)]
-        [%& %& nex-dir %'version.json']
-    ==
-  ::  groups to clear: any dropped from the share list, plus /public
-  ::  always — a fresh fiber cannot know what a prior life granted,
-  ::  so the discovery group's state is asserted on every application
-  ::  rather than diffed.
-  =/  clear=(list path)
-    =|  seen=(set path)
-    =/  base=(list path)  (weld old `(list path)`~[/public])
-    |-  ^-  (list path)
-    ?~  base  ~
-    ?:  ?|((~(has in seen) i.base) ?=(^ (find ~[i.base] new)))
-      $(base t.base)
-    [i.base $(base t.base, seen (~(put in seen) i.base))]
-  =/  jobs=(list [grp=path w=weir:nexus])
-    %+  weld
-      (turn clear |=(g=path [g *weir:nexus]))
-    (turn new |=(g=path [g grant]))
-  |-  ^-  form:m
-  ?~  jobs  (pure:m ~)
-  ;<  ~  bind:m  (reg-how:io [grp.i.jobs w.i.jobs])
-  $(jobs t.jobs)
 ::  desk-slug: URL name for a desk nexus — its dir name minus the
 ::  dot-suffix ('test.desk' -> 'test'). Dots are avoided in eyre
 ::  bindings: eyre parses them as file extensions during matching.
@@ -536,6 +493,40 @@
   =/  target=@p  (slav %p (crip (scag ship-end txt)))
   =/  source-path=path  (stab (crip (slag ship-end txt)))
   (weld /sys/ames/ships/[(scot %p target)]/root source-path)
+::  resolve-source: a source string as the path it names NOW. `@name/...`
+::  resolves the name through /sys/link, waiting for the link when it is
+::  not there yet (a desk may rise before the app it follows); any other
+::  spelling is +parse-path.
+::
+++  resolve-source
+  |=  src=@t
+  =/  m  (fiber:fiber:nexus ,path)
+  ^-  form:m
+  ?.  =('@' (end 3 src))  (pure:m (parse-path src))
+  =/  txt=tape  (trip src)
+  =/  cut=@ud  (fall (find "/" txt) (lent txt))
+  =/  name=@t  (crip (scag cut txt))
+  =/  rest=path  ?:(=(cut (lent txt)) / (stab (crip (slag cut txt))))
+  =/  link=road:tarball  (need (link-road src))
+  |-  ^-  form:m
+  ;<  ln=(unit lane:tarball)  bind:m  (resolve-link:io name)
+  ?:  ?=([~ %| *] ln)  (pure:m (weld p.u.ln rest))
+  ~&  >>  [%desk-source-unlinked src]
+  ;<  *  bind:m  (keep:io /link link ~)
+  ;<  *  bind:m  (take-news:io /link)
+  ;<  ~  bind:m  (drop:io /link link)
+  $
+::  link-road: for a source spelled `@name/...`, the link grub that says
+::  where the name points; ~ for any other spelling
+::
+++  link-road
+  |=  src=@t
+  ^-  (unit road:tarball)
+  ?.  =('@' (end 3 src))  ~
+  =/  txt=tape  (trip src)
+  =/  cut=@ud  (fall (find "/" txt) (lent txt))
+  =/  name=@ta  (crip (slag 1 (scag cut txt)))
+  `[%& %& /sys/link/[name] %'dest.lanes']
 ::  parse-source: a source string as a directory road
 ::
 ++  parse-source
@@ -676,7 +667,7 @@
     ::  must not fail the install.
     ?.  made-any  (pure:m ~)
     ;<  *  bind:m
-      (poke-soft:io [%& %& /apps/'shell.shell' %'sweep.sig'] [[/ %sig] ~])
+      (poke-soft:io [%& %& /apps/shell %'sweep.sig'] [[/ %sig] ~])
     (pure:m ~)
   =/  nam=@ta  -.i.entries
   =/  cod=path  (stab +.i.entries)
@@ -891,7 +882,7 @@
 ::  — no version-derived tagging. Every live-mutating action snapshots
 ::  first, so this is the universal "save the world" primitive.
 ::
-::  wipe-history: tombstone every firmed revision of the /desk fold
+::  wipe-history: drop every firmed revision of the /desk fold
 ::  except the live top — a clean slate before the baseline snapshot.
 ::
 ++  wipe-history
@@ -932,7 +923,7 @@
   ::  one firm of /desk captures the whole world — snapshotting a path
   ::  recursively firms everything beneath it, so /desk/code and
   ::  /desk/data ride along. One revision, one number.
-  ;<  ~  bind:m  (checkpoint:io (nex-road:io rail [%| /desk]))
+  ;<  ~  bind:m  (checkpoint:io (nex-road:io rail [%| /desk]) ~)
   ::  a firm of UNCHANGED content dedupes to the existing top revision —
   ::  which, if the world hasn't moved since the last snapshot, is already
   ::  a snapshot (carries a numeric tag). Capturing the same world twice is
@@ -968,9 +959,7 @@
     ?~  a  `e
     ?:((gth ud.cass.e ud.cass.u.a) `e a)
   ?~  top  %.n
-  ?&  !tomb.u.top
-      ?=(^ (skim ~(tap in tags.u.top) num-tag))
-  ==
+  ?=(^ (skim ~(tap in tags.u.top) num-tag))
 ::
 ::  +version-text: render a version file's content as text, by mark.
 ::  ~ for marks with no text rendering.
@@ -1214,12 +1203,11 @@
   ^-  (list @ud)
   ?:  ?=(%| -.hist)  ~
   %+  murn  p.hist
-  |=  [=cass:clay tags=(set @t) tomb=?]
+  |=  [=cass:clay tags=(set @t)]
   ^-  (unit @ud)
-  ?:  tomb  ~
   =/  ns=(list @ud)  (murn ~(tap in tags) |=(t=@t (rush t dem)))
   ?~(ns ~ `i.ns)
-::  clear-snap: tombstone world snapshot N (one /desk fold revision)
+::  clear-snap: drop world snapshot N (one /desk fold revision)
 ::
 ++  clear-snap
   |=  [=rail:tarball n=@ud]
@@ -1302,17 +1290,20 @@
 ::  +strip-nested: the necks and weirs inside a synced tree are its
 ::  publisher's. A neck would start a nexus inside /desk/code that no one
 ::  consented to, and a weir would set governance there, so both go from
-::  every directory below the root. Instances start only through
-::  bill.json and shell consent.
+::  every level of the tree, the root included. Instances start only
+::  through bill.json and shell consent. The destination's own root
+::  governance is the caller's to attach afterward: +sync-dir re-attaches
+::  the recorded neck and no weir at the root, so nothing the publisher
+::  carried survives at any level.
 ::
 ++  strip-nested
   |=  bol=bole:tarball
   ^-  bole:tarball
+  =?  fil.bol  ?=(^ fil.bol)  `u.fil.bol(neck ~, weir ~)
   %=    bol
       dir
     %-  ~(run by dir.bol)
     |=  kid=bole:tarball
-    =?  fil.kid  ?=(^ fil.kid)  `u.fil.kid(neck ~, weir ~)
     (strip-nested kid)
   ==
 ::
@@ -1488,6 +1479,8 @@
       [~ %veto *]
     [%fail (veto-error:io dart.u.in)]
       [~ %news * *]
+    ::  /link: the name the source is spelled by moved (see +resolve-source)
+    ?:  =(/link wire.u.in)  [%done %moved ~]
     ?.  =(news-wire wire.u.in)
       [%skip ~]
     [%done %news wave.u.in]
@@ -1506,7 +1499,7 @@
   |=  [eyre-id=@ta =rail:tarball code=@ud msg=@t]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  %+  ~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig']))
+  %+  send-simple:http-res:io
     eyre-id
   [[code ~] `(as-octs:mimes:html msg)]
 ::
@@ -1611,7 +1604,7 @@
           ['reason' ?~(text s+reason ~)]
       ==
     =/  bod=octs  (as-octs:mimes:html (en:json:html json))
-    ;<  ~  bind:m  (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils [/application/json bod]))
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
     (pure:m ~)
   ?:  ?=([%raw ?(%code %data) *] suffix)
     ::  raw bytes of one file, in its mark's mime form — for <img> etc.
@@ -1635,7 +1628,7 @@
     =/  out=simple-payload:http
       ?:  (runnable-mime:http-utils p.u.got)  (inert-response:http-utils q.u.got)
       (mime-response:http-utils u.got)
-    ;<  ~  bind:m  (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id out)
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id out)
     (pure:m ~)
   ?:  ?=([%tree ?(%code %data) *] suffix)
     ::  file tree of an axis — its live dir, or /checkout when checked out
@@ -1662,7 +1655,7 @@
           ['necks' a+necks]
       ==
     =/  bod=octs  (as-octs:mimes:html (en:json:html json))
-    ;<  ~  bind:m  (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils [/application/json bod]))
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
     (pure:m ~)
   ?:  =(/source-diff suffix)
     ::  incoming endpoint: how far ahead the source is from our head. Peeks
@@ -1678,7 +1671,7 @@
         (pairs:enjs:format ~[['hasSource' b+|] ['sourceVersion' ~] ['ownVersion' ~] ['changes' [%a ~]]])
       =/  bod=octs  (as-octs:mimes:html (en:json:html json))
       ;<  ~  bind:m
-        (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils [/application/json bod]))
+        (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
       (pure:m ~)
     =/  code-path=path           (parse-path code.u.config)
     =/  code-road=road:tarball   [%& %| code-path]
@@ -1706,7 +1699,7 @@
       ==
     =/  bod=octs  (as-octs:mimes:html (en:json:html json))
     ;<  ~  bind:m
-      (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils [/application/json bod]))
+      (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
     (pure:m ~)
   ?:  =(/state suffix)
     ::  data endpoint: source, version, the world snapshot list, sharing,
@@ -1732,7 +1725,7 @@
           ['dirty' b+!(top-is-snap desk-born)]
       ==
     =/  bod=octs  (as-octs:mimes:html (en:json:html json))
-    ;<  ~  bind:m  (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils [/application/json bod]))
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id (mime-response:http-utils [/application/json bod]))
     (pure:m ~)
   ::  everything else is a static asset from /ui — the shell (index.html)
   ::  for the page route, or style.css / app.js by name.
@@ -1743,7 +1736,7 @@
     (respond eyre-id rail 404 'Not found')
   =/  =mime  !<(mime (need-vase:tarball sang.fv))
   ;<  ~  bind:m
-    (~(send-simple http-res:io (nex-road:io rail [%& ~ %'main.sig'])) eyre-id (mime-response:http-utils mime))
+    (send-simple:http-res:io eyre-id (mime-response:http-utils mime))
   (pure:m ~)
 ::
 ::  snaps-to-json: the world snapshot list from an axis's born — each
@@ -1756,9 +1749,8 @@
   ?:  ?=(%| -.res)  ~
   =/  snaps=(list [n=@ud da=@da tags=(list @t)])
     %+  murn  p.res
-    |=  [=cass:clay tags=(set @t) tomb=?]
+    |=  [=cass:clay tags=(set @t)]
     ^-  (unit [n=@ud da=@da tags=(list @t)])
-    ?:  tomb  ~
     =/  ns=(list @ud)  (murn ~(tap in tags) |=(t=@t (rush t dem)))
     ?~(ns ~ `[i.ns da.cass (user-tags tags)])
   %+  turn  (sort snaps |=([a=[n=@ud *] b=[n=@ud *]] (gth n.a n.b)))
@@ -2009,8 +2001,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   =/  hed=response-header:http  [303 ~[['location' './']]]
-  =/  main-road  (nex-road:io rail [%& ~ %'main.sig'])
-  ;<  ~  bind:m  (~(send-header http-res:io main-road) eyre-id hed)
-  ;<  ~  bind:m  (~(send-data http-res:io main-road) eyre-id ~)
+  ;<  ~  bind:m  (send-header:http-res:io eyre-id hed)
+  ;<  ~  bind:m  (send-data:http-res:io eyre-id ~)
   (pure:m ~)
 --

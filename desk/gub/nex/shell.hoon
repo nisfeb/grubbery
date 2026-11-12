@@ -1,8 +1,9 @@
 ::  shell nexus: the home surface. Composes services — the launcher grid
-::  (from the tiles store) and the notifications bell — over HTTP, and
-::  owns the cross-ship discovery state: public.json, the derived
-::  directory of this ship's shared desks, and /peers/, live mirrors
-::  of other ships' directories.
+::  (from the tiles store) and the notifications bell — over HTTP, holds
+::  the notifications inbox itself (/notifications, lib/shell/notifications), and owns
+::  the cross-ship discovery state: public.json, the derived directory
+::  of this ship's shared desks, and /peers/, live mirrors of other
+::  ships' directories.
 ::
 ::  Terminology — the shell/kernel distinction. The "shell" is the
 ::  userspace permission MANAGER: it reads apps' declared link.json /
@@ -12,51 +13,92 @@
 ::  permits registry below lives entirely on the deciding side; the
 ::  stopping is the kernel's job. Manager vs enforcer, shell vs kernel.
 ::
+::  the pages, under shell/ui: the home page and its script and style,
+::  the permissions page, the peers panes, and the notifications inbox
 /<  feather-icons  /lib/feather-icons.hoon
-/<  app-js         shell/app.js
-/<  app-css        shell/style.css
-/<  permits-html   shell/permits.html
-/<  home-html      shell/home.html
-/<  docs-html      shell/docs.html
-/<  docs-js        shell/docs.js
-/<  chat-js        shell/chat.js
-/<  chat-css       shell/chat.css
-/<  marked-js      shell/marked.min.js
-/<  hoon-grammar   shell/hoon-grammar.json
-::  shared <split-view> web component — the resizable docs sidebar
-/&  splitview-js   /lib/ui/split-view.js
-::  shared window components — the docs assistant floats in a <float-window>.
-::  window-manager.js publishes window.floatwm and MUST load before float-window.
-/&  windowmgr-js   /lib/ui/window-manager.js
-/&  floatwin-js    /lib/ui/float-window.js
-/&  filepreview-js  /lib/ui/file-preview.js
+/<  app-js         shell/ui/app.js
+/<  app-css        shell/ui/style.css
+/<  permits-html   shell/ui/permits.html
+/<  home-html      shell/ui/home.html
+::  peers: the usergroups panes of the explorer mounted on /sys/ames
+/&  peers-js       shell/ui/peers.js
+::  notifications: the service (lib/shell/notifications), its page at
+::  /grubbery/inbox, and its tools nexus (push_notify)
+/<  notifications  /lib/shell/notifications.hoon
+/<  nib            /lib/inbox.hoon
+/<  nex-tools      /lib/tools.hoon
+/&  notif-bundle   /lib/notifications-bundle/
+/&  notif-icon     shell/ui/notifications/icon.svg
+/&  notif-html     shell/ui/notifications/index.html
+/&  notif-js       shell/ui/notifications/app.js
+/&  notif-css      shell/ui/notifications/style.css
+::  tools: the MCP endpoint (lib/shell/mcp), its page at /grubbery/tools
+::  on the kit (tab-group, modal-dialog), and its tools nexus seeded
+::  from the tool bundle
+/<  mcp            /lib/shell/mcp.hoon
+::  explorer: the namespace browser and editor (lib/shell/explorer), its
+::  page at /grubbery/explorer over the tree at /grubbery/ball, the gmux
+::  sessions under /explorer/sessions, snaps under /explorer/snaps
+/<  explorer       /lib/shell/explorer.hoon
+::  docket: parse a classic desk's desk.docket-0 into a launcher tile,
+::  read straight from the mounted clay mirror (no %docket agent).
+/<  dock           /lib/docket.hoon
+/&  tool-bundle    /lib/tool-bundle/
+/&  tools-icon     shell/ui/tools/icon.svg
+/&  tools-html     shell/ui/tools/index.html
+/&  tools-js       shell/ui/tools/app.js
+/&  tools-css      shell/ui/tools/style.css
+::  the explorer panes for a tools nexus and one of its tools
+/&  tools-pane-js  shell/ui/tools/pane.js
+/&  tg-js          /lib/ui/tab-group.js
+/&  md-js          /lib/ui/modal-dialog.js
 =<  ^-  nexus:nexus
     |%
     ++  on-load
       |=  =ball:tarball
       ^-  bole:tarball
+      ::  the kit components the tools page uses, welded into one served file
+      =/  wrap  |=(=mime ^-(@ (rap 3 ~[123 10 q.q.mime 10 125 10])))
+      =/  kit-js=mime
+        [/application/javascript (as-octs:mimes:html (rap 3 ~[(wrap tg-js) (wrap md-js)]))]
       %+  spin:loader  ball
+      ::  the explorer's rows come after: its /ui/explorer sits under /ui
+      %+  weld
       :~  (manifest:loader 0)
-          [%fall %& [/ %'main.sig'] [[/ %sig] ~]]
-          ::  mirror.sig: keeps a local copy of the covered source under
-          ::  /docs/mirror, so coverage recomputes from our own ball (data.hoon
-          ::  style) and the docs subsystem (config, mirror, agent) is one
-          ::  self-contained subtree. On rise it re-mirrors every target; the
-          ::  mirror dir is rebuildable cache, never user data.
-          [%fall %& [/ %'mirror.sig'] [[/ %sig] ~]]
-          [%fall %| /docs/mirror empty-dir:loader]
-          ::  /docs/hb: the mirrored HANDBOOK prose per collection (its docs
-          ::  home), kept apart from /docs/mirror (the code sources) so coverage
-          ::  never counts the markdown. Rebuildable cache, never user data.
-          [%fall %| /docs/hb empty-dir:loader]
-          ::  /docs/cache: the ship-computed coverage cache (one json grub per
-          ::  collection), recomputed on change — rebuildable, never user data.
-          [%fall %| /docs/cache empty-dir:loader]
+          ::  /ui: everything served over HTTP. http.sig binds the routes and
+          ::  spawns a request grub per hit under /ui/requests; the pages and
+          ::  their assets sit beside it, the notifications page in its own
+          ::  subdirectory.
+          [%fall %| /ui empty-dir:loader]
+          [%fall %& [/ui %'http.sig'] [[/ %sig] ~]]
+          [%fall %| /ui/requests empty-dir:loader]
+          [%over %& [/ui %'app.js'] [[/ %mime] app-js]]
+          [%over %& [/ui %'style.css'] [[/ %mime] app-css]]
+          [%over %& [/ui %'permits.html'] [[/ %mime] permits-html]]
+          [%over %& [/ui %'peers.js'] [[/ %mime] peers-js]]
+          [%fall %| /ui/notifications empty-dir:loader]
+          [%over %& [/ui/notifications %'index.html'] [[/ %mime] notif-html]]
+          [%over %& [/ui/notifications %'app.js'] [[/ %mime] notif-js]]
+          [%over %& [/ui/notifications %'style.css'] [[/ %mime] notif-css]]
+          [%over %& [/ui/notifications %'icon.svg'] [[/ %mime] notif-icon]]
+          ::  /ui/tools: the tools page (lib/shell/mcp), at /grubbery/tools
+          [%fall %| /ui/tools empty-dir:loader]
+          [%over %& [/ui/tools %'index.html'] [[/ %mime] tools-html]]
+          [%over %& [/ui/tools %'app.js'] [[/ %mime] tools-js]]
+          [%over %& [/ui/tools %'components.js'] [[/ %mime] kit-js]]
+          [%over %& [/ui/tools %'style.css'] [[/ %mime] tools-css]]
+          [%over %& [/ui/tools %'icon.svg'] [[/ %mime] tools-icon]]
+          [%over %& [/ui/tools %'pane.js'] [[/ %mime] tools-pane-js]]
           ::  usergroups.sig: the shell's ONE registry liaison. Registrant
           ::  prefixes nest-clobber (%how replaces every road under the
           ::  sender's prefix), so exactly one root-prefix fiber makes all
           ::  of the shell's grants. public.json is inert data it writes.
           [%fall %& [/ %'usergroups.sig'] [[/ %sig] ~]]
+          ::  groups.sig: the user's write path into usergroups (the Peers
+          ::  page and the tools poke it); it edits permit/groups.json and
+          ::  usergroups.sig derives the groups' files from the record and
+          ::  every granted app's own groups.json.
+          [%fall %& [/ %'groups.sig'] [[/ %sig] ~]]
           [%fall %& [/ %'public.json'] [[/ %json] [%a ~]]]
           [%fall %& [/ %'peers.json'] [[/ %json] [%a ~]]]
           ::  authoritative permission state, in two component grubs:
@@ -80,17 +122,25 @@
           [%fall %& [/cache %'asks.json'] [[/ %json] [%a ~]]]
           [%fall %& [/cache %'aliases.json'] [[/ %json] [%o ~]]]
           [%fall %& [/cache %'weirs.json'] [[/ %json] [%o ~]]]
-          ::  permit/share.json: per-alias discovery visibility — the USER's
-          ::  map of @alias -> 'public' | [usergroup paths]. Absent = private
-          ::  (the default): an app never chooses its own discoverability.
-          [%fall %& [/permit %'share.json'] [[/ %json] [%o ~]]]
+          ::  permit/link.json: the USER's side of discovery, by bare name:
+          ::  {<name>: {path: <where you point it>, share: [usergroups]}}.
+          ::  `path` is a name you declare yourself, a claimant beside the
+          ::  apps'; `share` is who may resolve the name here, the single
+          ::  record of that grant whoever asked for it. Absent = private.
+          [%fall %& [/permit %'link.json'] [[/ %json] [%o ~]]]
+          ::  permit/groups.json: the user's usergroup record —
+          ::  {user: {<group>: {members, make, poke, peek}}}. Apps state
+          ::  theirs in the groups.json at their own root. A group exists
+          ::  while someone names it; its who.ships and how.weir are the
+          ::  union, rewritten whole.
+          [%fall %& [/permit %'groups.json'] [[/ %json] [%o ~]]]
           ::  /sys/link: the discovery registry lives at the system level.
           ::  One dest.lanes per @name holding its target lanes — peers
           ::  (local or cross-ship) can `keep` a name and learn where
           ::  its app lives.
           ::  sweep.sig: poke target for "new apps may exist — look now".
           ::  Desk installs poke it after applying their bill, so fresh
-          ::  apps get followers (and their rise-notify) immediately
+          ::  apps get followers (and their reload-time notify) immediately
           ::  instead of waiting for a permits page load.
           [%fall %& [/ %'sweep.sig'] [[/ %sig] ~]]
           ::  bootstrap.sig: runs the repos-to-sync setup ONCE on first boot
@@ -108,45 +158,59 @@
           ::  under the shell, not /apps — desks need permission management,
           ::  built-in apps at /apps don't.
           [%fall %| /desks empty-dir:loader]
+          ::  /forge: the forge. A nexus, not a desk — it ships with the
+          ::  kernel, so its code is already in this namespace, named by
+          ::  the neck below (/nex/git/forge.hoon). Desks are for code
+          ::  that lives on another ship.
+          ::
+          ::  %fall, so the forge's own world — its repos and their git
+          ::  working trees — survives a shell reload.
+          [%fall %| /forge [`[`[/git %forge] ~ %.n ~] ~]]
           ::  /share: per-usergroup discovery directories, derived from
           ::  local desks' share.usergroups. /share/<group>/desks.json lists
           ::  the desks that group may subscribe to and where their code +
           ::  version live. Rebuilt from the live grants by the followers.
           [%fall %| /share empty-dir:loader]
           [%fall %| /peers empty-dir:loader]
-          [%fall %| /requests empty-dir:loader]
-          ::  /docs: holds the handbook's CONFIG grubs (targets, ignore, pins).
-          ::  The prose itself is NOT seeded here — it lives in the documented
-          ::  target's own man/docs (referenced, not owned) and is read from the
-          ::  mirror. See the docs page/search/anchor arms.
-          [%fall %| /docs empty-dir:loader]
-          ::  freshness pins for the live-code blocks: a map of
-          ::  "<doc>|<file>|<range>" -> the content hash of that span as of
-          ::  when the block was first seen. %fall so it seeds empty once and
-          ::  then belongs to the runtime — pins persist across reloads. The
-          ::  browser computes the hash (the same cyrb53 the badges use) and
-          ::  the ship only stores it; auto-pin is stamp-once, never re-stamped
-          ::  on view, so drift stays visible.
-          [%fall %& [/docs %'pins.json'] [[/ %json] [%o ~]]]
-          ::  coverage targets: the list of source files we WANT documented,
-          ::  the denominator for coverage. A file on this list with no live
-          ::  block reads as uncovered (a gap); a documented file NOT on the
-          ::  list is extra credit. %fall so the list is editable at runtime
-          ::  and persists. Stored as a json array of "/code"-relative paths.
-          [%fall %& [/docs %'targets.json'] [[/ %json] [%a ~]]]
-          ::  (ignore is not a shell grub — it lives in the documented target's
-          ::  own man/docs manifest, read from the mirror at compute time.)
-          [%over %& [/ %'app.js'] [[/ %mime] app-js]]
-          [%over %& [/ %'style.css'] [[/ %mime] app-css]]
-          [%over %& [/ %'permits.html'] [[/ %mime] permits-html]]
-          ::  docs-agent: the docs chatbot as a CONTAINED, sandboxed nexus
-          ::  (neck [/ %docs-agent], code at nex/docs-agent.hoon). The
-          ::  SANDBOX is the weir WE set on it here (kernel-enforced): the
-          ::  whole agent — and anything it mounts — may only read /docs
-          ::  (which holds the source mirror + registry), poke the metered
-          ::  provider + bowl, and write within its own subtree.
-          [%fall %| /docs/agent [`[`[/shell %docs-agent] `(agent-weir ~) %.n ~] ~]]
+          ::  local tiles: the home page's own launcher entries, one subdir
+          ::  /tiles/<name>/ holding tile.json (apps declare theirs in their
+          ::  own root's tile.json). %fall: seeded once with Landscape, then
+          ::  the user's, edited from the home page.
+          [%fall %| /tiles empty-dir:loader]
+          [%fall %| /tiles/landscape empty-dir:loader]
+          [%over %& [/tiles/landscape %'tile.json'] [[/ %json] landscape-tile]]
+          ::  hidden-tiles.json: the user's launcher preference — the set of
+          ::  tile names hidden from the home grid, toggled from the UI. This
+          ::  replaces the old hardcoded hidden set (any tile can be hidden or
+          ::  shown now); seeded empty.
+          [%fall %& [/ %'hidden-tiles.json'] [[/ %json] [%a ~]]]
+          ::  /notifications: the service (see lib/shell/notifications).
+          ::  /sys/link/notifications points here, so senders poke
+          ::  @notifications/main.sig and land on notifications/main.sig.
+          ::  The registry and the inbox are user data; the page (under
+          ::  /ui/notifications) is chrome, the home page's bell, not a tile.
+          [%fall %| /notifications empty-dir:loader]
+          [%fall %& [/notifications %'main.sig'] [[/ %sig] ~]]
+          [%fall %& [/notifications %'registry.json'] [[/ %json] [%o ~]]]
+          [%fall %& [/notifications %'inbox.inbox'] [[/ %inbox] *inbox:nib]]
+          [%over %| /notifications/tools (seed-tools:nex-tools notif-bundle)]
+          ::  /tools: the tools nexus the MCP endpoint serves (lib/shell/mcp):
+          ::  the bundle over whatever tools were added at runtime. Its tile
+          ::  is a local one, like Landscape's.
+          [%over %| /tools (tools-bole:mcp ball tool-bundle)]
+          [%fall %| /tiles/tools empty-dir:loader]
+          [%over %& [/tiles/tools %'tile.json'] [[/ %json] tile:mcp]]
+          [%fall %| /tiles/explorer empty-dir:loader]
+          [%over %& [/tiles/explorer %'tile.json'] [[/ %json] tile:explorer]]
+          ::  the forge and the github proxy it houses live under this
+          ::  shell, not under /apps, so the tile reader never finds them:
+          ::  their tiles are local ones too.
+          [%fall %| /tiles/forge empty-dir:loader]
+          [%over %& [/tiles/forge %'tile.json'] [[/ %json] forge-tile]]
+          [%fall %| /tiles/github empty-dir:loader]
+          [%over %& [/tiles/github %'tile.json'] [[/ %json] github-tile]]
       ==
+      rows:explorer
     ::
     ++  on-file
       |=  [=rail:tarball =blot:tarball]
@@ -155,150 +219,58 @@
       =/  m  (fiber:fiber:nexus ,~)
       ^-  process:fiber:nexus
       ?+    rail  stay:m
-          [~ %'main.sig']
-        ;<  ~  bind:m  (rise-wait:io prod "%shell main: failed")
-        ::  the docs agent reaches the anthropic proxy by NAME. on-load has
-        ::  no fiber to look the name up, so the agent is born with the base
-        ::  weir and sanded here with the resolved roads once per rise.
-        ;<  anth=(unit lane:tarball)  bind:m  (resolve-link:io '@anthropic')
-        ;<  ~  bind:m
-          ?.  ?=([~ %| *] anth)
-            ~&  >>>  %shell-docs-agent-no-anthropic
-            (pure:(fiber:fiber:nexus ,~) ~)
-          (sand:io (nex-road:io rail [%| /docs/agent]) `(agent-weir `p.u.anth))
+          ::  ui/http.sig: every route the shell serves. The home page and
+          ::  its API, the permissions page and its API, the peers panes,
+          ::  and the notifications inbox page.
+          [[%ui ~] %'http.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell http: failed")
         ;<  ~  bind:m  (bind-http:io [~ /apps/grubbery])
         ;<  ~  bind:m  (bind-http:io [~ /grubbery/tiles])
-        (http-dispatch:io %shell)
-          ::  mirror.sig: keep a local copy of every target's source under
-          ::  /docs/mirror (per source, under its tag), so coverage computes
-          ::  from local data. FOLLOWS each target by SUBSCRIPTION: the kernel
-          ::  mirrors Clay desks into the namespace as real grubs (see
-          ::  +sync-clay-desk), so /sys/clay/desks/<desk> is a live grubbery
-          ::  subtree — a directory keep on it wakes us when the target changes.
-          ::  +sync-keeps subscribes to the registry AND every target directory;
-          ::  a +mug check skips re-copying a target whose ball is unchanged.
-          ::  The mirror is not pruned, so coverage counts only current targets.
-          [~ %'mirror.sig']
-        ;<  ~  bind:m  (rise-wait:io prod "%shell mirror: failed")
-        |^
-        ;<  seen0=(map path @)  bind:m  (do-mirror ~)
-        ;<  ~  bind:m  recompute-all
-        ;<  kept0=(set path)    bind:m  (sync-keeps ~)
-        =/  seen=(map path @)   seen0
-        =/  kept=(set path)     kept0
-        |-  ^-  process:fiber:nexus
-        ::  wake whenever the registry, any watched target's source, or the pins
-        ::  change — then re-mirror and recompute coverage into the cache.
-        ;<  woke=wire  bind:m  take-mirror-news
-        ~?  dbg  [%shell-docs-mirror-wake woke]
-        ;<  seen1=(map path @)  bind:m  (do-mirror seen)
-        ;<  ~  bind:m  recompute-all
-        ;<  kept1=(set path)    bind:m  (sync-keeps kept)
-        $(seen seen1, kept kept1)
-        ::  +do-mirror: mirror every current target, skipping those whose source
-        ::  ball is unchanged since we last copied it. seen maps a target path to
-        ::  the mug it was last mirrored at; returns the updated map.
-        ++  do-mirror
-          |=  seen=(map path @)
-          =/  m  (fiber:fiber:nexus ,(map path @))
-          ^-  form:m
-          ;<  tgs=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-          =/  jobs=(list [dest=path src=path])  (mirror-jobs (colls tgs))
-          =/  out=(map path @)  seen
-          |-  ^-  form:m
-          ?~  jobs  (pure:m out)
-          ;<  got=(unit @)  bind:m
-            (mirror-dir rail dest.i.jobs src.i.jobs (~(get by seen) dest.i.jobs))
-          =?  out  ?=(^ got)  (~(put by out) dest.i.jobs u.got)
-          $(jobs t.jobs)
-        ::  +recompute-all: rebuild the coverage cache for every registered
-        ::  collection (its c = the collection's name as a one-segment path).
-        ++  recompute-all
-          =/  m  (fiber:fiber:nexus ,~)
-          ^-  form:m
-          ;<  tgs=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-          =/  cs=(list path)  (turn (colls tgs) |=([name=@t *] ~[name]))
-          |-  ^-  form:m
-          ?~  cs  (pure:m ~)
-          ;<  ~  bind:m  (recompute-coverage rail i.cs)
-          $(cs t.cs)
-        ::  +sync-keeps: subscribe to targets.json, the pins, and every source
-        ::  directory a collection mirrors (its code sources AND its handbook
-        ::  home); drop subscriptions for sources no longer registered. Keeps the
-        ::  newly-added and drops the removed (idempotent per wire). Returns the
-        ::  new set of watched source paths.
-        ++  sync-keeps
-          |=  old=(set path)
-          =/  m  (fiber:fiber:nexus ,(set path))
-          ^-  form:m
-          ;<  *  bind:m
-            (keep:io /cfg-t (nex-road:io rail [%& /docs %'targets.json']) `[/ %json])
-          ::  also watch the pins: a re-confirm changes freshness, so the cache
-          ::  must be recomputed. (Our own stamp settles in one extra pass.)
-          ;<  *  bind:m
-            (keep:io /cfg-p (nex-road:io rail [%& /docs %'pins.json']) `[/ %json])
-          ;<  tgs=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-          =/  now=(set path)
-            %-  ~(gas in *(set path))
-            (turn (mirror-jobs (colls tgs)) |=([* src=path] src))
-          =/  gone=(list path)   ~(tap in (~(dif in old) now))
-          =/  fresh=(list path)  ~(tap in (~(dif in now) old))
-          |-  ^-  form:m
-          ?^  gone
-            ;<  ~  bind:m  (drop:io (welp /tgt i.gone) [%& %| i.gone])
-            $(gone t.gone)
-          ?^  fresh
-            ;<  *  bind:m  (keep:io (welp /tgt i.fresh) [%& %| i.fresh] ~)
-            $(fresh t.fresh)
-          (pure:m now)
-        --
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/inbox])
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/tools])
+        ::  dist: /grubbery/mcp is the old MCP endpoint, kept as an alias
+        ::  of /grubbery/tools; clients configured on the old path keep
+        ::  working. Same length, so the endpoint's suffix is the same.
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/mcp])
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/ball])
+        ;<  ~  bind:m  (bind-http:io [~ /grubbery/explorer])
+        http-dispatch:io
+          ::  explorer/sessions/<name>.json: a gmux workspace the ship keeps;
+          ::  lib/shell/explorer runs the session's poke loop
+          ::
+          [[%explorer %sessions ~] @]
+        ;<  ~  bind:m  (rise-wait:io prod "%shell explorer session: failed, poke to restart")
+        session-loop:explorer
+          ::  notifications/main.sig: the bus's poke loop (register, notify,
+          ::  ack, clear); lib/shell/notifications does the work
+          ::
+          [[%notifications ~] %'main.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell notifications: failed")
+        serve:notifications
           ::  usergroups.sig: register once, then hold every shell grant
           ::  current — the base /public grant on public.json plus the
-          ::  per-group /sys/link shares from permit/share.json — and keep
+          ::  per-group /sys/link shares from permit/link.json — and keep
           ::  public.json (inert json) an honest reflection of the /public
-          ::  group's weir. Event-driven: wakes on share.json changes, on
+          ::  group's weir. Event-driven: wakes on the link record, on
           ::  the public group's weir changing (desk grants), or a poke.
           ::
           [~ %'usergroups.sig']
-        ;<  ~  bind:m  (rise-wait:io prod "%shell registry: failed")
-        ;<  here=rail:tarball  bind:m  get-here-abs:io
-        ;<  ~  bind:m  (reg-register-at:io here)
-        =/  nex-dir=path  path.here
+        ;<  ~  bind:m  (rise-wait:io prod "%shell groups: failed")
+        ;<  ~  bind:m  (carry-links rail)
         ;<  *  bind:m
-          (keep:io /share (nex-road:io rail [%& /permit %'share.json']) ~)
+          (keep:io /share (nex-road:io rail [%& /permit %'link.json']) ~)
         ;<  *  bind:m
-          (keep:io /pubw [%& %& /sys/ames/usergroups/'public.grp' %'how.weir'] ~)
-        =|  prev=(set path)
+          (keep:io /groups (nex-road:io rail [%& /permit %'groups.json']) ~)
+        ::  the derived files themselves: a hand edit to a who.ships or a
+        ::  how.weir is drift, and the next derive puts it back. No loop —
+        ::  the derive writes only what differs, so its own writes are
+        ::  silent and a hand edit settles after one round.
+        ;<  *  bind:m  (keep:io /derived [%& %| /sys/ames/usergroups] ~)
         |-
-        ;<  shares=(map path (set road:tarball))  bind:m  (read-shares rail nex-dir)
-        ::  one %how per group, total-state: base grant + that group's name
-        ::  shares. /public always recomputes (the base grant rides it);
-        ::  prev keeps un-shared groups in the set once more to clear them.
-        =/  groups=(list path)
-          ~(tap in (~(put in (~(uni in prev) ~(key by shares))) /public))
-        ;<  ~  bind:m
-          =/  m  (fiber:fiber:nexus ,~)
-          |-  ^-  form:m
-          ?~  groups  (pure:m ~)
-          =/  grp=path  i.groups
-          =/  link-roads=(set road:tarball)  (fall (~(get by shares) grp) ~)
-          =/  base=(set road:tarball)
-            ?.  =(/public grp)  ~
-            %-  sy
-            ^-  (list road:tarball)
-            :~  [%& %& nex-dir %'public.json']
-                ::  the new desk storefront — the /public group reads this to
-                ::  discover which desks it may subscribe to and where.
-                [%& %& (weld nex-dir /share/public) %'desks.json']
-            ==
-          =/  peeks=(set road:tarball)  (~(uni in base) link-roads)
-          ;<  ~  bind:m  (reg-how:io grp [~ ~ peeks])
-          $(groups t.groups)
-        =.  prev  ~(key by shares)
-        ;<  ~  bind:m  (reg-poke:io [%gc ~])
+        ::  every group's files, from the record: the user's section, each
+        ::  section, the names opened (the link record), the desks opened
+        ::  (their share.usergroups), and the shell's own /public base.
+        ;<  ~  bind:m  (apply-groups rail)
         ;<  paths=(list @t)  bind:m  scan-public
         ;<  cur=(unit json)  bind:m
           (peek-as:io (nex-road:io rail [%& / %'public.json']) ,json)
@@ -306,13 +278,32 @@
         ;<  ~  bind:m
           ?:  =(`next cur)  (pure:(fiber:fiber:nexus ,~) ~)
           (over:io (nex-road:io rail [%& / %'public.json']) [[/ %json] next])
+        ::  wakes: the record or the names changed (news), or a desk's
+        ::  share changed (its listener pokes)
         ;<  ~  bind:m  take-reg-wake
+        $
+          ::  groups.sig: a contribution to the user's usergroup record,
+          ::  from a request fiber or a tool under this shell.
+          ::
+          [~ %'groups.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell groups.sig: failed")
+        ;<  here=rail:tarball  bind:m  get-here-abs:io
+        |-
+        ;<  [=from:fiber:nexus =sage:tarball]  bind:m  take-poke-from:io
+        =/  jon=json  (fall (mole |.(!<(json q.sage))) *json)
+        =/  sender=rail:tarball  (resolve-bend:io here from)
+        ;<  err=(unit @t)  bind:m  (group-request rail sender jon)
+        ~?  >>  ?=(^ err)  [%shell-groups-refused path.sender u.err]
         $
           ::  sweep.sig: on any poke, spawn followers for apps that lack
           ::  them and refresh the caches if anything new appeared.
           ::
           [~ %'sweep.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%shell sweep: failed")
+        ::  a sweep on every nexus reload too: a follower this version
+        ::  adds (the desk share listener) must appear on a ship that
+        ::  already has desks, not wait for the next poke
+        ;<  *  bind:m  (spawn-followers rail)
         |-
         ;<  *  bind:m  take-poke:io
         ;<  made=?  bind:m  (spawn-followers rail)
@@ -321,25 +312,28 @@
           ;<  ~  bind:(fiber:fiber:nexus ,~)  (build-links rail)
           ;<  ~  bind:(fiber:fiber:nexus ,~)  (build-asks rail)
           ;<  ~  bind:(fiber:fiber:nexus ,~)  (build-aliases rail)
+          ;<  ~  bind:(fiber:fiber:nexus ,~)  (regrant-moved rail)
           (build-weirs rail)
         ::  desk shares change without spawning a follower, so /share must
         ::  rebuild on every sweep, not only when a new app appeared.
         ;<  ~  bind:m  (build-share rail)
         $
-          ::  bootstrap.sig: first-boot setup. On the FIRST rise where the
-          ::  /bootstrapped.json marker is absent, run the repos-to-sync
-          ::  pipeline once and write the marker. The marker persists, so every
-          ::  later rise (restart/crash-recovery) skips — setup runs exactly
-          ::  once. The manual POST /desks/sync-defaults stays available.
+          ::  bootstrap.sig: the stock desks, held current at every nexus reload.
+          ::  /bootstrapped.json marks that the first run happened. The
+          ::  manual POST /desks/sync-defaults does the same on demand.
           ::
           [~ %'bootstrap.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%shell bootstrap: failed")
+        ;<  ~  bind:m  ensure-polls
+        ::  every nexus reload: each %boot entry's repo and desk, made if missing,
+        ::  and its source re-pointed at the forge as it stands now. A
+        ::  stock entry added later, or a forge that moved, is taken up by
+        ::  the next reload with no one's hand on it. Idempotent; the network
+        ::  is touched last and softly.
+        ;<  ~  bind:m  (sync-stock %.y)
         ;<  done=?  bind:m
           (peek-exists:io (nex-road:io rail [%& / %'bootstrapped.json']))
-        ;<  ~  bind:m  ensure-polls
         ?:  done  (pure:m ~)
-        ~?  dbg  %shell-bootstrap-first-boot
-        ;<  ~  bind:m  sync-defaults
         ;<  err=(unit tang)  bind:m
           (make-soft:io (nex-road:io rail [%& / %'bootstrapped.json']) |+[[[/ %json] `json`[%b %.y]] ~])
         ~?  >>>  ?=(^ err)  %shell-bootstrap-mark-failed
@@ -375,6 +369,25 @@
           ~?  >>>  ?=(^ err)  [%shell-peer-cull-failed u.del]
           $
         $
+          ::  /sync/<desk>/share.sig: the desk's share listener. One job:
+          ::  when the desk's share set changes, the storefront follows.
+          ::  Nothing else runs in this fiber, so nothing can keep it from
+          ::  hearing the change.
+          ::
+          [[%sync @ ~] %'share.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell share-listener: failed")
+        =/  desk=@ta  i.t.path.rail
+        =/  road=road:tarball  [%& %& /apps/shell/desks/[desk] %'share.usergroups']
+        ;<  *  bind:m  (keep:io /share road ~)
+        ::  a change made while the shell was down shows on reload
+        ;<  ~  bind:m  (build-share rail)
+        |-
+        ;<  *  bind:m  (take-news:io /share)
+        ;<  ~  bind:m  (build-share rail)
+        ::  the groups the desk is open to are part of the record's union
+        ;<  ~  bind:m
+          (poke:io (nex-road:io rail [%& / %'usergroups.sig']) [[/ %json] [%o ~]])
+        $
           ::  /sync/<app>: a pure follower. Subscribes to its app's tree and
           ::  on any change (link.json, weir.json, …) pings the scanner to
           ::  reconcile /sys/link and the asks. Holds no state, writes nothing.
@@ -388,13 +401,24 @@
         ::  a ticking app (counter, weather) fires us on every data write.
         ;<  *  bind:m  (keep:io /alias [%& %& u.ap %'link.json'] ~)
         ;<  *  bind:m  (keep:io /weir [%& %& u.ap %'weir.json'] ~)
+        ::  its facts about usergroups; absent for most apps
+        ;<  *  bind:m  (keep:io /groups [%& %& u.ap %'groups.json'] ~)
         ::  a desk's opening declaration — absent for non-desk apps (a sub on
         ::  an absent road is legal and fires if it ever appears).
-        ;<  *  bind:m  (keep:io /shareg [%& %& u.ap %'share.usergroups'] ~)
-        ::  notify at rise too: a fresh install's ask predates this
+        ;<  *  bind:m  (keep:io /shareg (share-road u.ap) ~)
+        ::  notify on reload too: a fresh install's ask predates this
         ::  follower, so there is no change-news to catch — and an ask
         ::  still pending across a reload deserves the re-ping anyway.
-        ;<  ~  bind:m  (notify-if-unsettled rail u.ap)
+        ::  The app's sand is the shell's to set and the kernel's to keep:
+        ::  a reload carries every directory's weir forward, so nothing is
+        ::  re-granted here. The weir changes only when a grant or an alias
+        ::  does. (grant.json is the app's to keep, if it cares.)
+        ::  The notice, bounded: a notify whose ack never came (the
+        ::  notifications nexus busy or banged) used to hold the follower
+        ::  here for good, deaf to every change to the files it follows
+        ;<  did=(unit ~)  bind:m
+          ((with-timeout:io ,~) /notify ~s30 (notify-if-unsettled rail u.ap))
+        ~?  >>  ?=(~ did)  [%shell-follower-notify-timeout u.ap]
         |-
         ;<  ~  bind:m  take-any-news
         ;<  live=?  bind:m  (peek-exists:io [%& %| u.ap])
@@ -423,9 +447,15 @@
         ::  unsettled (the subscription IS the dedup — news only fires on
         ::  actual change), then refresh the caches.
         ;<  ~  bind:m  (notify-if-unsettled rail u.ap)
+        ::  its groups.json may be what changed: derive the groups again
+        ;<  ~  bind:m
+          (poke:io (nex-road:io rail [%& / %'usergroups.sig']) [[/ %json] [%o ~]])
         ;<  ~  bind:m  (build-links rail)
         ;<  ~  bind:m  (build-asks rail)
         ;<  ~  bind:m  (build-aliases rail)
+        ::  a name this app claims may be one another app was granted
+        ::  against: their sand follows the registry
+        ;<  ~  bind:m  (regrant-moved rail)
         ;<  ~  bind:m  (build-weirs rail)
         ;<  ~  bind:m  (build-share rail)
         $
@@ -438,24 +468,52 @@
         ;<  ~  bind:m  (rise-wait:io prod "%shell mirror: failed")
         =/  s=@t  (mirror-ship name.rail)
         ?~  (slaw %p s)  (pure:m ~)
+        ::  a peer on an older grubbery keeps its storefront under
+        ::  /apps/shell.shell (the shell installed as a desk app): both
+        ::  roads are kept, and whichever answers is read.
         ;<  *  bind:m  (keep:io /pub (peer-pub-road s) ~)
+        ;<  *  bind:m  (keep-soft:io /pub-legacy (peer-pub-road-legacy s) ~ ~s30)
         ;<  ~  bind:m  (refresh-mirror s)
         |-
-        ;<  *  bind:m  (take-news:io /pub)
+        ;<  ~  bind:m  take-pub-news
         ;<  ~  bind:m  (refresh-mirror s)
         $
           ::
-          [[%requests ~] @]
+          [[%ui %requests ~] @]
         ;<  ~  bind:m  (rise-wait:io prod "%shell request: failed")
         =/  eyre-id=@ta  name.rail
         ;<  [src=@p req=inbound-request:eyre]  bind:m  (get-state-as:io ,[src=@p inbound-request:eyre])
         ;<  our=@p  bind:m  get-our:io
         ?.  =(src our)
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[403 ~] `(as-octs:mimes:html 'Forbidden')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[403 ~] `(as-octs:mimes:html 'Forbidden')])
           (pure:m ~)
         =/  prefix=path  /grubbery/tiles
         =/  site=path  site:(parse-url:http-utils url.request.req)
+        ::  /grubbery/inbox[/<file>] → the notifications page
+        ?:  ?=([%grubbery %inbox *] site)
+          (serve-page:notifications rail)
+        ::  /grubbery/tools → the MCP endpoint and its page (and the
+        ::  dist alias /grubbery/mcp)
+        ?:  ?=([%grubbery ?(%tools %mcp) *] site)
+          (serve-request:mcp rail)
+        ::  /grubbery/ball[/...] and /grubbery/explorer[/...] → the explorer:
+        ::  the tree and its page
+        ?:  |(?=([%grubbery %ball *] site) ?=([%grubbery %explorer *] site))
+          (serve-request:explorer rail)
         =/  suffix=path  (slag (lent prefix) site)
+        ::  POST /apps/grubbery/peers/{create,members,permissions}: the three
+        ::  writes the peers panes need. Reads are the explorer's; these are
+        ::  the registry's (a ships mark, the usergroups registry poke).
+        ?:  &(=('POST' method.request.req) ?=([%peers @ ~] suffix))
+          =/  jon=json
+            %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
+            *json
+          ;<  err=(unit @t)  bind:m  (peers-write rail i.t.suffix jon)
+          ?^  err
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html u.err)])
+            (pure:m ~)
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html '{"ok":true}')])
+          (pure:m ~)
         ::  POST /apps/grubbery/permits → a user permission action, applied
         ::  directly (we are already gated to src==our, the authenticated
         ::  user). Writes the authoritative component grubs — permit/approved/
@@ -474,7 +532,7 @@
           ::  (the response waits for the fiber). The page requests them through
           ::  POST /permits/refresh the moment this returns, and reloads when
           ::  that completes.
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /permits/refresh {full}: the slow work, on the page's schedule
         ::  rather than the user's. The follower sweep (new installs get their
@@ -498,7 +556,7 @@
             ;<  ~  bind:(fiber:fiber:nexus ,~)  (build-asks rail)
             ;<  ~  bind:(fiber:fiber:nexus ,~)  (build-aliases rail)
             (build-weirs rail)
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /permits/reload {app}: reboot an app after a grant, so the
         ::  fibers that crashed while jailed come back holding what was
@@ -513,7 +571,7 @@
           ;<  ~  bind:m
             ?~  tp  (pure:(fiber:fiber:nexus ,~) ~)
             (reload:io [%& %| u.tp])
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /uninstall {root}: delete an installed app from its tile.
         ::  A desk-nested root uninstalls the WHOLE desk (the UI says so
@@ -524,19 +582,44 @@
             %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
             *json
           =/  rt=(unit path)  (soft-path (fall (jget jon 'root') ''))
+          ::  three spellings reach the same place. A desk-nested app names
+          ::  one nexus inside a desk and uninstalls the WHOLE desk, so walk
+          ::  up to the desk root; the desk root itself is already there (the
+          ::  Desks panel's "remove" sends this one); a bare /apps/<app> is a
+          ::  built-in app. Anything else is refused.
           =/  target=(unit path)
             ?~  rt  ~
-            ?:  ?=([%apps %'shell.shell' %desks @ %desk %data @ ~] u.rt)
-              `/apps/'shell.shell'/desks/[i.t.t.t.u.rt]
+            ?:  ?=([%apps %shell %desks @ %desk %data @ ~] u.rt)
+              `/apps/shell/desks/[i.t.t.t.u.rt]
+            ?:  ?=([%apps %shell %desks @ ~] u.rt)  `u.rt
             ?:  ?=([%apps @ ~] u.rt)  `u.rt
             ~
           ?~  target
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'bad root')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'bad root')])
             (pure:m ~)
           ;<  err=(unit tang)  bind:m  (cull-soft:io [%& %| u.target])
           ~?  >>>  ?=(^ err)  [%shell-uninstall-failed u.target]
           =/  code=@ud  ?~(err 200 500)
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[code ~] `(as-octs:mimes:html ?~(err 'ok' 'failed'))])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[code ~] `(as-octs:mimes:html ?~(err 'ok' 'failed'))])
+          (pure:m ~)
+        ::  POST /visibility {name, hidden}: hide or show a tile by name. The
+        ::  hidden set is the user's own launcher preference (replaces the old
+        ::  hardcoded set) — any tile can be toggled from the home page.
+        ?:  &(=('POST' method.request.req) ?=([%visibility ~] suffix))
+          =/  jon=json
+            %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
+            *json
+          =/  name=@t  (fall (jget jon 'name') '')
+          =/  hide=?  &(?=([%o *] jon) =([~ %b %.y] (~(get by p.jon) 'hidden')))
+          ?:  =('' name)
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'name required')])
+            (pure:m ~)
+          ;<  cur=(set @t)  bind:m  (read-hidden-tiles rail)
+          =/  next=(set @t)  ?:(hide (~(put in cur) name) (~(del in cur) name))
+          ;<  ~  bind:m
+            %+  over:io  (nex-road:io rail [%& / %'hidden-tiles.json'])
+            [[/ %json] [%a (turn ~(tap in next) |=(n=@t s+n))]]
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /desks/peers {add|del: ship}: forward to our own peers.json
         ::  fiber (folded in from the retired /desks nexus).
@@ -545,7 +628,7 @@
             %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
             *json
           ;<  ~  bind:m  (poke:io (nex-road:io rail [%& / %'peers.json']) [[/ %json] jon])
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /desks/add {name, code}: install a peer's shared desk as a
         ::  local cross-ship /desk. Make a trusted [/ %desk] wrapper (weir ~ —
@@ -559,22 +642,41 @@
           =/  name=@t  (jstr jon 'name')
           =/  code=@t  (jstr jon 'code')
           ?:  =('' name)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'name required')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'name required')])
             (pure:m ~)
           ?:  =('' code)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'code required')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'code required')])
             (pure:m ~)
           =/  dir-path=path
-            /apps/'shell.shell'/desks/[(cat 3 `@ta`name '.desk')]
+            /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
           ;<  live=?  bind:m  (peek-exists:io [%& %| dir-path])
           ?:  live
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[409 ~] `(as-octs:mimes:html 'a desk by that name already exists')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[409 ~] `(as-octs:mimes:html 'a desk by that name already exists')])
             (pure:m ~)
           ;<  ~  bind:m
             (make:io [%& %| dir-path] &+`bole:tarball`[`[`[/ %desk] ~ %.n ~] ~])
           =/  source=json  (pairs:enjs:format ~[['code' s+code]])
           ;<  ~  bind:m  (poke:io [%& %& dir-path %'source.json'] [[/ %json] source])
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'created')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'created')])
+          (pure:m ~)
+        ::  POST /desks/share {name, add|remove: <group>}: publish a desk to
+        ::  a usergroup, or stop. Forwarded to the desk's share.usergroups,
+        ::  which grants and the follower rebuilds the listing.
+        ?:  &(=('POST' method.request.req) ?=([%desks %share ~] suffix))
+          =/  jon=json
+            %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
+            *json
+          =/  name=@t  (jstr jon 'name')
+          =/  dir-path=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+          ;<  live=?  bind:m  (peek-exists:io [%& %| dir-path])
+          ?.  live
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'no such desk')])
+            (pure:m ~)
+          =/  cmd=json
+            ?.  ?=([%o *] jon)  [%o ~]
+            [%o (~(del by p.jon) 'name')]
+          ;<  ~  bind:m  (poke:io [%& %& dir-path %'share.usergroups'] [[/ %json] cmd])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
           (pure:m ~)
         ::  POST /desks/sync-defaults: bootstrap the shipped "repos to sync"
         ::  list — for each entry, ensure its git_repo (polling github) and a
@@ -586,8 +688,8 @@
           ::  answer first, for the reason spelled out at /desks/sync below:
           ::  syncing every stock entry touches the network once per entry, and
           ::  an HTTP request held open across that stalls the server.
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
-          ;<  ~  bind:m  sync-defaults
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
+          ;<  ~  bind:m  (sync-stock %.n)
           (pure:m ~)
         ::  POST /desks/sync {name}: sync ONE stock desk — find its entry and
         ::  run the same +ensure-pairing the "Sync all" path uses per entry.
@@ -596,11 +698,10 @@
             %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
             *json
           =/  name=@t  (jstr jon 'name')
-          ;<  our=@p  bind:m  get-our:io
-          =/  match=(unit stock-entry)  (find-stock our name)
+          =/  match=(unit stock-entry)  (find-stock name)
           ?~  match
             ;<  ~  bind:m
-              (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'no such stock desk')])
+              (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'no such stock desk')])
             (pure:m ~)
           ::  ANSWER FIRST, then do the work. +ensure-pairing touches the
           ::  network, and holding an HTTP request open across that is how this
@@ -610,7 +711,7 @@
           ::  page, which is the one page a user needs in order to fix anything.
           ::  The caller learns the outcome from /desks/stock, which reports each
           ::  entry's synced flag; it does not need this response to carry it.
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
           ;<  ~  bind:m  (ensure-pairing u.match)
           (pure:m ~)
         ::  POST /desks/delete {app}: cull a desk from /desks/<app>.
@@ -620,32 +721,33 @@
             *json
           =/  app=@t  (jstr jon 'app')
           ?:  =('' app)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'app required')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'app required')])
             (pure:m ~)
           ;<  ~  bind:m
             (cull:io (nex-road:io rail [%| /desks/[(crip (trip app))]]))
-          ;<  ~  bind:m  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'deleted')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'deleted')])
           (pure:m ~)
         ::  tile store, served from the tiles data ball over the namespace
         ::  /grubbery/tiles/tiles.json → all tile data
         ?:  ?=([%'tiles.json' ~] suffix)
-          ;<  tiles=(list [tile (unit path)])  bind:m  read-all-tiles
-          =/  =json  (tiles-to-json tiles)
+          ;<  tiles=(list [tile (unit path) ?])  bind:m  read-all-tiles
+          ;<  hidden=(set @t)  bind:m  (read-hidden-tiles rail)
+          =/  =json  (tiles-to-json tiles hidden)
           =/  body=octs  (as-octs:mimes:html (en:json:html json))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ['content-type' 'application/json'] ~] `body])
+            (send-simple:http-res:io eyre-id [[200 ['content-type' 'application/json'] ~] `body])
           (pure:m ~)
         ::  /grubbery/tiles/icon/<nexus-root-path> → serve a nexus's icon
         ::  file. The path may be deep (a desk-install's desk/data/<nexus>).
         ?:  ?=([%icon ^] suffix)
           ::  reconstruct the nexus root from the compressed icon path:
-          ::  <desk>/<nexus> -> /apps/shell.shell/desks/<desk>/desk/data/<nexus>,
+          ::  <desk>/<nexus> -> /apps/shell/desks/<desk>/desk/data/<nexus>,
           ::  a bare <nexus> -> /apps/<nexus>, or a full /apps/... path as-is.
           =/  segs=path  t.suffix
           =/  root=path
             ?:  ?=([%apps *] segs)  segs
             ?:  ?=([@ @ ~] segs)
-              ~[%apps %'shell.shell' %desks i.segs %desk %data i.t.segs]
+              ~[%apps %shell %desks i.segs %desk %data i.t.segs]
             ?:  ?=([@ ~] segs)  ~[%apps i.segs]
             [%apps segs]
           ;<  kid-root=view:nexus  bind:m
@@ -661,23 +763,23 @@
             ?:  (is-boom:tarball s)  out
             `[n s]
           ?~  icon-file
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
             (pure:m ~)
           =/  =mime  !<(mime (need-vase:tarball sang.u.icon-file))
-          ;<  ~  bind:m  (send-simple:srv eyre-id (mime-response:http-utils mime))
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id (mime-response:http-utils mime))
           (pure:m ~)
         ::  static assets: the shell's javascript and stylesheet
         ?:  |(?=([%'app.js' ~] suffix) ?=([%'style.css' ~] suffix))
           =/  fname=@ta  ?>(?=([@ ~] suffix) i.suffix)
           =/  ctype=@t   ?:(?=([%'app.js' ~] suffix) 'text/javascript' 'text/css')
           ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& ~ fname]) `[/ %mime])
+            (peek:io (nex-road:io rail [%& /ui fname]) `[/ %mime])
           ?.  ?=([%file *] fv)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
             (pure:m ~)
           =/  =mime  !<(mime (need-vase:tarball sang.fv))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' ctype]]] `q.mime])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' ctype]]] `q.mime])
           (pure:m ~)
         ::  /apps/grubbery/permits → the read-only permissions page
         ?:  ?=([%permits ~] suffix)
@@ -688,19 +790,19 @@
           ::  finishes. So the page itself asks for that work, in the background,
           ::  once it has rendered - see POST /permits/refresh below.
           ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& ~ %'permits.html']) `[/ %mime])
+            (peek:io (nex-road:io rail [%& /ui %'permits.html']) `[/ %mime])
           ?.  ?=([%file *] fv)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
             (pure:m ~)
           =/  =mime  !<(mime (need-vase:tarball sang.fv))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/html']]] `q.mime])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'text/html']]] `q.mime])
           (pure:m ~)
         ?:  ?=([%'approved.json' ~] suffix)
           ;<  approved=(map @t json)  bind:m  (read-approved rail)
           =/  bod=octs  (as-octs:mimes:html (en:json:html [%o approved]))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /apps/grubbery/weirs.json → ground truth: the live weir on each
         ::  governed dir, with the registry's intention overlaid per road.
@@ -709,7 +811,7 @@
             (peek-as:io (nex-road:io rail [%& /cache %'weirs.json']) ,json)
           =/  bod=octs  (as-octs:mimes:html (en:json:html (fall wv [%o ~])))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /apps/grubbery/aliases.json → the alias directory as menus:
         ::  app-declared link.json options merged with your stored ones.
@@ -719,27 +821,27 @@
           ;<  lst=json  bind:m  gather-peers
           =/  bod=octs  (as-octs:mimes:html (en:json:html lst))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /grubbery/tiles/desks/taken → every /desks child name, for
         ::  install-name availability checks.
         ?:  ?=([%desks %taken ~] suffix)
           ;<  =view:nexus  bind:m
-            (peek-shallow:io [%& %| /apps/'shell.shell'/desks] ~)
+            (peek-shallow:io [%& %| /apps/shell/desks] ~)
           =/  names=(list @ta)
             ?.  ?=([%ball *] view)  ~
             ~(tap in ~(key by dir.ball.view))
           =/  lst=json  a+(turn names |=(n=@ta `json`s+`@t`n))
           =/  bod=octs  (as-octs:mimes:html (en:json:html lst))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /grubbery/tiles/desks/list → your local desks, for the publish UI.
         ?:  ?=([%desks %list ~] suffix)
           ;<  lst=json  bind:m  discover-desks
           =/  bod=octs  (as-octs:mimes:html (en:json:html lst))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /grubbery/tiles/desks/stock → the vendored default-repos list with
         ::  each entry's synced status, for the Stock tab.
@@ -747,14 +849,22 @@
           ;<  lst=json  bind:m  stock-status
           =/  bod=octs  (as-octs:mimes:html (en:json:html lst))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  /grubbery/tiles/desks/forge-repos → the forge's repos, each one
+        ::  a source a desk can follow. The "From your forge" tab.
+        ?:  ?=([%desks %'forge-repos' ~] suffix)
+          ;<  lst=json  bind:m  forge-repos
+          =/  bod=octs  (as-octs:mimes:html (en:json:html lst))
+          ;<  ~  bind:m
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ?:  ?=([%'aliases.json' ~] suffix)
           ;<  av=(unit json)  bind:m
             (peek-as:io (nex-road:io rail [%& /cache %'aliases.json']) ,json)
           =/  bod=octs  (as-octs:mimes:html (en:json:html (fall av [%o ~])))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /apps/grubbery/asks.json → each app's declared weir.json ask.
         ?:  ?=([%'asks.json' ~] suffix)
@@ -762,15 +872,36 @@
             (peek-as:io (nex-road:io rail [%& /cache %'asks.json']) ,json)
           =/  bod=octs  (as-octs:mimes:html (en:json:html (fall av [%a ~])))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
-        ::  /apps/grubbery/share.json → per-alias discovery visibility map.
-        ?:  ?=([%'share.json' ~] suffix)
-          ;<  sv=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /permit %'share.json']) ,json)
+        ::  /apps/grubbery/profile.json → who this ship is. Only the @p for
+        ::  now; a profile the user fills in and publishes to a usergroup is
+        ::  the obvious next thing to answer here.
+        ?:  ?=([%'profile.json' ~] suffix)
+          =/  bod=octs
+            %-  as-octs:mimes:html
+            %-  en:json:html
+            (pairs:enjs:format ~[['ship' s+(scot %p our)]])
+          ;<  ~  bind:m
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  /apps/grubbery/link.json → per-name discovery: who may resolve
+        ::  each name, from the link record.
+        ?:  ?=([%'link.json' ~] suffix)
+          ;<  links=(map @t json)  bind:m  (read-links rail)
+          =/  sv=(unit json)
+            :-  ~
+            :-  %o
+            %-  ~(gas by *(map @t json))
+            %+  murn  ~(tap by links)
+            |=  [nm=@t e=json]
+            ^-  (unit [@t json])
+            =/  gs=(list path)  (link-groups e)
+            ?~  gs  ~
+            `[(cat 3 '@' nm) a+(turn gs |=(g=path s+(spat g)))]
           =/  bod=octs  (as-octs:mimes:html (en:json:html (fall sv [%o ~])))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /apps/grubbery/groups.json → the ship's usergroups (names).
         ?:  ?=([%'groups.json' ~] suffix)
@@ -791,483 +922,45 @@
           =/  bod=octs
             (as-octs:mimes:html (en:json:html a+(turn names |=(g=@t s+g))))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
         ::  /icon.svg → the shell's favicon
         ?:  ?=([%'icon.svg' ~] suffix)
           =/  bod=octs  (as-octs:mimes:html shell-icon)
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'image/svg+xml']]] `bod])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'image/svg+xml']]] `bod])
           (pure:m ~)
-        ::  /apps/grubbery/docs → the handbook reader shell
-        ?:  ?=([%docs ~] suffix)
-          ;<  ~  bind:m  (send-simple:srv eyre-id (mime-response:http-utils docs-html))
+        ::  === peers: the explorer mounted on /sys/ames, with panes ===
+        ::  /apps/grubbery/peers.js → the panes (groups, group)
+        ?:  ?=([%'peers.js' ~] suffix)
+          =/  bod=octs  q.peers-js
+          ;<  ~  bind:m
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/javascript']]] `bod])
           (pure:m ~)
-        ::  docs client assets: our reader script + the markdown renderer
-        ?:  ?=([%docs %'docs.js' ~] suffix)
+        ::  /apps/grubbery/peers.json → every usergroup folded from its files
+        ?:  ?=([%'peers.json' ~] suffix)
+          ;<  groups=json  bind:m  (peers-groups rail)
+          =/  bod=octs  (as-octs:mimes:html (en:json:html groups))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.docs-js])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
-        ::  shared <split-view> web component (the resizable sidebar)
-        ?:  ?=([%docs %'split-view.js' ~] suffix)
+        ::  /apps/grubbery/peers-viewer?path=&kind= → which pane a path under
+        ::  /sys/ames opens in (the explorer asks per tab; see +peers-viewer)
+        ?:  ?=([%'peers-viewer' ~] suffix)
+          =/  args=(map @t @t)  (malt args:(parse-url:http-utils url.request.req))
+          =/  pax=path  (fall (rush (fall (~(get by args) 'path') '') stap) /)
+          =/  pick=(unit json)  (peers-viewer pax =(`'dir' (~(get by args) 'kind')))
+          =/  bod=octs  (as-octs:mimes:html ?~(pick '' (en:json:html u.pick)))
           ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.splitview-js])
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
           (pure:m ~)
-        ::  window components for the floating docs assistant (manager first)
-        ?:  ?=([%docs %'window-manager.js' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.windowmgr-js])
-          (pure:m ~)
-        ?:  ?=([%docs %'float-window.js' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.floatwin-js])
-          (pure:m ~)
-        ::  the docs assistant widget: sandboxed chatbot UI (js + css)
-        ?:  ?=([%docs %'chat.js' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.chat-js])
-          (pure:m ~)
-        ?:  ?=([%docs %'file-preview.js' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.filepreview-js])
-          (pure:m ~)
-        ?:  ?=([%docs %'chat.css' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/css']]] `q.chat-css])
-          (pure:m ~)
-        ?:  ?=([%docs %'marked.min.js' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/javascript']]] `q.marked-js])
-          (pure:m ~)
-        ?:  ?=([%docs %'hoon-grammar.json' ~] suffix)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `q.hoon-grammar])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/nav.json → the sidebar tree, read from the
-        ::  documented target's own man/docs/docs.json manifest (nav field) via
-        ::  the mirror. The desk owns its sidebar shape; the shell just renders.
-        ?:  ?=([%docs %'nav.json' ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
-          ::  tag each section with whether it declares a coverage scope (a ◆).
-          =/  bod=octs  (as-octs:mimes:html (en:json:html (annotate-nav nav)))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/pins.json → the freshness pins map, read by
-        ::  the reader to check each live block against its stamped hash.
-        ?:  ?=([%docs %'pins.json' ~] suffix)
-          ;<  cur=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
-          =/  bod=octs  (as-octs:mimes:html (en:json:html (fall cur [%o ~])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  PROBE: /apps/grubbery/docs/covsrc?path=/lib/x.hoon → read /code
-        ::  source ship-side; report line count + mug + head, to check that
-        ::  the ship's raw-text extraction lines up with the browser's.
-        ?:  ?=([%docs %covsrc ~] suffix)
-          =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
-          =/  pl  (skim args |=([p=@t q=@t] =(p 'path')))
-          =/  pax=@t  ?~(pl '' q.i.pl)
-          =/  raw-pax=tape  (trip pax)
-          =/  full=path
-            (stab (crip ?:(=("/code" (scag 5 raw-pax)) raw-pax (weld "/code" raw-pax))))
-          ;<  =view:nexus  bind:m  (peek:io [%& %& (snip full) (rear full)] ~)
-          ?.  ?=([%file *] view)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'not found')])
-            (pure:m ~)
-          =/  txt=@t  (grub-text view)
-          =/  lines=(list @t)  (to-wain:format txt)
-          =/  resp=json
-            %-  pairs:enjs:format
-            :~  ['lines' (numb:enjs:format (lent lines))]
-                ['mug' (numb:enjs:format `@`(mug txt))]
-                ['head' s+(crip (scag 90 (trip txt)))]
-            ==
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html resp))])
-          (pure:m ~)
-        ::  DEBUG: /apps/grubbery/docs/anchors.json → every live-block anchor
-        ::  across all docs, parsed ship-side. Validates the anchor parser.
-        ?:  ?=([%docs %'anchors.json' ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
-          =/  items=(list [path=@t title=@t])  (nav-items nav)
-          =|  all=(list json)
-          |-  ^-  process:fiber:nexus
-          ?~  items
-            =/  bod=octs  (as-octs:mimes:html (en:json:html [%a (flop all)]))
-            ;<  ~  bind:m
-              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-            (pure:m ~)
-          ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
-          =/  txt=@t  (grub-text fv)
-          =.  all
-            %+  weld  all
-            %+  turn  (parse-anchors txt)
-            |=  [file=@t from=@ud to=@ud]
-            %-  pairs:enjs:format
-            :~  ['doc' s+path.i.items]
-                ['file' s+file]
-                ['from' (numb:enjs:format from)]
-                ['to' (numb:enjs:format to)]
-            ==
-          $(items t.items)
-        ::  /apps/grubbery/docs/coverage.json → the computed coverage, from the
-        ::  mirror: per target file, its line total and how many lines a doc's
-        ::  live block covers. Denominator = mirrored files minus the ignore
-        ::  list. (Freshness via mug + pins is layered on next.)
-        ?:  ?=([%docs %'coverage.json' ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          ::  ignore lives in the collection's own man/docs manifest — the desk
-          ::  declares what within itself doesn't count. nav carries the section
-          ::  scopes (sub-coverage) alongside the sidebar tree.
-          ;<  [ignore=(list @t) nav=json]  bind:m  (read-docs-config rail c)
-          ::  optional ?section=<name>: restrict the denominator to that nav
-          ::  section's scope (a list of "path [range]" selectors). Empty = the
-          ::  whole collection.
-          =/  sec=@t
-            =/  qa=quay:eyre  args:(parse-url:http-utils url.request.req)
-            =/  sl  (skim qa |=([p=@t q=@t] =(p 'section')))
-            ?~(sl '' q.i.sl)
-          =/  in-section=?  !=('' sec)
-          ::  serve the ship-computed coverage CACHE. It's recomputed on a change
-          ::  (+recompute-coverage, driven by the mirror fiber), so a view is a
-          ::  read — not a full recompute. The cache holds the whole-collection
-          ::  result plus a per-section view. A miss (first boot, before the
-          ::  fiber has run) falls back to computing on demand.
-          ;<  cj=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs/cache (cache-name c)]) ,json)
-          ?^  cj
-            =/  cache=(map @t json)  ?:(?=([%o *] u.cj) p.u.cj ~)
-            =/  whole=json  (fall (~(get by cache) 'whole') [%o ~])
-            =/  out=json
-              ?.  in-section  whole
-              =/  vj=json  (fall (~(get by cache) 'views') [%o ~])
-              =/  vm=(map @t json)  ?:(?=([%o *] vj) p.vj ~)
-              (fall (~(get by vm) sec) whole)
-            ;<  ~  bind:m
-              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html out))])
-            (pure:m ~)
-          ::  cache miss: compute now, stamp the pins it returns, serve.
-          ;<  [resp=json np=(map @t @t)]  bind:m  (compute-coverage rail c ignore nav sec)
-          ;<  pj=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
-          =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
-          ;<  ~  bind:m
-            ?:  =(~ np)  (pure:(fiber:fiber:nexus ,~) ~)
-            %+  over:io  (nex-road:io rail [%& /docs %'pins.json'])
-            [[/ %json] [%o (~(uni by pins) (~(run by np) |=(h=@t `json`s+h)))]]
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html resp))])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/mirror?path=/lib/x.hoon → the mirrored source
-        ::  text of one file, so the heatmap reads locally (no per-block /code
-        ::  fetch). Exactly what coverage measured.
-        ?:  ?=([%docs %mirror ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          =/  qargs=quay:eyre  args:(parse-url:http-utils url.request.req)
-          =/  pl  (skim qargs |=([p=@t q=@t] =(p 'path')))
-          =/  src=@t  ?~(pl '' q.i.pl)
-          =/  mir=path  (welp (coll-mirror c) (stab src))
-          ;<  mv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& (snip mir) (rear mir)]) ~)
-          =/  txt=@t  (grub-text mv)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/plain']]] `(as-octs:mimes:html txt)])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/targets.json → the coverage target list.
-        ?:  ?=([%docs %'targets.json' ~] suffix)
-          ;<  cur=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-          =/  bod=octs  (as-octs:mimes:html (en:json:html (fall cur [%a ~])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/ignore.json → the coverage ignore list, READ-ONLY.
-        ::  It's authored in the target's man/docs manifest (the desk owns its
-        ::  exclusions), so the UI shows it but no longer edits it.
-        ?:  ?=([%docs %'ignore.json' ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          ;<  [ignore=(list @t) *]  bind:m  (read-docs-config rail c)
-          =/  bod=octs
-            %-  as-octs:mimes:html
-            %-  en:json:html
-            [%a (turn ignore |=(s=@t `json`[%s s]))]
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  /apps/grubbery/docs/search?q=<query> → server-side full-text
-        ::  search over the /docs grubs. Returns hits (path+title+snippet);
-        ::  the browser never loads the whole corpus, only what it clicks.
-        ?:  ?=([%docs %search ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
-          =/  ql  (skim args |=([p=@t q=@t] =(p 'q')))
-          =/  q=@t  ?~(ql '' q.i.ql)
-          =/  qlow=tape  (cass (trip q))
-          ?:  =(~ qlow)
-            =/  bod=octs  (as-octs:mimes:html (en:json:html [%a ~]))
-            ;<  ~  bind:m
-              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-            (pure:m ~)
-          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
-          =/  items=(list [path=@t title=@t])  (nav-items nav)
-          =|  hits=(list json)
-          |-  ^-  process:fiber:nexus
-          ?~  items
-            =/  bod=octs  (as-octs:mimes:html (en:json:html [%a (flop hits)]))
-            ;<  ~  bind:m
-              (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-            (pure:m ~)
-          ;<  fv=view:nexus  bind:m
-            (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
-          =/  txt=@t  (grub-text fv)
-          =/  snip=(unit @t)  (find-snippet txt q)
-          =/  tmatch=?  !=(~ (find qlow (cass (trip title.i.items))))
-          =?  hits  |(?=(^ snip) tmatch)
-            =/  s=@t  ?~(snip title.i.items u.snip)
-            [(doc-hit path.i.items title.i.items s) hits]
-          $(items t.items)
-        ::  /apps/grubbery/docs/page?path=<name.md> → one doc's raw markdown
-        ?:  ?=([%docs %page ~] suffix)
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          =/  args=quay:eyre  args:(parse-url:http-utils url.request.req)
-          =/  pl  (skim args |=([p=@t q=@t] =(p 'path')))
-          =/  pax=@t  ?~(pl '' q.i.pl)
-          ?:  =('' pax)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'path required')])
-            (pure:m ~)
-          ::  prose lives in the collection's target: serve it straight from its
-          ::  mirror handbook dir — the same source coverage measures. No seed
-          ::  fallback; a page absent from the mirror is a real 404.
-          ;<  mv=view:nexus  bind:m
-            (peek:io (nex-road:io rail (doc-lane c pax)) ~)
-          =/  mtxt=@t  (grub-text mv)
-          ?:  =('' mtxt)
-            ;<  ~  bind:m  (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
-            (pure:m ~)
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'text/plain']]] `(as-octs:mimes:html mtxt)])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/confirm?c=<collection>
-        ::    {"blocks":[{"doc","file","range"},...]}
-        ::  → re-confirm freshness. For each block the SHIP re-hashes the CURRENT
-        ::  span from the collection's mirror and force-stamps its pin. The caller
-        ::  supplies only intent (which blocks it verified); the ship supplies the
-        ::  hash, so the browser never computes a mug. One block from the reader's
-        ::  "re-confirm" button, or a batch from an LLM audit pass — same call.
-        ?:  &(=('POST' method.request.req) ?=([%docs %confirm ~] suffix))
-          ;<  c=path  bind:m  (coll-of rail url.request.req)
-          =/  jon=json
-            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) *json)
-          =/  blocks=(list [doc=@t file=@t range=@t])
-            ?.  ?=([%o *] jon)  ~
-            =/  bl=(unit json)  (~(get by p.jon) 'blocks')
-            ?.  ?=([~ %a *] bl)  ~
-            %+  murn  p.u.bl
-            |=  b=json
-            ^-  (unit [@t @t @t])
-            ?.  ?=([%o *] b)  ~
-            =/  d=(unit json)  (~(get by p.b) 'doc')
-            =/  f=(unit json)  (~(get by p.b) 'file')
-            =/  r=(unit json)  (~(get by p.b) 'range')
-            ?.  ?&(?=([~ %s *] d) ?=([~ %s *] f) ?=([~ %s *] r))  ~
-            `[p.u.d p.u.f p.u.r]
-          ::  read the collection's mirror (to hash spans) and the current pins
-          ;<  mv=view:nexus  bind:m  (peek:io (nex-road:io rail [%| (coll-mirror c)]) ~)
-          =/  finfo=(map @t (list @t))
-            ?.  ?=([%ball *] mv)  ~
-            %-  malt
-            %+  murn  ~(tap ba:tarball ball.mv)
-            |=  [=rail:tarball =sang:tarball]
-            `[(spat (snoc path.rail name.rail)) (to-wain:format (sang-text sang))]
-          ;<  pj=(unit json)  bind:m
-            (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
-          =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
-          ::  sections to re-confirm (by name) — each scope is read from the
-          ::  manifest nav (or derived from its docs), re-hashed and re-pinned.
-          ;<  [* nav=json]  bind:m  (read-docs-config rail c)
-          ;<  anchors=(list [doc=@t file=@t from=@ud to=@ud])  bind:m
-            (gather-all-anchors rail c)
-          =/  sections=(list @t)
-            ?.  ?=([%o *] jon)  ~
-            =/  sl=(unit json)  (~(get by p.jon) 'sections')
-            ?.  ?=([~ %a *] sl)  ~
-            (murn p.u.sl |=(x=json ?:(?=([%s *] x) `p.x ~)))
-          =/  block-updates=(map @t json)
-            %+  roll  blocks
-            |=  [b=[doc=@t file=@t range=@t] acc=(map @t json)]
-            =/  ls=(unit (list @t))  (~(get by finfo) file.b)
-            ?~  ls  acc
-            =/  rng=[from=@ud to=@ud]
-              ?:  =('all' range.b)  [1 0]
-              =/  dh=(unit @ud)  (find "-" (trip range.b))
-              ?~  dh  [(fall (rush range.b dem) 1) (fall (rush range.b dem) 1)]
-              :-  (fall (rush (crip (scag u.dh (trip range.b))) dem) 1)
-              (fall (rush (crip (slag +(u.dh) (trip range.b))) dem) 0)
-            =/  total=@ud  (lent u.ls)
-            ?:  (gth from.rng total)  acc
-            =/  hi=@ud  (min total ?:(=(0 to.rng) total to.rng))
-            =/  span=(list @t)  (swag [(dec from.rng) +((sub hi from.rng))] u.ls)
-            =/  key=@t  (crip "{(spud c)}|{(trip doc.b)}|{(trip file.b)}|{(trip range.b)}")
-            (~(put by acc) key s+`@t`(scot %ux (mug span)))
-          ::  re-confirming a section re-stamps the anchor pins of every block on
-          ::  its own page(s) — freshness is the block aggregate, so this clears
-          ::  the section's drift by clearing the blocks that caused it.
-          =/  updated=(map @t json)
-            %+  roll  sections
-            |=  [name=@t acc=(map @t json)]
-            =/  nd=(unit json)  (find-node nav name)
-            ?~  nd  acc
-            =/  docs=(set @t)  (~(gas in *(set @t)) (subtree-docs u.nd))
-            %+  roll  anchors
-            |=  [a=[doc=@t file=@t from=@ud to=@ud] ac=_acc]
-            ?.  (~(has in docs) doc.a)  ac
-            =/  ls=(unit (list @t))  (~(get by finfo) file.a)
-            ?~  ls  ac
-            =/  total=@ud  (lent u.ls)
-            ?:  (gth from.a total)  ac
-            =/  hi=@ud  (min total ?:(=(0 to.a) total to.a))
-            =/  span=(list @t)  (swag [(dec from.a) +((sub hi from.a))] u.ls)
-            =/  rng=@t  ?:(=(0 to.a) 'all' (crip "{(a-co:co from.a)}-{(a-co:co to.a)}"))
-            =/  key=@t  (crip "{(spud c)}|{(trip doc.a)}|{(trip file.a)}|{(trip rng)}")
-            (~(put by ac) key s+`@t`(scot %ux (mug span)))
-          =.  updated  (~(uni by updated) block-updates)
-          ;<  ~  bind:m
-            ?:  =(~ updated)  (pure:(fiber:fiber:nexus ,~) ~)
-            (over:io (nex-road:io rail [%& /docs %'pins.json']) [[/ %json] [%o (~(uni by pins) updated)]])
-          =/  bod=octs
-            %-  as-octs:mimes:html
-            %-  en:json:html
-            (pairs:enjs:format ~[['confirmed' (numb:enjs:format ~(wyt by updated))]])
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/targets  [{name, docs, sources}, ...] →
-        ::  replace the registry with the posted json array. Each entry is a
-        ::  collection (see +colls); stored verbatim.
-        ?:  &(=('POST' method.request.req) ?=([%docs %targets ~] suffix))
-          =/  jon=json
-            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) [%a ~])
-          ;<  ~  bind:m
-            (over:io (nex-road:io rail [%& /docs %'targets.json']) [[/ %json] jon])
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html (en:json:html [%b %.y]))])
-          (pure:m ~)
-        ::  (no POST /ignore — ignore is authored in the target's man/docs
-        ::  manifest, not editable through the shell.)
-        ::  POST /apps/grubbery/docs/chat → the docs assistant. One metered
-        ::  round-trip through the anthropic proxy; returns {reply}.
-        ?:  &(=('POST' method.request.req) ?=([%docs %chat ~] suffix))
-          =/  jon=json
-            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) *json)
-          =/  msg=@t  (fall (jget jon 'message') '')
-          ;<  [reply=@t trace=json]  bind:m  (ask-agent rail msg)
-          =/  bod=octs
-            %-  as-octs:mimes:html
-            %-  en:json:html
-            (pairs:enjs:format ~[['reply' s+reply] ['trace' trace]])
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  GET /apps/grubbery/docs/history → the stored conversation, read
-        ::  straight from the agent's chats/main.json. Restores across refreshes.
-        ?:  ?=([%docs %history ~] suffix)
-          =/  chat-road=road:tarball
-            (nex-road:io rail [%& /docs/agent/chats %'main.json'])
-          ;<  fv=view:nexus  bind:m  (peek:io chat-road `[/ %json])
-          =/  conv=json
-            ?.  ?=([%file *] fv)  [%a ~]
-            (fall (mole |.(!<(json (need-vase:tarball sang.fv)))) [%a ~])
-          =/  bod=octs  (as-octs:mimes:html (en:json:html conv))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/clear → archive + reset the conversation.
-        ?:  &(=('POST' method.request.req) ?=([%docs %clear ~] suffix))
-          ;<  ~  bind:m
-            %-  poke:io
-            :+  (nex-road:io rail [%& /docs/agent %'main.sig'])
-              [/ %json]
-            (pairs:enjs:format ~[['action' s+'clear']])
-          =/  bod=octs
-            (as-octs:mimes:html (en:json:html (pairs:enjs:format ~[['ok' [%b %.y]]])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/say {chat-id, message} → poke the
-        ::  docs-agent turn handler. Sign of life for the new nexus: the
-        ::  message lands as a grub at docs-agent.docs-agent/chats/<id>.json.
-        ?:  &(=('POST' method.request.req) ?=([%docs %say ~] suffix))
-          =/  jon=json
-            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) *json)
-          ;<  ~  bind:m
-            (poke:io (nex-road:io rail [%& /docs/agent %'main.sig']) [/ %json] jon)
-          =/  bod=octs
-            (as-octs:mimes:html (en:json:html (pairs:enjs:format ~[['ok' [%b %.y]]])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/stop → interrupt the docs-agent's
-        ::  current turn (manual cancel). Pokes the turn handler, which its
-        ::  in-flight await catches and aborts.
-        ?:  &(=('POST' method.request.req) ?=([%docs %stop ~] suffix))
-          ;<  ~  bind:m
-            %-  poke:io
-            :+  (nex-road:io rail [%& /docs/agent %'main.sig'])
-              [/ %json]
-            (pairs:enjs:format ~[['action' s+'interrupt']])
-          =/  bod=octs
-            (as-octs:mimes:html (en:json:html (pairs:enjs:format ~[['ok' [%b %.y]]])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  POST /apps/grubbery/docs/config {system, model, max_tokens} →
-        ::  write the agent's prompt + model config grubs.
-        ?:  &(=('POST' method.request.req) ?=([%docs %config ~] suffix))
-          =/  jon=json
-            (fall (de:json:html ?~(body.request.req '' q.u.body.request.req)) *json)
-          =/  po=(map @t json)  ?:(?=([%o *] jon) p.jon ~)
-          =/  sys=@t    (fall (jget jon 'system') '')
-          =/  model=@t  =/(mo=@t (fall (jget jon 'model') '') ?:(=('' mo) 'claude-sonnet-4-6' mo))
-          =/  mt=json   (fall (~(get by po) 'max_tokens') [%n '1024'])
-          ;<  ~  bind:m
-            %-  over:io
-            :-  (nex-road:io rail [%& /docs/agent %'system.md'])
-            [[/ %mime] [/text/markdown (as-octs:mimes:html sys)]]
-          ;<  ~  bind:m
-            %-  over:io
-            :-  (nex-road:io rail [%& /docs/agent %'config.json'])
-            [[/ %json] (pairs:enjs:format ~[['model' s+model] ['max_tokens' mt]])]
-          =/  bod=octs
-            (as-octs:mimes:html (en:json:html (pairs:enjs:format ~[['ok' [%b %.y]]])))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
-        ::  GET /apps/grubbery/docs/config → the agent's current prompt +
-        ::  model config, for the chat config modal.
-        ?:  ?=([%docs %config ~] suffix)
-          ;<  sv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& /docs/agent %'system.md']) `[/ %mime])
-          =/  sys=@t
-            ?.  ?=([%file *] sv)  ''
-            `@t`q.q:!<(mime (need-vase:tarball sang.sv))
-          ;<  cv=view:nexus  bind:m
-            (peek:io (nex-road:io rail [%& /docs/agent %'config.json']) `[/ %json])
-          =/  cfg=json
-            ?.  ?=([%file *] cv)  [%o ~]
-            (fall (mole |.(!<(json (need-vase:tarball sang.cv)))) [%o ~])
-          =/  bod=octs
-            %-  as-octs:mimes:html
-            (en:json:html (pairs:enjs:format ~[['system' s+sys] ['config' cfg]]))
-          ;<  ~  bind:m
-            (send-simple:srv eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
-          (pure:m ~)
+        ::  /apps/grubbery/peers[/<path>] → the explorer's browse page, mounted
+        ::  here and rooted at /sys/ames: the ships and usergroups directories,
+        ::  browsed like anything else, with the panes above on the groups.
+        ?:  ?=([%peers *] suffix)
+          (serve-explorer-page eyre-id peers-mount)
         ::  default → serve the home page (static file, /<-imported home-html)
-        ;<  ~  bind:m  (send-simple:srv eyre-id (mime-response:http-utils home-html))
+        ;<  ~  bind:m  (send-simple:http-res:io eyre-id (mime-response:http-utils home-html))
         (pure:m ~)
       ==
     --
@@ -1276,638 +969,556 @@
 ::  helper core, where the nexus core above can see it.
 ::
 ++  dbg  ^-(? |)
-++  srv  ~(. http-res:io [%| 1 %& ~ %'main.sig'])
-::  coll-of: the collection a request is scoped to — the `c` query param (a
-::  collection name). Absent, we fall back to the first registered collection,
-::  so a bare request still resolves the default. Returns the one-segment path.
-++  coll-of
-  |=  [=rail:tarball url=@t]
-  =/  m  (fiber:fiber:nexus ,path)
-  ^-  form:m
-  =/  qa=quay:eyre  args:(parse-url:http-utils url)
-  =/  cl  (skim qa |=([p=@t q=@t] =(p 'c')))
-  ?^  cl  (pure:m ~[q.i.cl])
-  ;<  tg=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-  =/  cs  (colls tg)
-  (pure:m ?~(cs ~ ~[name.i.cs]))
-::  read-docs-config: a collection's handbook manifest, read from its mirrored
-::  handbook — {ignore, nav}. Config lives WITH the documented handbook (the desk
-::  owns its coverage exclusions and its sidebar shape), not in the shell. Empty
-::  when the manifest isn't mirrored yet.
-++  read-docs-config
-  |=  [=rail:tarball c=path]
-  =/  m  (fiber:fiber:nexus ,[ignore=(list @t) nav=json])
-  ^-  form:m
-  ::  the manifest is a %json grub in the mirror — clam it to json directly,
-  ::  not through grub-text (which extracts source TEXT, not a json noun).
-  ;<  ju=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& (coll-docs c) %'docs.json']) ,json)
-  =/  obj=(map @t json)  ?~(ju ~ ?:(?=([%o *] u.ju) p.u.ju ~))
-  =/  nav=json  (fall (~(get by obj) 'nav') [%a ~])
-  (pure:m [(json-strs (~(get by obj) 'ignore')) nav])
-::  nav-items: the flat [path title] of every doc in a nav tree, walking the
-::  {title,path} / {title,kids} json. Arbitrary depth, over json's recursion.
-++  nav-items
-  |=  nav=json
-  ^-  (list [path=@t title=@t])
-  |^  (walk nav)
-  ++  walk
-    |=  j=json
-    ^-  (list [path=@t title=@t])
-    ?.  ?=([%a *] j)  ~
-    %-  zing
-    %+  turn  p.j
-    |=  node=json
-    ^-  (list [path=@t title=@t])
-    ?.  ?=([%o *] node)  ~
-    =/  pax  (~(get by p.node) 'path')
-    ?:  ?=([~ %s *] pax)
-      =/  ttl  (~(get by p.node) 'title')
-      ~[[p.u.pax ?:(?=([~ %s *] ttl) p.u.ttl '')]]
-    =/  kids  (~(get by p.node) 'kids')
-    ?~(kids ~ (walk u.kids))
-  --
-::  subtree-scopes: every `scope` selector in a node's subtree (its own plus all
-::  its descendants'). A grouping section's coverage rolls up to this union.
-++  subtree-scopes
-  |=  nd=json
-  ^-  (list @t)
-  ?.  ?=([%o *] nd)  ~
-  =/  own=(list @t)  (json-strs (~(get by p.nd) 'scope'))
-  =/  kids  (~(get by p.nd) 'kids')
-  =/  sub=(list @t)
-    ?~  kids  ~
-    ?.  ?=([%a *] u.kids)  ~
-    (zing (turn p.u.kids subtree-scopes))
-  (weld own sub)
-::  find-node: the nav node titled `name`, at any depth.
-++  find-node
-  |=  [nav=json name=@t]
-  ^-  (unit json)
-  ?.  ?=([%a *] nav)  ~
-  |-  ^-  (unit json)
-  ?~  p.nav  ~
-  =/  nd  i.p.nav
-  ?.  ?=([%o *] nd)  $(p.nav t.p.nav)
-  =/  ttl  (~(get by p.nd) 'title')
-  ?:  ?&(?=([~ %s *] ttl) =(name p.u.ttl))  `nd
-  =/  kids  (~(get by p.nd) 'kids')
-  =/  sub  ?~(kids ~ (find-node u.kids name))
-  ?^(sub sub $(p.nav t.p.nav))
-::  node-cover-scope: a node's coverage scope — its own `scope` selectors UNIONED
-::  with every scoped descendant's. So a leaf measures its own code, a scopeless
-::  parent rolls its children up, and a parent that ALSO declares a scope adds
-::  that on top of the roll-up. ~ if there's no scope anywhere in the subtree.
-++  node-cover-scope
-  |=  [nav=json name=@t]
-  ^-  (list @t)
-  =/  nd=(unit json)  (find-node nav name)
-  ?~  nd  ~
-  (subtree-scopes u.nd)
-::  any-cov: does any node in this annotated nav array carry cov=true?
-++  any-cov
-  |=  nav=json
-  ^-  ?
-  ?.  ?=([%a *] nav)  |
-  %+  lien  p.nav
-  |=(nd=json &(?=([%o *] nd) =([~ %b %.y] (~(get by p.nd) 'cov'))))
-::  annotate-nav: tag each node with `cov` — whether it has measured coverage:
-::  its own `scope`, OR any scoped descendant (a grouping section rolls its
-::  children up). Coverage is opt-in on ANY node — a section or a leaf page. A
-::  node with no scope anywhere under it just has loose live blocks, unmeasured.
-::  The reader shows a ◆ handle wherever cov is true.
-++  annotate-nav
-  |=  nav=json
+::  === peers: usergroups + ships as the explorer mounted on /sys/ames ===
+::  The page is the explorer's browse page with one declaration injected:
+::  route /apps/grubbery/peers, root /sys/ames, and a viewer endpoint.
+::  +peers-viewer answers it: the usergroups directory opens in the groups
+::  pane, each <name>.grp directory in its group pane (peers.js). The
+::  panes read /peers.json and write through +peers-write; everything else
+::  (the ships listing, the raw who.ships / how.weir, delete) is the
+::  explorer's. A group /a/b is stored at /sys/ames/usergroups/a/b.grp.
+++  peers-mount
   ^-  json
-  ?.  ?=([%a *] nav)  nav
-  :-  %a
-  %+  turn  p.nav
-  |=  nd=json
-  ^-  json
-  ?.  ?=([%o *] nd)  nd
-  =/  kids  (~(get by p.nd) 'kids')
-  =/  ann=(unit json)  ?~(kids ~ `(annotate-nav u.kids))
-  =/  po=(map @t json)  ?~(ann p.nd (~(put by p.nd) 'kids' u.ann))
-  =/  own=?  ?=(^ (~(get by po) 'scope'))
-  =/  kidcov=?  ?~(ann | (any-cov u.ann))
-  [%o (~(put by po) 'cov' [%b |(own kidcov)])]
-::  scoped-sections: the titles of every nav node with measured coverage — its
-::  own scope OR any scoped descendant — at any depth. So a grouping section (its
-::  rolled-up aggregate) appears alongside the pages/sections that scope directly.
-++  scoped-sections
-  |=  nav=json
-  ^-  (list @t)
-  ?.  ?=([%a *] nav)  ~
-  %-  zing
-  %+  turn  p.nav
-  |=  nd=json
-  ^-  (list @t)
-  ?.  ?=([%o *] nd)  ~
-  =/  ttl  (~(get by p.nd) 'title')
-  =/  self=(list @t)
-    ?:(?&(?=([~ %s *] ttl) ?=(^ (subtree-scopes nd))) ~[p.u.ttl] ~)
-  =/  kids  (~(get by p.nd) 'kids')
-  (weld self ?~(kids ~ (scoped-sections u.kids)))
-::  section-status-of: a section's freshness — drifted iff any live block in its
-::  own page (or, for a grouping node, any descendant page) is drifted. An
-::  anchor's `doc` ties a block to its section, so this is just the aggregate of
-::  the section's blocks: no separate scope pin (adding a file to the scope
-::  can't drift it), no cross-section bleed (a shared source file's drift only
-::  counts against the section whose page anchored the changed block).
-++  section-status-of
-  |=  [nav=json name=@t doc-drift=(set @t)]
-  ^-  @t
-  =/  nd=(unit json)  (find-node nav name)
-  ?~  nd  'fresh'
-  ?:((lien (subtree-docs u.nd) |=(d=@t (~(has in doc-drift) d))) 'drifted' 'fresh')
-::  subtree-docs: every page path in the nav subtree at nd — its own `path` plus
-::  all descendants'. These are the .md files whose live blocks the section owns.
-++  subtree-docs
-  |=  nd=json
-  ^-  (list @t)
-  ?.  ?=([%o *] nd)  ~
-  =/  own=(list @t)
-    =/  p  (~(get by p.nd) 'path')
-    ?:(?=([~ %s *] p) ~[p.u.p] ~)
-  =/  kids  (~(get by p.nd) 'kids')
-  =/  kd=(list @t)
-    ?.  ?=([~ %a *] kids)  ~
-    (zing (turn p.u.kids |=(k=json (subtree-docs k))))
-  (weld own kd)
-::  section-covered: the lines covered by a section's OWN pages — the union of
-::  the per-page covered sets over subtree-docs. A section's number is what
-::  its pages cite, not what any page anywhere cites inside its scope.
-++  section-covered
-  |=  [doc-cov=(map @t (map @t (set @ud))) nav=json name=@t]
-  ^-  (map @t (set @ud))
-  =/  nd=(unit json)  (find-node nav name)
-  ?~  nd  ~
-  %+  roll  (subtree-docs u.nd)
-  |=  [d=@t acc=(map @t (set @ud))]
-  %+  roll  ~(tap by (fall (~(get by doc-cov) d) ~))
-  |=  [[f=@t s=(set @ud)] a=_acc]
-  (~(put by a) f (~(uni in (fall (~(get by a) f) ~)) s))
-::  section-summaries: one summary per scoped section — {name, covered, total,
-::  status} — for the coverage overview. Numbers come from the section's own
-::  pages' blocks (section-covered); freshness is the block aggregate via
-::  `doc-drift` (the set of pages with a drifted live block). Read-only.
-++  section-summaries
-  |=  $:  nav=json
-          finfo=(map @t (list @t))
-          doc-cov=(map @t (map @t (set @ud)))
-          ig-set=(set @t)
-          ignore-lines=(map @t (set @ud))
-          doc-drift=(set @t)
-      ==
-  ^-  json
-  :-  %a
-  %+  turn  (scoped-sections nav)
-  |=  name=@t
-  ^-  json
-  =/  scope-lines=(map @t (set @ud))  (ref-lines finfo (node-cover-scope nav name))
-  =/  covered=(map @t (set @ud))  (section-covered doc-cov nav name)
-  =/  in-scope
-    |=  f=@t
-    ^-  (set @ud)
-    ?:  (~(has in ig-set) f)  ~
-    (~(dif in (fall (~(get by scope-lines) f) ~)) (fall (~(get by ignore-lines) f) ~))
-  =/  keys=(list @t)  ~(tap in ~(key by scope-lines))
-  =/  total=@ud
-    (roll keys |=([f=@t a=@ud] (add a ~(wyt in (in-scope f)))))
-  =/  cov=@ud
-    %+  roll  keys
-    |=  [f=@t a=@ud]
-    (add a ~(wyt in (~(int in (fall (~(get by covered) f) ~)) (in-scope f))))
-  =/  status=@t  (section-status-of nav name doc-drift)
   %-  pairs:enjs:format
-  :~  ['name' s+name]
-      ['covered' (numb:enjs:format cov)]
-      ['total' (numb:enjs:format total)]
-      ['status' s+status]
+  :~  ['route' s+'/apps/grubbery/peers']
+      ['root' s+'/sys/ames']
+      ['title' s+'peers']
+      ['icon' s+'/apps/grubbery/icon.svg']
+      ['viewers' s+'/apps/grubbery/peers-viewer']
   ==
-::  cov-state: everything coverage needs from the mirror, loaded ONCE per
-::  collection: the line map of every mirrored file, the ignore sets, and the
-::  fold over every live-block anchor (covered lines, per-file fresh/drifted/
-::  gone counts, the pins to stamp, the per-file anchor json, the pages with a
-::  drifted block, and the covered lines PER PAGE, so a section view counts only
-::  the blocks on its own pages). Every section view is then a pure render over
-::  this.
-+$  cov-state
-  $:  finfo=(map @t (list @t))
-      ig-set=(set @t)
-      ignore-lines=(map @t (set @ud))
-      covered=(map @t (set @ud))
-      flags=(map @t [f=@ud d=@ud g=@ud])
-      newpins=(map @t @t)
-      fancs=(map @t (list json))
-      doc-drift=(set @t)
-      nanc=@ud
-      doc-cov=(map @t (map @t (set @ud)))
-  ==
-::  load-coverage: the expensive half of coverage — peek the whole mirror, split
-::  every file into lines, gather every anchor, fold them against the pins.
-::  Runs once per recompute; +render-coverage derives each view from it.
-++  load-coverage
-  |=  [=rail:tarball c=path ignore=(list @t)]
-  =/  m  (fiber:fiber:nexus ,cov-state)
-  ^-  form:m
-  ;<  mv=view:nexus  bind:m  (peek:io (nex-road:io rail [%| (coll-mirror c)]) ~)
-  ~?  dbg  [%shell-docs-split c]
-  =/  finfo=(map @t (list @t))
-    ~>  %bout
-    ?.  ?=([%ball *] mv)  ~
-    %-  malt
-    %+  murn  ~(tap ba:tarball ball.mv)
-    |=  [=rail:tarball =sang:tarball]
-    =/  src=@t  (spat (snoc path.rail name.rail))
-    `[src (to-wain:format (sang-text sang))]
-  =/  ig-set=(set @t)
-    (silt (skim ~(tap in ~(key by finfo)) |=(s=@t (ignored s ignore))))
-  ;<  anchors=(list [doc=@t file=@t from=@ud to=@ud])  bind:m
-    (gather-all-anchors rail c)
-  =/  ignore-lines=(map @t (set @ud))
-    (ref-lines finfo (skim ignore |=(e=@t !=(~ (find " " (trip e))))))
-  ;<  pj=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
-  =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
-  =/  nanc=@ud  (lent anchors)
-  =+  ^=  res
-    =|  cov=(map @t (set @ud))
-    =|  flg=(map @t [f=@ud d=@ud g=@ud])
-    =|  np=(map @t @t)
-    =|  ancs=(map @t (list json))
-    =|  dcv=(map @t (map @t (set @ud)))
-    |-  ^-  $:  (map @t (set @ud))
-                (map @t [f=@ud d=@ud g=@ud])
-                (map @t @t)
-                (map @t (list json))
-                (map @t (map @t (set @ud)))
-            ==
-    ?~  anchors  [cov flg np ancs dcv]
-    =/  a  i.anchors
-    =/  fl=[f=@ud d=@ud g=@ud]  (fall (~(get by flg) file.a) [0 0 0])
-    =/  al=(list json)  (fall (~(get by ancs) file.a) ~)
-    =/  mka
-      |=  st=@t
-      ^-  json
-      %-  pairs:enjs:format
-      :~  ['doc' s+doc.a]
-          ['from' (numb:enjs:format from.a)]
-          ['to' (numb:enjs:format to.a)]
-          ['status' s+st]
-      ==
-    =/  ls=(unit (list @t))  (~(get by finfo) file.a)
-    ?:  |(?=(~ ls) (gth from.a (lent u.ls)))
-      %=  $
-        anchors  t.anchors
-        flg   (~(put by flg) file.a fl(g +(g.fl)))
-        ancs  (~(put by ancs) file.a [(mka 'gone') al])
-      ==
-    =/  total=@ud  (lent u.ls)
-    =/  hi=@ud  (min total ?:(=(0 to.a) total to.a))
-    =/  s=(set @ud)  (fall (~(get by cov) file.a) ~)
-    =/  dm=(map @t (set @ud))  (fall (~(get by dcv) doc.a) ~)
-    =/  ds=(set @ud)  (fall (~(get by dm) file.a) ~)
-    =^  ds  s
-      =/  ln=@ud  from.a
-      |-  ^-  [(set @ud) (set @ud)]
-      ?:  (gth ln hi)  [ds s]
-      $(ln +(ln), s (~(put in s) ln), ds (~(put in ds) ln))
-    =/  span=(list @t)  (swag [(dec from.a) +((sub hi from.a))] u.ls)
-    =/  hash=@t  `@t`(scot %ux (mug span))
-    =/  rng=@t  ?:(=(0 to.a) 'all' (crip "{(a-co:co from.a)}-{(a-co:co to.a)}"))
-    =/  key=@t  (crip "{(spud c)}|{(trip doc.a)}|{(trip file.a)}|{(trip rng)}")
-    =/  stored=(unit json)  (~(get by pins) key)
-    =+  ^=  fps
-      ?~  stored  [fl(f +(f.fl)) (~(put by np) key hash) 'fresh']
-      ?:  =(hash ?:(?=([%s *] u.stored) p.u.stored ''))
-        [fl(f +(f.fl)) np 'fresh']
-      [fl(d +(d.fl)) np 'drifted']
-    %=  $
-      anchors  t.anchors
-      cov   (~(put by cov) file.a s)
-      dcv   (~(put by dcv) doc.a (~(put by dm) file.a ds))
-      flg   (~(put by flg) file.a -.fps)
-      np    +<.fps
-      ancs  (~(put by ancs) file.a [(mka +>.fps) al])
-    ==
-  =/  fancs=(map @t (list json))  +>+<.res
-  ::  doc-drift: the pages that carry at least one drifted live block. A
-  ::  section's freshness is the aggregate of the blocks on its own page(s) —
-  ::  no separate section pin, so adding scope can't spuriously drift it.
-  =/  doc-drift=(set @t)
-    %-  ~(gas in *(set @t))
-    %-  zing
-    %+  turn  ~(val by fancs)
-    |=  js=(list json)
-    ^-  (list @t)
-    %+  murn  js
-    |=  j=json
-    ^-  (unit @t)
-    ?.  ?=([%o *] j)  ~
-    =/  st  (~(get by p.j) 'status')
-    =/  dc  (~(get by p.j) 'doc')
-    ?.  ?=([~ %s *] st)  ~
-    ?.  =('drifted' p.u.st)  ~
-    ?.  ?=([~ %s *] dc)  ~
-    `p.u.dc
-  %-  pure:m
-  :*  finfo
-      ig-set
-      ignore-lines
-      -.res
-      +<.res
-      +>-.res
-      fancs
-      doc-drift
-      nanc
-      +>+>.res
-  ==
-::  render-coverage: the coverage result for collection c (whole, or scoped to
-::  a section) — per-file numbers, overall totals, section drift, the sections
-::  overview — as a pure function of a loaded cov-state. Called once per view.
-::  want-files=%.n skips the per-file list (the cached whole view strips it
-::  anyway). The whole view never materializes "every line of every file" as
-::  a set — totals come from file lengths minus ignores, coverage from the
-::  anchored sets minus ignores — because that set costs a put per line of
-::  the mirror (~17s over 2k files) and is only needed to paint one file.
-++  render-coverage
-  |=  [cs=cov-state nav=json sec=@t want-files=?]
-  ^-  json
-  =,  cs
-  =/  in-section=?  !=('' sec)
-  ::  a section counts only the live blocks on its own page(s); the whole
-  ::  view counts every block in the collection
-  =/  covered=(map @t (set @ud))
-    ?.(in-section covered.cs (section-covered doc-cov nav sec))
-  =/  scope-strs=(list @t)
-    ?:(=('' sec) ~ (node-cover-scope nav sec))
-  =/  scope-lines=(map @t (set @ud))
-    ?.(in-section ~ (ref-lines finfo scope-strs))
-  =/  section-status=@t
-    ?.(in-section '' (section-status-of nav sec doc-drift))
-  =/  in-scope
-    |=  [src=@t ls=(list @t)]
-    ^-  (set @ud)
-    =/  base=(set @ud)
-      ?.  in-section
-        =/  n=@ud  1
-        =|  s=(set @ud)
-        |-  ^-  (set @ud)
-        ?:  (gth n (lent ls))  s
-        $(n +(n), s (~(put in s) n))
-      (fall (~(get by scope-lines) src) ~)
-    (~(dif in base) (fall (~(get by ignore-lines) src) ~))
-  =/  ign
-    |=  src=@t
-    ^-  (set @ud)
-    (fall (~(get by ignore-lines) src) ~)
-  =/  file-jsons=(list json)
-    ?.  want-files  ~
-    %+  murn  (sort ~(tap by finfo) |=([[a=@t *] [b=@t *]] (aor a b)))
-    |=  [src=@t ls=(list @t)]
-    ^-  (unit json)
-    =/  sc=(set @ud)  (in-scope src ls)
-    ?:  &(in-section =(~ sc))  ~
-    =/  ig=?  (~(has in ig-set) src)
-    =/  fl=[f=@ud d=@ud g=@ud]  (fall (~(get by flags) src) [0 0 0])
-    =/  documented=?  |(!=(0 f.fl) !=(0 d.fl) !=(0 g.fl))
-    ?:  &(ig !documented)  ~
-    =/  cset=(set @ud)  (~(int in (fall (~(get by covered) src) ~)) sc)
-    :-  ~
-    %-  pairs:enjs:format
-    :~  ['file' s+src]
-        ['extra' [%b ig]]
-        ['total' (numb:enjs:format ~(wyt in sc))]
-        ['covered' (numb:enjs:format ~(wyt in cset))]
-        ['fresh' (numb:enjs:format f.fl)]
-        ['drifted' (numb:enjs:format d.fl)]
-        ['gone' (numb:enjs:format g.fl)]
-        :-  'ranges'
-        :-  %a
-        %+  turn  (ranges cset)
-        |=([lo=@ud hi=@ud] `json`[%a ~[(numb:enjs:format lo) (numb:enjs:format hi)]])
-        :-  'scope'
-        :-  %a
-        %+  turn  (ranges sc)
-        |=([lo=@ud hi=@ud] `json`[%a ~[(numb:enjs:format lo) (numb:enjs:format hi)]])
-        ['anchors' [%a (flop (fall (~(get by fancs) src) ~))]]
-    ==
-  =/  tot-lines=@ud
-    %+  roll  ~(tap by finfo)
-    |=  [[s=@t l=(list @t)] a=@ud]
-    ?:  (~(has in ig-set) s)  a
-    ?.  in-section  (add a (sub (lent l) ~(wyt in (ign s))))
-    (add a ~(wyt in (in-scope s l)))
-  =/  tot-cov=@ud
-    %+  roll  ~(tap by covered)
-    |=  [[s=@t c=(set @ud)] a=@ud]
-    ?:  (~(has in ig-set) s)  a
-    ?.  in-section  (add a ~(wyt in (~(dif in c) (ign s))))
-    (add a ~(wyt in (~(int in c) (in-scope s (fall (~(get by finfo) s) ~)))))
-  =/  tf=[f=@ud d=@ud g=@ud]
-    %+  roll  ~(tap by flags)
-    |=  [[s=@t x=[f=@ud d=@ud g=@ud]] a=[f=@ud d=@ud g=@ud]]
-    ?:  &(in-section =(~ (fall (~(get by scope-lines) s) *(set @ud))))  a
-    [(add f.x f.a) (add d.x d.a) (add g.x g.a)]
-  %-  pairs:enjs:format
-  :~  ['files' [%a file-jsons]]
-      ['totalLines' (numb:enjs:format tot-lines)]
-      ['coveredLines' (numb:enjs:format tot-cov)]
-      ['fresh' (numb:enjs:format f.tf)]
-      ['drifted' (numb:enjs:format d.tf)]
-      ['gone' (numb:enjs:format g.tf)]
-      :-  'section'
-      ?:  =('' sec)  ~
-      (pairs:enjs:format ~[['name' s+sec] ['status' s+section-status]])
-      :-  'sections'
-      ?:  in-section  [%a ~]
-      (section-summaries nav finfo doc-cov ig-set ignore-lines doc-drift)
-  ==
-::  compute-coverage: one view (whole, or a section) plus the pins it wants
-::  stamped — load then render. The endpoint's cache-miss fallback; the
-::  recompute fiber loads once and renders every view itself.
-++  compute-coverage
-  |=  [=rail:tarball c=path ignore=(list @t) nav=json sec=@t]
-  =/  m  (fiber:fiber:nexus ,[resp=json np=(map @t @t)])
-  ^-  form:m
-  ;<  cs=cov-state  bind:m  (load-coverage rail c ignore)
-  (pure:m [(render-coverage cs nav sec %.y) newpins.cs])
-::  cache-name: the coverage cache grub for a collection — one json grub under
-::  /docs/cache, keyed by a mug of the collection path (outside /docs/mirror, so
-::  a re-mirror never wipes it).
-++  cache-name
-  |=  c=path
-  ^-  @ta
-  `@ta`(rap 3 'cov-' (scot %uv (mug c)) '.json' ~)
-::  recompute-coverage: (re)build and STORE the coverage cache for one collection
-::  — the whole-collection result plus each scoped section's view — and stamp the
-::  freshness pins once. Driven by the mirror fiber when a target's source (code
-::  or docs) or the pins change; the endpoint only reads what this writes. The
-::  mirror is loaded ONCE; every view renders from that load. Prints one timing
-::  line per collection.
-++  recompute-coverage
-  |=  [=rail:tarball c=path]
+::  +serve-explorer-page: the explorer's browse page with a mount
+::  declaration ahead of its scripts, the way a mounting app serves it.
+++  serve-explorer-page
+  |=  [eyre-id=@ta mount=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  [ignore=(list @t) nav=json]  bind:m  (read-docs-config rail c)
-  ;<  cs=cov-state  bind:m  (load-coverage rail c ignore)
-  =/  secs=(list @t)  (scoped-sections nav)
-  ::  %bout: vere prints the wall time of the wrapped render (in-event time
-  ::  is otherwise unobservable — the bowl clock only ticks per event).
-  ~?  dbg  [%shell-docs-render c sections=(lent secs)]
-  =/  [whole=json views=(map @t json)]
-    ~>  %bout
-    :-  (render-coverage cs nav '' %.n)
-    %-  malt
-    %+  turn  secs
-    |=(s=@t [s (render-coverage cs nav s %.y)])
-  ::  the overview reads `whole` only for its totals + section summaries, never
-  ::  the 1600-file list — so strip files from the cached whole (each section
-  ::  view keeps its own scoped, small file list).
-  =/  whole-slim=json
-    ?.(?=([%o *] whole) whole [%o (~(put by p.whole) 'files' [%a ~])])
-  =/  cache=json  (pairs:enjs:format ~[['whole' whole-slim] ['views' [%o views]]])
-  ~?  dbg  [%shell-docs-recompute c files=~(wyt by finfo.cs) anchors=nanc.cs]
-  ::  stamp every new pin once, then store the cache grub for this collection.
-  ;<  pj=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /docs %'pins.json']) ,json)
-  =/  pins=(map @t json)  ?~(pj ~ ?:(?=([%o *] u.pj) p.u.pj ~))
+  =/  page=tape  (trip q.q:browse-html:explorer)
+  =/  decl=tape
+    "<script>window.EXPLORER_MOUNT = {(trip (en:json:html mount))};</script>\0a"
+  =/  marker=tape  "<script src=\"/grubbery/ball/apps/shell/ui/explorer/kit.js\""
+  =/  at=(unit @ud)  (find marker page)
+  =/  out=tape
+    ?~  at  (weld decl page)
+    :(weld (scag u.at page) decl (slag u.at page))
   ;<  ~  bind:m
-    ?:  =(~ newpins.cs)  (pure:(fiber:fiber:nexus ,~) ~)
-    %+  over:io  (nex-road:io rail [%& /docs %'pins.json'])
-    [[/ %json] [%o (~(uni by pins) (~(run by newpins.cs) |=(h=@t `json`s+h)))]]
-  (over:io (nex-road:io rail [%& /docs/cache (cache-name c)]) [[/ %json] cache])
-::  ref-lines: resolve a list of "path [range]" selectors against the mirror
-::  line map into per-file line sets — the shared primitive for section scopes
-::  and ranged ignores. A bare path (no range) selects the whole file.
-++  ref-lines
-  |=  [finfo=(map @t (list @t)) refs=(list @t)]
-  ^-  (map @t (set @ud))
-  %+  roll  refs
-  |=  [ss=@t acc=(map @t (set @ud))]
-  =/  ref=(unit [file=@t from=@ud to=@ud])  (parse-ref (trip ss))
-  ?~  ref  acc
-  =/  ls=(unit (list @t))  (~(get by finfo) file.u.ref)
-  ?~  ls  acc
-  =/  total=@ud  (lent u.ls)
-  =/  hi=@ud  (min total ?:(=(0 to.u.ref) total to.u.ref))
-  =/  lset=(set @ud)
-    =/  n=@ud  from.u.ref
-    =|  s=(set @ud)
-    |-  ^-  (set @ud)
-    ?:  (gth n hi)  s
-    $(n +(n), s (~(put in s) n))
-  (~(put by acc) file.u.ref (~(uni in (fall (~(get by acc) file.u.ref) ~)) lset))
-::  scope-content: the concatenated text of a section's in-scope lines (files
-::  sorted, lines in order) — the thing we mug for a section's freshness. A
-::  whole-file scope mugs the whole file, so any edit to it drifts the section.
-++  scope-content
-  |=  [finfo=(map @t (list @t)) scope-lines=(map @t (set @ud))]
-  ^-  @t
-  %-  crip  %-  zing
-  %+  turn  (sort ~(tap by scope-lines) |=([[a=@t *] [b=@t *]] (aor a b)))
-  |=  [file=@t lset=(set @ud)]
-  =/  ls=(list @t)  (fall (~(get by finfo) file) ~)
-  =/  i=@ud  0
-  =|  out=(list tape)
-  |-  ^-  tape
-  ?~  ls  (zing (flop out))
-  =/  n=@ud  +(i)
-  ?:  (~(has in lset) n)
-    $(ls t.ls, i n, out ["{(trip i.ls)}\0a" out])
-  $(ls t.ls, i n)
-::  find-snippet: first line of `text` containing `q` (case-insensitive),
-::  capped for display. ~ if no line matches. Grep's line-as-context trick.
-++  find-snippet
-  |=  [text=@t q=@t]
-  ^-  (unit @t)
-  =/  ql=tape  (cass (trip q))
-  =/  lines=(list @t)  (to-wain:format text)
-  |-  ^-  (unit @t)
-  ?~  lines  ~
-  ?.  =(~ (find ql (cass (trip i.lines))))
-    `(crip (scag 200 (trip i.lines)))
-  $(lines t.lines)
-::  doc-hit: one search result as JSON.
-++  doc-hit
-  |=  [p=@t t=@t snip=@t]
-  ^-  json
-  (pairs:enjs:format ~[['path' s+p] ['title' s+t] ['snippet' s+snip]])
-::  agent-weir: THE SANDBOX. The complete external reach we grant the
-::  docs-agent when we mount it — the kernel refuses everything else.
-::  Files (sigs) are granted as rails; directories as folds. make stays
-::  empty: writing its own subtree (chats) is inherent, and it writes
-::  nothing outside itself.
-::
-::  The agent sees ONLY the docs subtree — nothing external. That subtree holds
-::  everything it needs: the local mirror (/docs/mirror, a copy of every
-::  documented target's source AND handbook), the registry (targets.json), and
-::  its own chats. No /code or raw-desk grant: the mirror already contains that
-::  source, so the sandbox stays the docs' own data.
-::    peek: /docs (mirror + registry + own subtree), the anthropic name
-::          in /sys/link, and the proxy's calls once resolved
-::    poke: bowl.sig (time + entropy), the proxy's main.sig once resolved
-++  agent-weir
-  |=  anth=(unit path)
-  ^-  weir:tarball
-  =/  dir  |=(p=path `road:tarball`[%& %| p])
-  =/  fil  |=([p=path n=@ta] `road:tarball`[%& %& p n])
-  :*  make=~
-      %-  sy
-      %+  weld  ~[(fil /sys 'bowl.sig')]
-      ?~(anth ~ ~[(fil u.anth 'main.sig')])
-      %-  sy
-      %+  weld  ~[(dir /apps/'shell.shell'/docs) (dir /sys/link/anthropic)]
-      ?~(anth ~ ~[(dir (snoc u.anth %calls))])
+    (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'text/html']]] `(as-octs:mimes:html (crip out))])
+  (pure:m ~)
+::  +peers-viewer: the pane for a path relative to /sys/ames, dirs only
+++  peers-viewer
+  |=  [pax=path dir=?]
+  ^-  (unit json)
+  ?.  dir  ~
+  =/  script=json  s+'/apps/grubbery/peers.js'
+  ?:  =(/usergroups pax)
+    `(pairs:enjs:format ~[['view' s+'groups'] ['script' script] ['args' [%o ~]]])
+  ?.  ?=([%usergroups @ *] pax)  ~
+  =/  grp=(unit path)  (peers-group-of t.pax)
+  ?~  grp  ~
+  :-  ~
+  %-  pairs:enjs:format
+  :~  ['view' s+'group']
+      ['script' script]
+      ['args' (pairs:enjs:format ~[['group' s+(spat u.grp)] ['dir' s+(spat pax)]])]
   ==
-::  ask-agent: bridge one browser turn to the docs-agent nexus. Subscribe
-::  to the conversation grub, poke the agent's main.sig with {chat-id,
-::  message}, await its write, and return the last (assistant) reply +
-::  trace. All the model/tool work runs inside the sandboxed agent.
-++  ask-agent
-  |=  [=rail:tarball message=@t]
-  =/  m  (fiber:fiber:nexus ,[reply=@t trace=json])
-  ^-  form:m
-  =/  chat-road=road:tarball
-    (nex-road:io rail [%& /docs/agent/chats %'main.json'])
-  =/  main-road=road:tarball
-    (nex-road:io rail [%& /docs/agent %'main.sig'])
-  ;<  *  bind:m  (keep:io /agent chat-road ~)
-  ;<  ~  bind:m
-    %-  poke:io
-    :+  main-road  [/ %json]
-    (pairs:enjs:format ~[['message' s+message]])
-  ;<  conv=json  bind:m  (await-agent chat-road)
-  ;<  ~  bind:m  (drop:io /agent chat-road)
-  =/  msgs=(list json)  ?.(?=([%a *] conv) ~ p.conv)
-  ?~  msgs  (pure:m ['(no reply)' [%a ~]])
-  =/  last=json  (rear msgs)
-  ?.  ?=([%o *] last)  (pure:m ['(no reply)' [%a ~]])
-  =/  reply=@t
-    (fall (bind (~(get by p.last) 'content') |=(j=json ?>(?=(%s -.j) p.j))) '')
-  =/  trace=json  (fall (~(get by p.last) 'trace') [%a ~])
-  (pure:m [reply trace])
-::  await-agent: wait for the agent's ASSISTANT write to the conversation
-::  grub. The agent writes twice per turn (the user message first, then the
-::  completed turn), so we skip news whose last message is still the user's.
-++  await-agent
-  |=  chat-road=road:tarball
+::  +peers-group-of: /a/b.grp -> `/a/b; a last segment without .grp is a
+::  category directory, not a group
+++  peers-group-of
+  |=  rel=path
+  ^-  (unit path)
+  ?~  rel  ~
+  =/  last=tape  (trip (rear rel))
+  =/  len=@ud  (lent last)
+  ?.  &((gth len 4) =(".grp" (slag (sub len 4) last)))  ~
+  `(snoc (snip `path`rel) (crip (scag (sub len 4) last)))
+::  +peers-storage: where a group's files live
+++  peers-storage
+  |=  grp=path
+  ^-  path
+  ?~  grp  /sys/ames/usergroups
+  (weld /sys/ames/usergroups (snoc (snip `path`grp) (cat 3 (rear grp) '.grp')))
+::  +peers-find: every group under a directory, recursing through
+::  category directories; the group's name is its path of stems
+++  peers-find
+  |=  [pax=path ug=ball:tarball]
+  ^-  (list [name=path grp=ball:tarball])
+  =/  kids=(list [@ta ball:tarball])  ~(tap by dir.ug)
+  =|  acc=(list [name=path grp=ball:tarball])
+  |-
+  ?~  kids  acc
+  =/  [kid-name=@ta kid=ball:tarball]  i.kids
+  =/  stem=(unit path)  (peers-group-of ~[kid-name])
+  ?^  stem
+    $(kids t.kids, acc [[(weld pax u.stem) kid] acc])
+  $(kids t.kids, acc (weld acc ^$(pax (snoc pax kid-name), ug kid)))
+::  +peers-groups: every usergroup as json: name, dir (relative to
+::  /sys/ames), public, members, and its make/poke/peek roads as text
+++  peers-groups
+  |=  rail=rail:tarball
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
-  |-
-  ;<  ~  bind:m  (take-news /agent)
-  ;<  =view:nexus  bind:m  (peek:io chat-road ~)
-  ?.  ?=([%file *] view)  $
-  =/  conv=json  (fall (mole |.(!<(json (need-vase:tarball sang.view)))) [%a ~])
-  =/  msgs=(list json)  ?.(?=([%a *] conv) ~ p.conv)
-  ?~  msgs  $
-  =/  last=json  (rear msgs)
-  ?.  &(?=([%o *] last) ?=([~ %s %'assistant'] (~(get by p.last) 'role')))  $
-  (pure:m conv)
-::  (the docs chat loop that used to live here moved into the sandboxed
-::  docs-agent nexus, now built on lib/clanker)
+  ;<  ug=view:nexus  bind:m  (peek:io [%& %| /sys/ames/usergroups] ~)
+  ?.  ?=([%ball *] ug)  (pure:m a+~)
+  ;<  all=(list [grp=path by=@t members=(set @p) =weir:nexus])  bind:m  (gather-groups rail)
+  ;<  rec=json  bind:m  (read-groups-record rail)
+  =/  found=(list [name=path grp=ball:tarball])  (peers-find / ball.ug)
+  =/  roads  |=(s=(set road:tarball) ^-(json a+(turn ~(tap in s) |=(r=road:tarball s+(crip (peers-road-text r))))))
+  =/  ships  |=(s=(set @p) ^-(json a+(turn (sort ~(tap in s) aor) |=(p=@p s+(scot %p p)))))
+  =/  part
+    |=  [by=@t members=(set @p) w=weir:nexus]
+    ^-  json
+    %-  pairs:enjs:format
+    :~  ['by' s+by]
+        ['members' (ships members)]
+        ['make' (roads make.w)]
+        ['poke' (roads poke.w)]
+        ['peek' (roads peek.w)]
+    ==
+  %-  pure:m
+  :-  %a
+  %+  murn  found
+  |=  [name=path grp=ball:tarball]
+  ^-  (unit json)
+  =/  who=(unit sang:tarball)  (~(get ba:tarball grp) [/ %'who.ships'])
+  =/  how=(unit sang:tarball)  (~(get ba:tarball grp) [/ %'how.weir'])
+  ?~  who  ~
+  =/  who-res  (mule |.(!<((set @p) (need-vase:tarball u.who))))
+  =/  members=(set @p)  ?:(?=(%| -.who-res) ~ p.who-res)
+  =/  =weir:nexus
+    ?~  how  *weir:nexus
+    =/  res  (mule |.(!<(weir:nexus (need-vase:tarball u.how))))
+    ?:(?=(%| -.res) *weir:nexus p.res)
+  =/  here=(list [grp=path by=@t members=(set @p) =weir:nexus])
+    (skim all |=([g=path * * *] =(g name)))
+  ::  the shell's record part alone is editable; its name shares and
+  ::  /public base ride in the merged shell row below
+  =/  mine=json
+    =/  g=(map @t json)  (contribution rec (spat name))
+    =/  strs
+      |=  k=@t
+      ^-  (list @t)
+      =/  v  (~(get by g) k)
+      ?.  ?=([~ %a *] v)  ~
+      (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j)))
+    =/  rd  |=(k=@t (sy (murn (strs k) peers-parse-road)))
+    (part 'manual' (sy (murn (strs 'members') |=(t=@t (slaw %p t)))) [(rd 'make') (rd 'poke') (rd 'peek')])
+  =/  merged=(list [by=@t members=(set @p) =weir:nexus])
+    %+  roll  here
+    |=  [[* by=@t ms=(set @p) w=weir:nexus] acc=(list [by=@t members=(set @p) =weir:nexus])]
+    ?~  (find ~[by] (turn acc |=([b=@t * *] b)))
+      (snoc acc [by ms w])
+    %+  turn  acc
+    |=  [b=@t m=(set @p) x=weir:nexus]
+    ?.  =(b by)  [b m x]
+    [b (~(uni in m) ms) [(~(uni in make.x) make.w) (~(uni in poke.x) poke.w) (~(uni in peek.x) peek.w)]]
+  :-  ~
+  %-  pairs:enjs:format
+  :~  ['name' s+(spat name)]
+      ['dir' s+(spat (slag 2 (peers-storage name)))]
+      ['public' b+=(/public name)]
+      ['members' (ships members)]
+      ['make' (roads make.weir)]
+      ['poke' (roads poke.weir)]
+      ['peek' (roads peek.weir)]
+      ::  your part, which the pane edits
+      ['mine' mine]
+      ::  every contribution, with who made it
+      ['contributions' a+(turn merged |=([by=@t ms=(set @p) w=weir:nexus] (part by ms w)))]
+  ==
+::  +peers-write: the panes' three writes. ~ on success, an error text
+::  otherwise.
+++  peers-write
+  |=  [rail=rail:tarball what=@ta jon=json]
+  =/  m  (fiber:fiber:nexus ,(unit @t))
+  ^-  form:m
+  =/  jarr
+    |=  k=@t
+    ^-  json
+    ?.  ?=([%o *] jon)  [%a ~]
+    (fall (~(get by p.jon) k) [%a ~])
+  =/  grp=@t  (jstr jon ?:(=(%create what) 'name' 'group'))
+  ?:  =('' grp)  (pure:m `'group required (a path like /friends)')
+  =/  req=(unit json)
+    ?+  what  ~
+      %create       `(pairs:enjs:format ~[['group' s+grp]])
+      %members      `(pairs:enjs:format ~[['group' s+grp] ['members' (jarr 'ships')]])
+      %permissions  `(pairs:enjs:format ~[['group' s+grp] ['make' (jarr 'make')] ['poke' (jarr 'poke')] ['peek' (jarr 'peek')]])
+      %delete       `(pairs:enjs:format ~[['group' s+grp] ['remove' b+&]])
+    ==
+  ?~  req  (pure:m `'unknown peers action')
+  ;<  ~  bind:m  (poke:io (nex-road:io rail [%& / %'groups.sig']) [[/ %json] u.req])
+  (pure:m ~)
+::  === usergroups: the record, and the files derived from it ===
+::
+::  +read-groups-record: permit/groups.json as an object.
+++  read-groups-record
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ;<  v=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /permit %'groups.json']) ,json)
+  (pure:m ?~(v [%o ~] ?:(?=(%o -.u.v) u.v [%o ~])))
+::  +user-section: the user's groups, from the record.
+++  user-section
+  |=  rec=json
+  ^-  json
+  ?.  ?=(%o -.rec)  [%o ~]
+  (fall (~(get by p.rec) 'user') [%o ~])
+::  +contribution: what the user says about one group.
+++  contribution
+  |=  [rec=json gkey=@t]
+  ^-  (map @t json)
+  =/  sec=json  (user-section rec)
+  ?.  ?=(%o -.sec)  ~
+  =/  g  (~(get by p.sec) gkey)
+  ?.(?=([~ %o *] g) ~ p.u.g)
+::  +set-contribution: the record with the user's say on one group
+::  replaced (~ removes it).
+++  set-contribution
+  |=  [rec=json gkey=@t next=(unit json)]
+  ^-  json
+  =/  top=(map @t json)  ?.(?=(%o -.rec) ~ p.rec)
+  =/  sec=json  (user-section rec)
+  =/  smap=(map @t json)  ?.(?=(%o -.sec) ~ p.sec)
+  =/  smap2=(map @t json)
+    ?~(next (~(del by smap) gkey) (~(put by smap) gkey u.next))
+  [%o (~(put by top) 'user' [%o smap2])]
+::  +group-request: one poke to groups.sig, the user's write path (the
+::  Peers page and the tools, both under this shell). {group, members?,
+::  make?, poke?, peek?, remove?}: each key present replaces that part of
+::  the user's contribution to the group; `remove` drops it; a group named
+::  with nothing else is declared. Apps never poke this: they state their
+::  facts in their own groups.json, read at derivation. ~ on success.
+++  group-request
+  |=  [rail=rail:tarball sender=rail:tarball jon=json]
+  =/  m  (fiber:fiber:nexus ,(unit @t))
+  ^-  form:m
+  ?.  ?=([%o *] jon)  (pure:m `'not an object')
+  ?.  =(/apps/shell (scag 2 path.sender))  (pure:m `'not the user')
+  ;<  roots=(list path)  bind:m  app-roots
+  ?:  (lien roots |=(r=path =(r (scag (lent r) path.sender))))
+    (pure:m `'an app states its groups in its own groups.json')
+  =/  grp=(unit path)  (biff (jget jon 'group') |=(t=@t (rush t stap)))
+  ?:  |(?=(~ grp) ?=(~ u.grp))  (pure:m `'group required (a path like /friends)')
+  ;<  rec=json  bind:m  (read-groups-record rail)
+  =/  gkey=@t  (spat u.grp)
+  =/  cur=(map @t json)  (contribution rec gkey)
+  =/  field
+    |=  k=@t
+    ^-  json
+    =/  v  (~(get by p.jon) k)
+    ?:(?=([~ %a *] v) u.v (fall (~(get by cur) k) [%a ~]))
+  =/  remove=?  =(`[%b %.y] (~(get by p.jon) 'remove'))
+  =/  next=(unit json)
+    ?:  remove  ~
+    :-  ~
+    %-  pairs:enjs:format
+    :~  ['members' (field 'members')]
+        ['make' (field 'make')]
+        ['poke' (field 'poke')]
+        ['peek' (field 'peek')]
+    ==
+  =/  rec2=json  (set-contribution rec gkey next)
+  ?:  =(rec2 rec)  (pure:m ~)
+  ;<  ~  bind:m
+    (put:io (nex-road:io rail [%& /permit %'groups.json']) [[/ %json] rec2])
+  (pure:m ~)
+::  +app-groups: one app's facts about usergroups, from the groups.json at
+::  its root, within the top-level keys Permits granted it. A key naming
+::  a group opens the app's own roads into it (roads only); a key ending
+::  in a slash is a prefix the app runs groups under: each entry inside
+::  is a group with members and roads. Roads are relative to the app's
+::  root, so they can only ever name its own subtree.
+++  app-groups
+  |=  [app=path entry=json]
+  =/  m  (fiber:fiber:nexus ,(list [grp=path members=(set @p) =weir:nexus]))
+  ^-  form:m
+  =/  granted=(set @t)
+    ?.  ?=(%o -.entry)  ~
+    =/  v  (~(get by p.entry) 'groups')
+    ?.  ?=([~ %a *] v)  ~
+    (sy (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j))))
+  ?:  =(~ granted)  (pure:m ~)
+  ;<  gv=(unit json)  bind:m  (peek-as:io [%& %& app %'groups.json'] ,json)
+  ?~  gv  (pure:m ~)
+  ?.  ?=(%o -.u.gv)  (pure:m ~)
+  =/  strs
+    |=  [g=json k=@t]
+    ^-  (list @t)
+    ?.  ?=(%o -.g)  ~
+    =/  v  (~(get by p.g) k)
+    ?.  ?=([~ %a *] v)  ~
+    (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j)))
+  =/  roads
+    |=  [g=json k=@t]
+    ^-  (set road:tarball)
+    %-  sy
+    %+  murn  (strs g k)
+    |=  t=@t
+    ^-  (unit road:tarball)
+    =/  rel=(unit road:tarball)  (peers-parse-road t)
+    ?~  rel  ~
+    ?.  ?=(%& -.u.rel)  ~
+    ?-  -.p.u.rel
+      %&  `[%& %& (weld app path.p.p.u.rel) name.p.p.u.rel]
+      %|  `[%& %| (weld app p.p.u.rel)]
+    ==
+  =/  weir-of  |=(g=json `weir:nexus`[(roads g 'make') (roads g 'poke') (roads g 'peek')])
+  =/  is-prefix=$-(@t ?)  |=(k=@t =('/' (rear (trip k))))
+  %-  pure:m
+  %-  zing
+  %+  turn  ~(tap by p.u.gv)
+  |=  [key=@t g=json]
+  ^-  (list [grp=path members=(set @p) =weir:nexus])
+  ?.  (~(has in granted) key)  ~
+  ?.  (is-prefix key)
+    ::  a group it opens into: its own roads, never the roster
+    =/  grp=(unit path)  (rush key stap)
+    ?~  grp  ~
+    [u.grp ~ (weir-of g)]~
+  ::  a prefix it runs: every group inside, roster and roads
+  =/  pre=(unit path)  (rush (crip (snip (trip key))) stap)
+  ?~  pre  ~
+  ?.  ?=(%o -.g)  ~
+  %+  murn  ~(tap by p.g)
+  |=  [sub=@t sg=json]
+  ^-  (unit [grp=path members=(set @p) =weir:nexus])
+  ::  a sub-key is a name under the prefix, spelled with or without a
+  ::  leading slash. Absolute is fine too, as long as it IS under the
+  ::  prefix: an app never names a group outside the key it was granted.
+  =/  rest=(unit path)
+    =/  tap=tape  (trip sub)
+    ?~  tap  ~
+    (rush (crip ?:(=('/' i.tap) tap ['/' tap])) stap)
+  ?~  rest  ~
+  =/  full=path
+    ?:  =(u.pre (scag (lent u.pre) u.rest))  u.rest
+    (weld u.pre u.rest)
+  ?.  =(u.pre (scag (lent u.pre) full))  ~
+  =/  members=(set @p)  (sy (murn (strs sg 'members') |=(t=@t (slaw %p t))))
+  `[full members (weir-of sg)]
+::  +gather-groups: every contribution to usergroups, each with who made
+::  it. 'manual' is what the shell DECLARES: permit/groups.json, written
+::  through the Peers page or the tools. 'shell' is what it DERIVES: its
+::  storefront, a desk published, a name shared — each follows from a
+::  feature, not from an entry. Everything else is one app, named by its
+::  nexus root, declared in the groups.json at that root. The derivation
+::  and the Peers page both read this.
+++  gather-groups
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(list [grp=path by=@t members=(set @p) =weir:nexus]))
+  ^-  form:m
+  ;<  rec0=json  bind:m  (read-groups-record rail)
+  ;<  rec=json  bind:m  (seed-groups-record rail rec0)
+  =/  from-user=(list [grp=path by=@t members=(set @p) =weir:nexus])
+    =/  sec=json  (user-section rec)
+    ?.  ?=(%o -.sec)  ~
+    %+  murn  ~(tap by p.sec)
+    |=  [gkey=@t g=json]
+    ^-  (unit [grp=path by=@t members=(set @p) =weir:nexus])
+    =/  grp=(unit path)  (rush gkey stap)
+    ?~  grp  ~
+    =/  strs
+      |=  k=@t
+      ^-  (list @t)
+      ?.  ?=(%o -.g)  ~
+      =/  v  (~(get by p.g) k)
+      ?.  ?=([~ %a *] v)  ~
+      (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j)))
+    =/  roads  |=(k=@t (sy (murn (strs k) peers-parse-road)))
+    `[u.grp 'manual' (sy (murn (strs 'members') |=(t=@t (slaw %p t)))) [(roads 'make') (roads 'poke') (roads 'peek')]]
+  =/  base=[grp=path by=@t members=(set @p) =weir:nexus]
+    :^  /public  'shell'  ~
+    :+  ~  ~
+    %-  sy
+    ^-  (list road:tarball)
+    :~  [%& %& /apps/shell %'public.json']
+        [%& %& /apps/shell/share/public %'desks.json']
+    ==
+  ;<  names=(map path (set road:tarball))  bind:m  (read-shares rail /apps/shell)
+  =/  from-names=(list [grp=path by=@t members=(set @p) =weir:nexus])
+    %-  zing
+    %+  turn  ~(tap by names)
+    |=  [grp=path rs=(set road:tarball)]
+    %+  turn  ~(tap in rs)
+    |=  r=road:tarball
+    ^-  [grp=path by=@t members=(set @p) =weir:nexus]
+    [grp 'shell' ~ [~ ~ (sy ~[r])]]
+  ;<  dv=view:nexus  bind:m  (peek-shallow:io [%& %| /apps/shell/desks] ~)
+  =/  kids=(list @ta)  ?.(?=([%ball *] dv) ~ ~(tap in ~(key by dir.ball.dv)))
+  ;<  shares=(list [path json])  bind:m  (gather-shares kids)
+  =/  from-desks=(list [grp=path by=@t members=(set @p) =weir:nexus])
+    %+  murn  shares
+    |=  [grp=path entry=json]
+    ^-  (unit [grp=path by=@t members=(set @p) =weir:nexus])
+    =/  dir=@t  (fall (jget entry 'dir') '')
+    ?:  =('' dir)  ~
+    =/  dpath=path  /apps/shell/desks/[`@ta`dir]
+    ::  the shell's grant, on the user's publish: a desk wrapper has no
+    ::  app of its own
+    :-  ~
+    :^  grp  'shell'  ~
+    :+  ~  ~
+    (sy ~[`road:tarball`[%& %| (weld dpath /desk/code)] `road:tarball`[%& %& dpath %'version.json']])
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ;<  from-apps=(list [grp=path by=@t members=(set @p) =weir:nexus])  bind:m
+    =/  m  (fiber:fiber:nexus ,(list [grp=path by=@t members=(set @p) =weir:nexus]))
+    =/  todo=(list [app=@t entry=json])  ~(tap by approved)
+    |-  ^-  form:m
+    ?~  todo  (pure:m ~)
+    =/  root=(unit path)  (soft-path app.i.todo)
+    ?~  root  $(todo t.todo)
+    ?.  =('granted' (fall (jget entry.i.todo 'verdict') ''))  $(todo t.todo)
+    ;<  mine=(list [grp=path members=(set @p) =weir:nexus])  bind:m
+      (app-groups u.root entry.i.todo)
+    ;<  rest=(list [grp=path by=@t members=(set @p) =weir:nexus])  bind:m  $(todo t.todo)
+    %-  pure:m
+    %+  weld
+      (turn mine |=([grp=path members=(set @p) w=weir:nexus] [grp app.i.todo members w]))
+    rest
+  (pure:m :(weld from-user [base ~] from-names from-desks from-apps))
+::  +apply-groups: every group's who.ships and how.weir, rewritten whole
+::  from the union of every contribution (+gather-groups). A group nobody
+::  contributes to is culled; /public always stands.
+++  apply-groups
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  all=(list [grp=path by=@t members=(set @p) =weir:nexus])  bind:m  (gather-groups rail)
+  =/  union=(map path [members=(set @p) =weir:nexus])
+    %+  roll  all
+    |=  [[grp=path * members=(set @p) w=weir:nexus] u=(map path [members=(set @p) =weir:nexus])]
+    =/  cur  (fall (~(get by u) grp) `[members=(set @p) =weir:nexus]`[~ *weir:nexus])
+    %+  ~(put by u)  grp
+    :-  (~(uni in members.cur) members)
+    :*  (~(uni in make.weir.cur) make.w)
+        (~(uni in poke.weir.cur) poke.w)
+        (~(uni in peek.weir.cur) peek.w)
+    ==
+  ::  write what changed
+  =/  groups=(list [grp=path members=(set @p) =weir:nexus])  ~(tap by union)
+  ;<  ~  bind:m
+    =/  m  (fiber:fiber:nexus ,~)
+    |-  ^-  form:m
+    ?~  groups  (pure:m ~)
+    =/  dir=path  (peers-storage grp.i.groups)
+    ;<  who=(unit (set @p))  bind:m  (peek-as:io [%& %& dir %'who.ships'] ,(set @p))
+    ;<  how=(unit weir:nexus)  bind:m  (peek-as:io [%& %& dir %'how.weir'] ,weir:nexus)
+    ;<  ~  bind:m
+      ?:  =(who `members.i.groups)  (pure:m ~)
+      (put:io [%& %& dir %'who.ships'] [[/ %ships] members.i.groups])
+    ;<  ~  bind:m
+      ?:  =(how `weir.i.groups)  (pure:m ~)
+      (put:io [%& %& dir %'how.weir'] [[/ %weir] weir.i.groups])
+    $(groups t.groups)
+  ::  cull what nobody names any more
+  ;<  ug=view:nexus  bind:m  (peek:io [%& %| /sys/ames/usergroups] ~)
+  ?.  ?=([%ball *] ug)  (pure:m ~)
+  =/  found=(list [name=path grp=ball:tarball])  (peers-find / ball.ug)
+  =/  gone=(list path)
+    %+  murn  found
+    |=  [name=path *]
+    ?:  |(=(/public name) (~(has by union) name))  ~
+    `name
+  ;<  ~  bind:m
+    =/  m  (fiber:fiber:nexus ,~)
+    |-  ^-  form:m
+    ?~  gone  (pure:m ~)
+    ;<  *  bind:m  (cull-soft:io [%& %| (peers-storage i.gone)])
+    $(gone t.gone)
+  ::  a category directory the last group left is itself gone: /a/b.grp
+  ::  culled leaves /a, which is no group and names nothing
+  ;<  ug2=view:nexus  bind:m  (peek:io [%& %| /sys/ames/usergroups] ~)
+  ?.  ?=([%ball *] ug2)  (pure:m ~)
+  =/  cats=(list @ta)
+    %+  murn  ~(tap by dir.ball.ug2)
+    |=  [nm=@ta sub=ball:tarball]
+    ^-  (unit @ta)
+    ?:  ?=(^ (peers-group-of ~[nm]))  ~
+    ?.  =(~ (peers-find / sub))  ~
+    `nm
+  |-  ^-  form:m
+  ?~  cats  (pure:m ~)
+  ;<  *  bind:m  (cull-soft:io [%& %| /sys/ames/usergroups/[i.cats]])
+  $(cats t.cats)
+::  +seed-groups-record: a ship whose groups predate the record keeps
+::  them: every group's members, and the roads of every group but
+::  /public (whose roads are derived), become the user's section, once.
+++  seed-groups-record
+  |=  [rail=rail:tarball rec=json]
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ?.  ?=(%o -.rec)  (pure:m rec)
+  ?.  =(~ p.rec)  (pure:m rec)
+  ;<  ug=view:nexus  bind:m  (peek:io [%& %| /sys/ames/usergroups] ~)
+  ?.  ?=([%ball *] ug)  (pure:m rec)
+  =/  found=(list [name=path grp=ball:tarball])  (peers-find / ball.ug)
+  =/  roads  |=(s=(set road:tarball) ^-(json a+(turn ~(tap in s) |=(r=road:tarball s+(crip (peers-road-text r))))))
+  =/  user=(map @t json)
+    %-  ~(gas by *(map @t json))
+    %+  murn  found
+    |=  [name=path grp=ball:tarball]
+    ^-  (unit [@t json])
+    ::  /public is the shell's to name; the user's record carries only
+    ::  what the user adds to it
+    ?:  =(/public name)  ~
+    =/  who=(unit sang:tarball)  (~(get ba:tarball grp) [/ %'who.ships'])
+    =/  how=(unit sang:tarball)  (~(get ba:tarball grp) [/ %'how.weir'])
+    =/  members=(set @p)
+      ?~  who  ~
+      =/  r  (mule |.(!<((set @p) (need-vase:tarball u.who))))
+      ?:(?=(%| -.r) ~ p.r)
+    =/  =weir:nexus
+      ?:  |(=(/public name) ?=(~ how))  *weir:nexus
+      =/  r  (mule |.(!<(weir:nexus (need-vase:tarball u.how))))
+      ?:(?=(%| -.r) *weir:nexus p.r)
+    :-  ~
+    :-  (spat name)
+    %-  pairs:enjs:format
+    :~  ['members' a+(turn ~(tap in members) |=(p=@p s+(scot %p p)))]
+        ['make' (roads make.weir)]
+        ['poke' (roads poke.weir)]
+        ['peek' (roads peek.weir)]
+    ==
+  ?:  =(~ user)  (pure:m rec)
+  =/  rec2=json  [%o (~(put by *(map @t json)) 'user' [%o user])]
+  ;<  ~  bind:m
+    (put:io (nex-road:io rail [%& /permit %'groups.json']) [[/ %json] rec2])
+  (pure:m rec2)
+::  a road as the panes show it: /dir/ for a subtree, /dir/file.ext for a grub
+::  +peers-parse-road: a road from its text, or nothing. A trailing slash
+::  names a subtree and is dropped before parsing; a last segment with a
+::  dot is a file. Text that does not parse yields NO road: a bad line
+::  must never widen into "/", which is everything.
+++  peers-parse-road
+  |=  t=@t
+  ^-  (unit road:tarball)
+  =/  tap=tape  (trip t)
+  =/  trimmed=tape
+    ?:  &((gth (lent tap) 1) =('/' (rear tap)))  (snip tap)
+    tap
+  ?:  =("/" trimmed)  `[%& %| /]
+  =/  pax=(unit path)  (rush (crip trimmed) stap)
+  ?~  pax  ~
+  ?~  u.pax  ~
+  =/  last=tape  (trip (rear u.pax))
+  ?~  (find "." last)
+    `[%& %| u.pax]
+  `[%& %& (snip `path`u.pax) (rear u.pax)]
+++  peers-road-text
+  |=  =road:tarball
+  ^-  tape
+  ?-  -.road
+      %&
+    ?-  -.p.road
+      %&  "{(spud path.p.p.road)}/{(trip name.p.p.road)}"
+      %|  (spud p.p.road)
+    ==
+      %|
+    ?-  -.q.p.road
+      %&  "{(spud path.p.q.p.road)}/{(trip name.p.q.p.road)}"
+      %|  (spud p.q.p.road)
+    ==
+  ==
 ::  take-news: wait for a news wave on `wire`, ignore everything else.
 ++  take-news
   |=  =wire
@@ -1927,137 +1538,102 @@
 ::  a stock entry is either a github repo (shell provisions a git_repo that
 ::  polls it, then a desk following the checkout) or a direct /code path (just
 ::  a desk following that namespace dir, like a plain /desk).
+::  how a github entry's checkout becomes live code, which is also what
+::  its build chat's repo_deploy tool does after a commit:
+::    %desk  a /desk follows the tree's /code and deploys when its
+::           code/version.json is bumped (the stock app path)
+::    %clay  the tree's <dir> IS a Clay desk: deploying commits it into
+::           the named desk, the way a Unix |commit does (the kernel)
++$  deploy-spec
+  $%  [%desk ~]
+      [%clay desk=@tas dir=@t]
+  ==
+::  how a stock entry comes to be on a ship.
+::
+::    %boot   the shell sets it up when the ship boots, and the apps it
+::            brings are granted what they ask: installing the ship was the
+::            decision. The grants are ordinary grants, shown on the permits
+::            page and narrowed or dropped there like any other.
+::    %offer  listed under Recommended. Installed when the user asks, and
+::            its apps ask for their permissions like any other install.
+::
++$  setup  ?(%boot %offer)
 +$  stock-entry
-  $%  [%github name=@t repo=@t ref=@t]
-      [%code name=@t code=@t]
+  $%  [%github name=@t title=@t repo=@t ref=@t deploy=deploy-spec =setup]
   ==
-::  Takes `our` because one entry differs on the distributor. Every ship
-::  follows ~ricsul-bilwyt's lattice desk; ~ricsul-bilwyt cannot follow itself
-::  — a source of "~ricsul-bilwyt/..." resolves on ricsul to a remote read of
-::  its own namespace, which would make the desk its own source and mirror
-::  nothing — so the distributor follows its forge checkout instead.
-::
 ++  default-repos
-  |=  our=@p
   ^-  (list stock-entry)
-  ::  Only what ~ricsul-bilwyt distributes. Upstream's own stock entries
-  ::  (contacts, wallet) are not part of this release; a ship that wants
-  ::  them adds a desk by hand.
-  :~  ::  lattice ships as a stock desk from here on. It used to be a
-      ::  %fall row in root.hoon creating an instance under /apps
-      ::  directly, and this entry is what replaces it: the shell stands
-      ::  up the desk, the desk mirrors its source's code, and apply-bill
-      ::  creates the instance from bill.json.
-      ::
-      ::  A ship upgrading past the removal of that root.hoon row finds
-      ::  its old instance DORMANT with its data intact - the code left
-      ::  the ball, so its typed grubs read as booms, but the nouns are
-      ::  still there and +ball-to-bole revalidates them against the
-      ::  marks that travel with the desk's code.
-      ::
-      ::  Carrying that data across is lattice's own job, not this
-      ::  file's and not desk.hoon's: +carry-old-data runs on the new
-      ::  instance's writer rise, which is reached only once consent has
-      ::  been granted, and it copies rather than moves - the old
-      ::  instance is left untouched.
-      ::
-      ::  The user IS asked to approve the new instance's roads, because
-      ::  it is a new instance with no consent recorded, and lattice is
-      ::  unavailable until they do. That prompt is the upgrade.
-      ::  +parse-path turns a "~ship/..." source into
-      ::  /sys/ames/ships/<ship>/root/..., so this is a cross-ship read of
-      ::  ricsul's own lattice desk — code is distributed BY ricsul, not
-      ::  fetched from github by every ship. Version-gated: a subscriber
-      ::  re-syncs only when ricsul bumps the code's version.json.
-      ::
-      ::  ricsul must OPEN that desk to its subscribers' usergroup
-      ::  (share.usergroups grants peek on /desk/code and version.json).
-      ::  Without the grant a subscriber gets a desk that mirrors nothing:
-      ::  desk present, code empty, no instance, and no error to read.
-      (published our 'lattice' 'nisfeb/lattice' 'main')
-      ::  auspex ships the same way, from the same distributor. Its repo's
-      ::  default branch is master, not main.
-      (published our 'auspex' 'nisfeb/auspex' 'master')
-      ::  the calendar: caldav and google sync are coming; v3 has the model.
-      (published our 'calendar' 'nisfeb/calendar' 'main')
-      ::  armillary and orrery, the same way as the rest.
-      (published our 'armillary' 'nisfeb/armillary' 'main')
-      (published our 'orrery' 'nisfeb/orrery' 'main')
+  ::  every entry is a github repo the forge mirrors. The forge itself is
+  ::  not one: it is a nexus of this shell at /apps/shell/forge. These
+  ::  entries are housed in it and find it by name.
+  ::
+  ::  grubbery is the ship's own source: its mirror deploys by committing
+  ::  into the grubbery desk and never becomes a desk, so %boot here sets
+  ::  up a mirror and nothing that could ask for a permission.
+  :~  [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
+      [%github 'hatchery' 'Hatchery' 'gwbtc/hatchery' 'main' [%desk ~] %offer]
+      [%github 'grubbery' 'Grubbery' 'gwbtc/grubbery' 'develop' [%clay %grubbery 'desk'] %boot]
   ==
-::  +published: the stock entry for an app WE publish, which differs on the one
-::  ship that cannot follow itself.
-::
-::    A subscriber follows the distributor's own desk, read cross-ship: code is
-::    distributed BY the distributor, and no subscriber talks to github. It is
-::    version-gated, so a subscriber re-syncs only when the distributor bumps
-::    that desk's code/version.json.
-::
-::    The distributor gets the %github entry instead, because a
-::    "~<distributor>/..." source resolves ON the distributor to a remote read of
-::    its own namespace — the desk would be its own source and mirror nothing.
-::
-::    THE DISTRIBUTOR MUST OPEN EACH OF THESE DESKS to its subscribers'
-::    usergroup; share.usergroups grants peek on /desk/code and version.json.
-::    Without the grant a subscriber gets a desk that mirrors nothing: desk
-::    present, code empty, no instance, and no error to read anywhere.
-::
-++  published
-  |=  [our=@p nom=@t repo=@t ref=@t]
-  ^-  stock-entry
-  ?:  =(our distributor)  [%github nom repo ref]
-  [%code nom (desk-source nom)]
-::  distributor: the ship that publishes our apps to this fleet. Named ONCE,
-::  because +desk-source derives every subscriber path from it — two
-::  hand-written copies of a ship name drift, and the failure that drift
-::  produces is a desk that mirrors nothing without saying so.
-::
-++  distributor  ~ricsul-bilwyt
-::  +desk-source: a subscriber's source.json for one of OUR desks — the
-::  distributor's own desk code dir, read cross-ship. +parse-path turns the
-::  "~ship/" prefix into /sys/ames/ships/<ship>/root/.
-::
-++  desk-source
-  |=  nom=@t
-  ^-  @t
-  %-  crip
-  "{<distributor>}/apps/shell.shell/desks/{(trip nom)}.desk/desk/code"
-::  stock-name / stock-code: pull the name (and, for %code, the code path)
-::  out of an entry regardless of kind.
-++  stock-name  |=(e=stock-entry ?-(-.e %github name.e, %code name.e))
+::  deploy-json: the deploy spec as the repo's config.json carries it
+::  (and the forge copies into the repo clanker's config for repo_deploy)
+++  deploy-json
+  |=  d=deploy-spec
+  ^-  json
+  ?-  -.d
+    %desk  (pairs:enjs:format ~[['kind' s+'version'] ['file' s+'code/version.json']])
+    %clay  (pairs:enjs:format ~[['kind' s+'clay'] ['desk' s+desk.d] ['dir' s+dir.d]])
+  ==
+::  stock-name: an entry's name.
+++  stock-name  |=(e=stock-entry name.e)
 ::  repo-config: the config.json a git_repo instance is seeded with.
 ::
 ++  repo-config
-  |=  [repo=@t ref=@t]
+  |=  [repo=@t ref=@t deploy=deploy-spec]
   ^-  json
   %-  pairs:enjs:format
   :~  ['repo' s+repo]
       ['ref' s+ref]
       ['token' s+'']
       ['poll' n+'15']
+      ['deploy' (deploy-json deploy)]
   ==
 ::  ensure-pairing: idempotently stand up ONE git_repo + desk pairing.
 ::  Guarded makes (skip what exists) + a replace-in-place source poke, so
 ::  re-running is safe. The desk follows the repo's /data/tree/code and
 ::  the stock desk machinery owns the rest (version watch, sync, bill).
 ::
+::  +await-forge: the forge's root lane, waiting on /sys/link/forge until
+::  the name is claimed (the way a desk waits for an @name source)
+::
+++  await-forge
+  =/  m  (fiber:fiber:nexus ,(unit lane:tarball))
+  ^-  form:m
+  =/  link=road:tarball  [%& %& /sys/link/forge %'dest.lanes']
+  |-  ^-  form:m
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  ?:  ?=([~ %| *] fr)  (pure:m fr)
+  ~&  >>  %shell-pairing-awaiting-forge
+  ;<  *  bind:m  (keep:io /forge-link link ~)
+  ;<  *  bind:m  (take-news:io /forge-link)
+  ;<  ~  bind:m  (drop:io /forge-link link)
+  $
 ++  ensure-pairing
   |=  entry=stock-entry
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   =/  name=@t  (stock-name entry)
-  =/  desk-dir=path  /apps/'shell.shell'/desks/[(cat 3 `@ta`name '.desk')]
-  ::  forge houses the repo instances; it is found by name
-  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+  ::  forge houses the repo instances; it is found by name. On a fresh
+  ::  ship the name may not be claimed yet when the first entry is
+  ::  reached: wait for the link rather than skip the entry.
+  ;<  fr=(unit lane:tarball)  bind:m  await-forge
   ?.  ?=([~ %| *] fr)
     ~&  >>>  %shell-pairing-no-forge
     (pure:m ~)
   =/  forge=path  p.u.fr
-  ::  the /code path the desk will follow
-  =/  code=@t
-    ?-  -.entry
-      %code    code.entry
-      %github  (crip "{(spud forge)}/repos/{(trip name)}.git_repo/data/tree/code")
-    ==
+  ::  the code path the desk will follow: a github entry's by the forge's
+  ::  NAME, so the desk resolves it where the forge is, now and after a move
+  =/  code=@t  (crip "@forge/repos/{(trip name)}.git_repo/data/tree/code")
   =/  repo-dir=path  (weld forge /repos/[(cat 3 `@ta`name '.git_repo')])
   ::  ORDER MATTERS HERE, and it used to leave a user with a repo, no desk,
   ::  and nothing at all in the log.
@@ -2075,7 +1651,6 @@
   ::
   ::  1. the repo instance and its remote — no fetch yet
   ;<  ~  bind:m
-    ?.  ?=(%github -.entry)  (pure:m ~)
     ;<  has-repo=?  bind:m  (peek-exists:io [%& %| repo-dir])
     ;<  ~  bind:m
       ?:  has-repo  (pure:m ~)
@@ -2094,29 +1669,43 @@
       =/(v (~(get by cur-obj) 'repo') ?:(?=([~ %s *] v) p.u.v ''))
     =/  cur-ref=@t
       =/(v (~(get by cur-obj) 'ref') ?:(?=([~ %s *] v) p.u.v ''))
+    =/  cur-deploy=(unit json)  (~(get by cur-obj) 'deploy')
+    =/  want-deploy=json  (deploy-json deploy.entry)
     ;<  ~  bind:m
-      ?:  &(=(cur-repo repo.entry) =(cur-ref ref.entry))  (pure:m ~)
+      ?:  ?&  =(cur-repo repo.entry)
+              =(cur-ref ref.entry)
+              =(cur-deploy `want-deploy)
+          ==
+        (pure:m ~)
       ::  config.json is a plain data grub (no poke handler), so overwrite
       ::  it with over:io — poke:io would nack and crash this handler.
-      (over:io [%& %& repo-dir %'config.json'] [[/ %json] (repo-config repo.entry ref.entry)])
+      ::  A user's other fields (author, account, token) are kept.
+      =/  cfg=json  (repo-config repo.entry ref.entry deploy.entry)
+      =/  merged=json
+        ?.  ?=([%o *] cfg)  cfg
+        [%o (~(uni by cur-obj) p.cfg)]
+      (over:io [%& %& repo-dir %'config.json'] [[/ %json] merged])
     ::  the poll daemon reads poll.json, not config.json's `poll`: a repo
     ::  is seeded with minutes 0 (off) and nothing ever copied the cadence
     ::  across, so a stock mirror only pulled when something poked it —
     ::  a version pushed to github never reached the distributor on its
     ::  own. Turn the daemon on once; a cadence someone set stays.
     (ensure-poll repo-dir)
-  ::  2. the desk, BEFORE any network work
+  ::  2. the desk, BEFORE any network work. Only a %desk deploy has one:
+  ::  a %clay entry (the kernel) deploys by committing its tree into a
+  ::  Clay desk, which its build chat's repo_deploy does; no follower
+  =/  follower=?  ?=(%desk -.deploy.entry)
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
   ;<  ~  bind:m
-    ?:  has-desk  (pure:m ~)
+    ?:  |(has-desk !follower)  (pure:m ~)
     (make:io [%& %| desk-dir] &+`bole:tarball`[`[`[/ %desk] ~ %.n ~] ~])
   ::  3. always wire the desk's source at the computed code path
   ;<  ~  bind:m
+    ?.  follower  (pure:m ~)
     (poke:io [%& %& desk-dir %'source.json'] [[/ %json] (pairs:enjs:format ~[['code' s+code]])])
   ::  4. LAST, and SOFT: ask for a fresh fetch, so "sync" still means "pull
   ::  latest" when the network cooperates. Soft because a nack here would
   ::  otherwise roll back steps 1-3 with it.
-  ?.  ?=(%github -.entry)  (pure:m ~)
   ;<  *  bind:m
     %+  poke-soft:io  [%& %& repo-dir %'run.git-action']
     [[/ %json] (pairs:enjs:format ~[['command' s+'pull']])]
@@ -2143,53 +1732,108 @@
 ++  ensure-polls
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  our=@p  bind:m  get-our:io
-  =/  todo=(list stock-entry)  (default-repos our)
+  =/  todo=(list stock-entry)  default-repos
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  ?.  ?=([~ %| *] fr)  (pure:m ~)
   |-  ^-  form:m
   ?~  todo  (pure:m ~)
-  ?.  ?=(%github -.i.todo)  $(todo t.todo)
-  =/  repo-dir=path  /apps/'forge.git_forge'/repos/[(cat 3 `@ta`(stock-name i.todo) '.git_repo')]
+  =/  repo-dir=path  (weld p.u.fr /repos/[(cat 3 `@ta`(stock-name i.todo) '.git_repo')])
   ;<  has=?  bind:m  (peek-exists:io [%& %| repo-dir])
   ;<  ~  bind:m  ?.(has (pure:m ~) (ensure-poll repo-dir))
   $(todo t.todo)
 ::  find-stock: the default-repos entry whose name matches, if any.
 ::
 ++  find-stock
-  |=  [our=@p nom=@t]
+  |=  nom=@t
   ^-  (unit stock-entry)
-  =/  todo=(list stock-entry)  (default-repos our)
+  =/  todo=(list stock-entry)  default-repos
   |-  ^-  (unit stock-entry)
   ?~  todo  ~
   ?:  =(nom (stock-name i.todo))  `i.todo
   $(todo t.todo)
-::  sync-defaults: run ensure-pairing over the whole default-repos list.
+::  sync-stock: run ensure-pairing over the stock list. Boot takes the
+::  %boot entries only; Install all on the Recommended tab takes every
+::  entry.
 ::
-++  sync-defaults
+++  sync-stock
+  |=  boot-only=?
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  our=@p  bind:m  get-our:io
-  =/  todo=(list stock-entry)  (default-repos our)
+  =/  todo=(list stock-entry)  default-repos
   |-  ^-  form:m
   ?~  todo  (pure:m ~)
+  ?:  &(boot-only !=(%boot setup.i.todo))  $(todo t.todo)
   ;<  ~  bind:m  (ensure-pairing i.todo)
   $(todo t.todo)
 ::  stock-status: the default-repos list as json, each with a `synced` flag
 ::  (its desk exists and its source is wired). Feeds the Stock tab.
 ::
+::  +forge-repos: every repo in the forge, as a source a desk can follow.
+::
+::    name   the repo without its .git_repo suffix — the desk's name
+::    code   the source road, by the forge's NAME, so it keeps resolving
+::           if the forge moves
+::    ready  the checkout has a /code directory. A repo that has never
+::           been pulled has none yet, and the UI greys it out rather
+::           than offering an install that would follow nothing.
+::
+::  No forge, or no /repos, is an empty list, not an error: a ship that
+::  has not provisioned one yet has nothing to show, which is what the
+::  tab should say.
+::
+++  forge-repos
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  ?.  ?=([~ %| *] fr)  (pure:m a+~)
+  =/  repos-dir=path  (weld p.u.fr /repos)
+  ;<  =view:nexus  bind:m  (peek-shallow:io [%& %| repos-dir] ~)
+  ?.  ?=([%ball *] view)  (pure:m a+~)
+  =/  kids=(list @ta)  ~(tap in ~(key by dir.ball.view))
+  =|  acc=(list json)
+  |-  ^-  form:m
+  ?~  kids  (pure:m a+(flop acc))
+  =/  nam=tape  (trip i.kids)
+  =/  len=@ud  (lent nam)
+  ?.  &((gth len 9) =(".git_repo" (slag (sub len 9) nam)))
+    $(kids t.kids)
+  =/  short=@t  (crip (scag (sub len 9) nam))
+  ::  a /code directory is the whole question. A repo in the forge is a git
+  ::  repo and owes this system no declaration about itself; what makes one
+  ::  offerable here is that a desk could follow it, and that means a
+  ::  checkout with /code in it. Anything else -- the ship's own source, a
+  ::  library, a repo never pulled -- is not a desk source and is not
+  ::  listed. The tab has always described itself this way.
+  ;<  has-code=?  bind:m
+    (peek-exists:io [%& %| (weld repos-dir /[i.kids]/data/tree/code)])
+  ?.  has-code  $(kids t.kids)
+  =/  one=json
+    %-  pairs:enjs:format
+    :~  ['name' s+short]
+        ['code' s+(crip "@forge/repos/{nam}/data/tree/code")]
+    ==
+  $(kids t.kids, acc [one acc])
+::
 ++  stock-status
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
-  ;<  our=@p  bind:m  get-our:io
-  =/  todo=(list stock-entry)  (default-repos our)
+  =/  todo=(list stock-entry)  default-repos
   =|  acc=(list json)
   |-  ^-  form:m
   ?~  todo  (pure:m a+(flop acc))
+  ::  only a %desk entry belongs here. A %clay entry is the ship's own
+  ::  source: it deploys by committing its tree into a Clay desk, the way
+  ::  a |commit does, and never becomes a desk at all. Listing it on a
+  ::  tab whose verb is "install" offered something that does not exist.
+  ::  Its repo mirror is the forge's business, not the desk installer's.
+  ?.  ?=(%desk -.deploy.i.todo)  $(todo t.todo)
   =/  name=@t  (stock-name i.todo)
-  =/  desk-dir=path  /apps/'shell.shell'/desks/[(cat 3 `@ta`name '.desk')]
+  =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
   ;<  src=(unit json)  bind:m
     ?.  has-desk  (pure:(fiber:fiber:nexus ,(unit json)) ~)
     (peek-as:io [%& %& desk-dir %'source.json'] ,json)
+  ::  a desk entry is set up when its desk exists and follows a source.
   =/  synced=?
     ?&  has-desk
         ?=(^ src)
@@ -2197,15 +1841,10 @@
         ?=([~ %s *] (~(get by p.u.src) 'code'))
     ==
   =/  fields=(list [@t json])
-    ?-  -.i.todo
-        %github
-      :~  ['name' s+name]  ['kind' s+'github']
-          ['repo' s+repo.i.todo]  ['ref' s+ref.i.todo]  ['synced' b+synced]
-      ==
-        %code
-      :~  ['name' s+name]  ['kind' s+'code']
-          ['code' s+code.i.todo]  ['synced' b+synced]
-      ==
+    :~  ['name' s+name]  ['title' s+title.i.todo]  ['kind' s+'github']
+        ['repo' s+repo.i.todo]  ['ref' s+ref.i.todo]  ['synced' b+synced]
+        ['setup' s+setup.i.todo]
+        ['deploy' (deploy-json deploy.i.todo)]
     ==
   $(todo t.todo, acc [(pairs:enjs:format fields) acc])
 ::  === peer-desk storefront (folded in from the retired /desks nexus) ===
@@ -2217,7 +1856,7 @@
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
   ;<  =view:nexus  bind:m
-    (peek:io [%& %| /apps/'shell.shell'/peers] ~)
+    (peek:io [%& %| /apps/shell/peers] ~)
   ?.  ?=([%ball *] view)  (pure:m a+~)
   ?~  fil.ball.view  (pure:m a+~)
   =/  entries=(list [n=@ta =sang:tarball gain=? bang=(unit tang)])
@@ -2232,14 +1871,14 @@
   =/  m  (fiber:fiber:nexus ,(map @t @t))
   ^-  form:m
   ;<  =view:nexus  bind:m
-    (peek-shallow:io [%& %| /apps/'shell.shell'/desks] ~)
+    (peek-shallow:io [%& %| /apps/shell/desks] ~)
   ?.  ?=([%ball *] view)  (pure:m ~)
   =/  kids=(list @ta)  ~(tap in ~(key by dir.ball.view))
   =|  acc=(map @t @t)
   |-
   ?~  kids  (pure:m acc)
   ;<  src=(unit json)  bind:m
-    (peek-as:io [%& %& /apps/'shell.shell'/desks/[i.kids] %'source.json'] ,json)
+    (peek-as:io [%& %& /apps/shell/desks/[i.kids] %'source.json'] ,json)
   ?~  src  $(kids t.kids)
   =/  code=@t  (jstr u.src 'code')
   ?:  =('' code)  $(kids t.kids)
@@ -2260,38 +1899,88 @@
   ^-  form:m
   =/  t=tape  (trip n)
   =/  s=@t  (crip (scag (sub (lent t) 5) t))
-  ::  the mirror holds the peer's /share/public/desks.json — an array of
-  ::  desk cards {name, dir, code}, each a desk we may install.
-  =/  entries=(list json)
+  ::  the mirror holds the peer's desk cards, enriched by the mirror
+  ::  fiber when the peer's storefront last changed; nothing here reaches
+  ::  the peer, so a dead peer costs this listing nothing
+  =/  cards=(list json)
     ?:  (is-boom:tarball sang)  ~
     =/  r=(each json tang)
       (mule |.(!<(json (need-vase:tarball sang))))
     ?:  ?=(%| -.r)  ~
     ?.  ?=(%a -.p.r)  ~
     p.p.r
-  ;<  apps=(list json)  bind:m  (peer-apps s entries srcs)
+  =/  apps=(list json)  (turn cards |=(c=json (mark-installed c srcs)))
   (pure:m (pairs:enjs:format ~[['ship' s+s] ['apps' a+apps]]))
 ::
 ++  peer-apps
-  |=  [s=@t entries=(list json) srcs=(map @t @t)]
+  |=  [s=@t entries=(list json)]
   =/  m  (fiber:fiber:nexus ,(list json))
   ^-  form:m
   ?~  entries  (pure:m ~)
-  ;<  one=json  bind:m  (peer-app s i.entries srcs)
+  ::  each card costs remote peeks into the peer; a peer that stops
+  ::  answering mid-way costs this mirror a wait and a bare card, never
+  ::  the listing
+  ;<  one=(unit json)  bind:m
+    ((with-timeout:io ,json) /enrich ~s20 (peer-app s i.entries))
+  ~?  >>  ?=(~ one)  [%shell-peer-card-timeout s (jstr i.entries 'name')]
+  =/  card=json  ?^(one u.one (bare-card s i.entries))
   ;<  rest=(list json)  bind:m  $(entries t.entries)
-  (pure:m [one rest])
+  (pure:m [card rest])
+::  +bare-card: a peer's desk card with nothing fetched from the peer:
+::  what its storefront entry alone says
+::
+++  bare-card
+  |=  [s=@t entry=json]
+  ^-  json
+  =/  ename=@t  (jstr entry 'name')
+  =/  dir=@t    (jstr entry 'dir')
+  =/  code-src=@t  (cat 3 s (jstr entry 'code'))
+  %-  pairs:enjs:format
+  :~  ['path' s+(cat 3 '/apps/shell/desks/' dir)]
+      ['name' s+ename]
+      ['title' s+ename]
+      ['info' s+'']
+      ['color' s+'']
+      ['version' ~]
+      ['icon' ~]
+      ['ship' s+s]
+      ['code' s+code-src]
+      ['source' s+code-src]
+  ==
+::  +mark-installed: a mirrored card plus whether this ship follows it
+::  (a local desk whose source is the card's code) and as what
+::
+++  mark-installed
+  |=  [card=json srcs=(map @t @t)]
+  ^-  json
+  ?.  ?=([%o *] card)  card
+  =/  src=@t  (jstr card 'source')
+  =/  loc=(unit @t)  (~(get by srcs) src)
+  :-  %o
+  %-  ~(gas by p.card)
+  :~  ['installed' b+?=(^ loc)]
+      ['local' ?~(loc ~ s+u.loc)]
+  ==
 ::  +peer-app: one published desk as a card — tile metadata and icon from
 ::  a shallow peek of its code tree, version from canonical file names.
 ::
 ++  peer-app
-  |=  [s=@t entry=json srcs=(map @t @t)]
+  |=  [s=@t entry=json]
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
   =/  dir=@t    (jstr entry 'dir')       :: the desk's dir name on the peer
   =/  ename=@t  (jstr entry 'name')      :: display name (already slugged)
-  =/  codep=@t  (jstr entry 'code')      :: "/apps/<dir>/desk/code"
+  =/  codep=@t  (jstr entry 'code')      :: "/apps/shell/desks/<dir>/desk/code"
   ?:  =('' dir)  (pure:m entry)          :: malformed card — pass through
-  =/  base=path  (weld /sys/ames/ships/[s]/root /apps/[`@ta`dir])
+  ::  the desk's root on the peer is wherever its card says the code is,
+  ::  two levels up from /desk/code: never guess the layout of their ship
+  =/  codepath=path  (fall (rush codep stap) /)
+  =/  n=@ud  (lent codepath)
+  =/  desk-root=path
+    ?.  &((gth n 2) =(/desk/code (slag (sub n 2) codepath)))
+      /apps/shell/desks/[`@ta`dir]
+    `path`(scag (sub n 2) codepath)
+  =/  base=path  (weld /sys/ames/ships/[s]/root desk-root)
   ;<  cv=view:nexus  bind:m
     (peek-shallow:io [%& %| (weld base /desk/code)] ~)
   =/  [title=@t info=@t color=@t icon=(unit @ta)]
@@ -2325,7 +2014,7 @@
   =/  code-src=@t  (cat 3 s codep)
   %-  pure:m
   %-  pairs:enjs:format
-  :~  ['path' s+(cat 3 '/apps/' dir)]
+  :~  ['path' s+(spat desk-root)]
       ['name' s+ename]
       ['title' s+title]
       ['info' s+info]
@@ -2335,8 +2024,6 @@
       ['ship' s+s]
       ['code' s+code-src]
       ['source' s+code-src]
-      ['installed' b+(~(has by srcs) code-src)]
-      ['local' ?~((~(get by srcs) code-src) ~ s+(need (~(get by srcs) code-src)))]
   ==
 ::  +try-version: a remote desk's version through canonical file names,
 ::  since its root is not listable.
@@ -2345,7 +2032,10 @@
   |=  base=path
   =/  m  (fiber:fiber:nexus ,(unit @t))
   ^-  form:m
-  =/  names=(list @ta)  ~[%'version.txt' %'version.ud' %'version.json']
+  ::  a desk's root version.json is the one a peer's share grants a read
+  ::  on; the older spellings are tried only after it, so a published desk
+  ::  costs one peek and no vetoes
+  =/  names=(list @ta)  ~[%'version.json' %'version.txt' %'version.ud']
   |-  ^-  form:m
   ?~  names  (pure:m ~)
   ;<  vv=view:nexus  bind:m  (peek:io [%& %& base i.names] ~)
@@ -2353,6 +2043,22 @@
   ?:  (is-boom:tarball sang.vv)  $(names t.names)
   =/  nun  (sang-noun:tarball sang.vv)
   ?+    p.sang.vv  $(names t.names)
+      [~ %json]
+    =/  j  ((soft json) nun)
+    ?~  j  $(names t.names)
+    =/  v=(unit @t)  (version-in-json u.j)
+    ?~  v  $(names t.names)
+    (pure:m v)
+      ::  a desk mirrors its source's version file as it found it; a
+      ::  source kept as raw text holds the same json in mime
+      [~ %mime]
+    =/  mm  ((soft mime) nun)
+    ?~  mm  $(names t.names)
+    =/  j=(unit json)  (de:json:html q.q.u.mm)
+    ?~  j  $(names t.names)
+    =/  v=(unit @t)  (version-in-json u.j)
+    ?~  v  $(names t.names)
+    (pure:m v)
       [~ %ud]
     =/  x  ((soft @ud) nun)
     ?~  x  $(names t.names)
@@ -2362,6 +2068,18 @@
     ?~  w  $(names t.names)
     ?~  u.w  $(names t.names)
     (pure:m `i.u.w)
+  ==
+::  +version-in-json: the `version` of a version.json, as text
+::
+++  version-in-json
+  |=  j=json
+  ^-  (unit @t)
+  ?.  ?=([%o *] j)  ~
+  =/  v=(unit json)  (~(get by p.j) 'version')
+  ?~  v  ~
+  ?+  -.u.v  ~
+    %n  `p.u.v
+    %s  `p.u.v
   ==
 ::  +jstr: a string field from a json object, '' if absent.
 ::
@@ -2378,7 +2096,7 @@
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
   ;<  =view:nexus  bind:m
-    (peek:io [%& %| /apps/'shell.shell'/desks] ~)
+    (peek:io [%& %| /apps/shell/desks] ~)
   ?.  ?=([%ball *] view)  (pure:m a+~)
   =/  apps=(list @ta)  ~(tap in ~(key by dir.ball.view))
   ;<  cards=(list json)  bind:m  (gather-desks apps)
@@ -2398,15 +2116,19 @@
   =/  m  (fiber:fiber:nexus ,(unit json))
   ^-  form:m
   ;<  sj=(unit json)  bind:m
-    (peek-as:io [%& %& /apps/'shell.shell'/desks/[app] %'source.json'] ,json)
+    (peek-as:io [%& %& /apps/shell/desks/[app] %'source.json'] ,json)
   =/  code=@t  ?~(sj '' (jstr u.sj 'code'))
-  ::  publishing + source editing live in the desk's OWN page now; this list
-  ::  is just navigation, so it carries name, source, and a link to the page.
+  ::  share: the usergroups this desk is published to (its share set),
+  ::  so the Installed tab can show and change who may follow it
+  ;<  shr=(unit (set path))  bind:m
+    (peek-as:io [%& %& /apps/shell/desks/[app] %'share.usergroups'] ,(set path))
+  =/  groups=(list path)  (sort ~(tap in (fall shr ~)) aor)
   %-  pure:m  :-  ~
   %-  pairs:enjs:format
   :~  ['name' s+app]
       ['source' ?:(=('' code) ~ s+code)]
       ['url' s+(cat 3 '/grubbery/desk/' (app-slug app))]
+      ['share' a+(turn groups |=(g=path s+(spat g)))]
   ==
 ::  +desk-suffix: the extension after the last dot ('foo.desk' -> 'desk').
 ::
@@ -2467,12 +2189,32 @@
 ++  peer-pub-road
   |=  s=@t
   ^-  road:tarball
+  [%& %& /sys/ames/ships/[s]/root/apps/shell/share/public %'desks.json']
+::  +peer-pub-road-legacy: the same storefront on a peer whose shell is
+::  still a desk app at /apps/shell.shell.
+::
+++  peer-pub-road-legacy
+  |=  s=@t
+  ^-  road:tarball
   [%& %& /sys/ames/ships/[s]/root/apps/'shell.shell'/share/public %'desks.json']
+::  +take-pub-news: wake on news from either storefront keep.
+::
+++  take-pub-news
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  |=  input:fiber:nexus
+  :+  ~  q.state
+  ?+  in  [%skip ~]
+      ~  [%wait ~]
+      [~ %news * *]
+    ?:  |(=(/pub wire.u.in) =(/pub-legacy wire.u.in))  [%done ~]
+    [%skip ~]
+  ==
 ::
 ++  jget
   |=  [j=json k=@t]
   ^-  (unit @t)
-  ?.  ?=(%o -.j)  ~
+  ?.  ?=([%o *] j)  ~
   =/  v  (~(get by p.j) k)
   ?.(?=([~ %s *] v) ~ `p.u.v)
 ::  +suppress-alias: hide an app-declared option (alias name + path) from
@@ -2525,34 +2267,68 @@
     (unsuppress-alias hidden alias path)
   ;<  ~  bind:m  (put:io (nex-road:io rail [%& /permit %'hidden.json']) [[/ %json] next])
   (build-asks rail)
-::  +read-shares: permit/share.json inverted for granting — usergroup
-::  path -> set of /sys/link dest.lanes roads it may peek.
+::  +carry-links: the record was permit/links.json before it was
+::  permit/link.json, to match the link.json an app declares. The shares
+::  in it are the user's decisions and cannot be recomputed, so they are
+::  carried over once and the old grub culled. Delete this when no ship
+::  is still holding the plural name.
+::
+++  carry-links
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  old=road:tarball  (nex-road:io rail [%& /permit %'links.json'])
+  ;<  ov=(unit json)  bind:m  (peek-as:io old ,json)
+  ?.  ?=([~ %o ^] ov)  (pure:m ~)
+  ;<  cur=(map @t json)  bind:m  (read-links rail)
+  ;<  ~  bind:m
+    ?^  cur  (pure:m ~)
+    (put:io (nex-road:io rail [%& /permit %'link.json']) [[/ %json] u.ov])
+  ;<  *  bind:m  (cull-soft:io old)
+  (pure:m ~)
+::  +read-links: the user's link record, permit/link.json, by bare name.
+::
+++  read-links
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(map @t json))
+  ^-  form:m
+  ;<  lv=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /permit %'link.json']) ,json)
+  (pure:m ?~(lv ~ ?.(?=(%o -.u.lv) ~ p.u.lv)))
+::  +bare-name: a name without its @ — the key links.json uses.
+::
+++  bare-name
+  |=  nm=@t
+  ^-  @t
+  =/  t=tape  (trip nm)
+  ?~(t nm ?:(=('@' i.t) (crip t.t) nm))
+::  +link-groups: the usergroups one link record entry is open to.
+::
+++  link-groups
+  |=  e=json
+  ^-  (list path)
+  ?.  ?=(%o -.e)  ~
+  =/  v  (~(get by p.e) 'share')
+  ?:  ?=([~ %s *] v)
+    ?:(=('public' p.u.v) ~[/public] (drop (soft-path p.u.v)))
+  ?.  ?=([~ %a *] v)  ~
+  (murn p.u.v |=(g=json ?.(?=([%s *] g) ~ (soft-path p.g))))
+::  +read-shares: the link record inverted for granting — usergroup path
+::  -> the /sys/link dest.lanes roads it may peek. A name's share is a
+::  property of the NAME: one road, one record, whoever asked for it.
 ::
 ++  read-shares
   |=  [rail=rail:tarball nex-dir=path]
   =/  m  (fiber:fiber:nexus ,(map path (set road:tarball)))
   ^-  form:m
-  ;<  sv=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /permit %'share.json']) ,json)
-  =/  jon=json  (fall sv [%o ~])
-  ?.  ?=(%o -.jon)  (pure:m ~)
-  =|  out=(map path (set road:tarball))
-  =/  entries=(list [al=@t v=json])  ~(tap by p.jon)
-  |-  ^-  form:m
-  ?~  entries  (pure:m out)
-  =/  road=road:tarball  (link-road al.i.entries)
-  =/  grps=(list path)
-    ?:  ?=([%s *] v.i.entries)
-      ?:  =('public' p.v.i.entries)  ~[/public]
-      (drop (soft-path p.v.i.entries))
-    ?.  ?=([%a *] v.i.entries)  ~
-    %+  murn  p.v.i.entries
-    |=(g=json ?.(?=([%s *] g) ~ (soft-path p.g)))
-  =/  o=(map path (set road:tarball))
-    %+  roll  grps
-    |=  [g=path acc=_out]
-    (~(put by acc) g (~(put in (fall (~(get by acc) g) ~)) road))
-  $(entries t.entries, out o)
+  ;<  links=(map @t json)  bind:m  (read-links rail)
+  %-  pure:m
+  %+  roll  ~(tap by links)
+  |=  [[nm=@t e=json] out=(map path (set road:tarball))]
+  =/  road=road:tarball  (link-road (cat 3 '@' nm))
+  %+  roll  (link-groups e)
+  |=  [g=path acc=_out]
+  (~(put by acc) g (~(put in (fall (~(get by acc) g) ~)) road))
 ::  +read-approved: the permit/approved grub — the map of app path -> its
 ::  consented manifest. The system of record for present grant state.
 ::
@@ -2589,7 +2365,7 @@
   (resolve-link-at:io '@notifications' [%& / %'main.sig'])
 ::  +register-notify: register the shell with the notifications nexus so
 ::  its notify pokes are accepted (senders must be registered). Poke-soft
-::  so a failed registration is logged, not fatal — re-run on every rise.
+::  so a failed registration is logged, not fatal — re-run on every reload.
 ::
 ++  register-notify
   |=  rail=rail:tarball
@@ -2617,7 +2393,33 @@
   ?&  (same (road-strs a 'poke') (road-strs b 'poke'))
       (same (road-strs a 'peek') (road-strs b 'peek'))
       (same (road-strs a 'make') (road-strs b 'make'))
+      (same (road-strs a 'groups') (road-strs b 'groups'))
+      =((name-shares a) (name-shares b))
   ==
+::  +name-shares: the ask's `names` as a comparable list — each claimed
+::  name with the groups it asks to be opened to, both sorted. A change
+::  here is a change of audience, so it reopens the ask like any road.
+::
+++  name-shares
+  |=  a=json
+  ^-  (list [@t (list @t)])
+  =/  v  ?.(?=(%o -.a) ~ (~(get by p.a) 'names'))
+  ?.  ?=([~ %a *] v)  ~
+  %+  sort
+    %+  murn  p.u.v
+    |=  n=json
+    ^-  (unit [@t (list @t)])
+    ?.  ?=(%o -.n)  ~
+    =/  al=@t  (fall (jget n 'alias') '')
+    ?:  =('' al)  ~
+    =/  gs  (~(get by p.n) 'groups')
+    :-  ~
+    :-  al
+    %+  sort
+      ?.  ?=([~ %a *] gs)  ~
+      (murn p.u.gs |=(g=json ?.(?=([%s *] g) ~ `p.g)))
+    aor
+  |=([x=[al=@t *] y=[al=@t *]] (aor al.x al.y))
 ::
 ++  is-settled
   |=  [ask=json approved=(map @t json)]
@@ -2649,9 +2451,9 @@
   ^-  form:m
   =/  pax=path  (fall (soft-path app) /unknown)
   ::  desk-nested apps keep their nested identity in the title:
-  ::  /apps/shell.shell/desks/<desk>/desk/data/<app> -> "<desk>/<app>".
+  ::  /apps/shell/desks/<desk>/desk/data/<app> -> "<desk>/<app>".
   =/  nm=@t
-    ?:  ?=([%apps %'shell.shell' %desks @ %desk %data @ ~] pax)
+    ?:  ?=([%apps %shell %desks @ %desk %data @ ~] pax)
       (rap 3 (app-slug i.t.t.t.pax) '/' (app-slug i.t.t.t.t.t.t.pax) ~)
     (app-slug (rear pax))
   =/  meta=json
@@ -2687,28 +2489,74 @@
   =/  granted=json  (fall (~(get by p.jon) 'granted') [%o ~])
   ?:  ?&(=('approve-weir' act) ?!(=('' app)))
     ;<  hidden=json  bind:m  (read-hidden rail)
-    (do-approve-weir rail app picks granted hidden now)
+    ;<  ~  bind:m  (do-approve-weir rail app picks granted hidden now)
+    ::  the name shares the user ticked, into the one record that holds
+    ::  them. A name the app declared and the user left empty is closed.
+    =/  shares=json  (fall (~(get by p.jon) 'shares') [%o ~])
+    ?.  ?=(%o -.shares)  (pure:m ~)
+    (set-link-shares rail ~(tap by p.shares))
   ?:  ?&(=('deny-weir' act) ?!(=('' app)))
     (do-deny-weir rail app now)
   ?:  =('alias-share' act)
     ?:  =('' alias)  (pure:m ~)
-    ;<  sv=(unit json)  bind:m
-      (peek-as:io (nex-road:io rail [%& /permit %'share.json']) ,json)
-    =/  cur=json  (fall sv [%o ~])
-    =/  mp=(map @t json)  ?.(?=(%o -.cur) ~ p.cur)
-    =/  share=(unit json)  (~(get by p.jon) 'share')
-    =/  nxt=(map @t json)
-      ?~  share  (~(del by mp) alias)
-      ?:  ?=(~ u.share)  (~(del by mp) alias)
-      (~(put by mp) alias u.share)
-    ::  writing share.json IS the nudge; grants re-apply on the news.
-    (put:io (nex-road:io rail [%& /permit %'share.json']) [[/ %json] [%o nxt]])
+    (set-link-shares rail ~[[alias (fall (~(get by p.jon) 'share') ~)]])
+  ::  a name of your own: {alias, path} points it, {alias} alone drops it
+  ?:  =('link-set' act)
+    ?:  =('' alias)  (pure:m ~)
+    (set-user-link rail alias ?:(=('' path) ~ `path))
   ?:  ?&  ?|(=('alias-suppress' act) =('alias-unsuppress' act))
           ?!(=('' alias))
           ?!(=('' path))
       ==
     (do-suppress rail alias path =('alias-suppress' act))
   (pure:m ~)
+::  +set-link-shares: record which usergroups may resolve each name, in
+::  permit/link.json. An empty list closes the name; an entry left with
+::  neither a share nor a path of yours goes. Writing the record IS the
+::  nudge: usergroups.sig re-derives the group grants on the news.
+::
+++  set-link-shares
+  |=  [rail=rail:tarball shares=(list [name=@t groups=json])]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  cur=(map @t json)  bind:m  (read-links rail)
+  =/  nxt=(map @t json)
+    %+  roll  shares
+    |=  [[name=@t groups=json] acc=_cur]
+    =/  key=@t  (bare-name name)
+    =/  e=(map @t json)
+      =/  g  (~(get by acc) key)
+      ?.(?=([~ %o *] g) ~ p.u.g)
+    =/  empty=?  |(?=(~ groups) &(?=([%a *] groups) =(~ p.groups)))
+    =/  e2=(map @t json)
+      ?:(empty (~(del by e) 'share') (~(put by e) 'share' groups))
+    ?:(=(~ e2) (~(del by acc) key) (~(put by acc) key [%o e2]))
+  ?:  =(nxt cur)  (pure:m ~)
+  (put:io (nex-road:io rail [%& /permit %'link.json']) [[/ %json] [%o nxt]])
+::  +set-user-link: declare a name of your own, pointing at a path, or
+::  drop that declaration (path=~). Its share, if any, stays.
+::
+++  set-user-link
+  |=  [rail=rail:tarball name=@t path=(unit @t)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  cur=(map @t json)  bind:m  (read-links rail)
+  =/  key=@t  (bare-name name)
+  =/  e=(map @t json)
+    =/  g  (~(get by cur) key)
+    ?.(?=([~ %o *] g) ~ p.u.g)
+  =/  e2=(map @t json)
+    ?~  path  (~(del by e) 'path')
+    (~(put by e) 'path' s+u.path)
+  =/  nxt=(map @t json)
+    ?:(=(~ e2) (~(del by cur) key) (~(put by cur) key [%o e2]))
+  ?:  =(nxt cur)  (pure:m ~)
+  ;<  ~  bind:m
+    (put:io (nex-road:io rail [%& /permit %'link.json']) [[/ %json] [%o nxt]])
+  ::  a name nobody claims any more leaves no /sys/link behind
+  ;<  ~  bind:m  (build-links rail)
+  ;<  ~  bind:m  (build-aliases rail)
+  (build-asks rail)
 ::  +parse-road: road text -> a road. trailing slash = directory, no
 ::  slash = file; leading ../ climbs out (one step each). Same as desks.
 ::
@@ -2743,6 +2591,9 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ;<  pv=view:nexus  bind:m  (peek:io (peer-pub-road s) ~)
+  ;<  pv=view:nexus  bind:m
+    ?:  ?=([%file *] pv)  (pure:(fiber:fiber:nexus ,view:nexus) pv)
+    (peek:io (peer-pub-road-legacy s) ~)
   ?.  ?=([%file *] pv)
     ~&  >>  [%shell-peer-unreachable s]
     (pure:m ~)
@@ -2750,7 +2601,12 @@
   =/  res=(each json tang)
     (mule |.(!<(json (need-vase:tarball sang.pv))))
   ?:  ?=(%| -.res)  (pure:m ~)
-  (replace:io p.res)
+  ::  the storefront names desks; the cards other pages show need the
+  ::  peer's tile, icon and version too. Fetch them HERE, once per change
+  ::  of the storefront, so the listing endpoint reads only this mirror.
+  =/  entries=(list json)  ?.(?=([%a *] p.res) ~ p.p.res)
+  ;<  cards=(list json)  bind:m  (peer-apps s entries)
+  (replace:io a+cards)
 ::
 +$  tile
   $:  name=@ta
@@ -2759,16 +2615,59 @@
       color=@t
       image=@t
       href=@t
+      ::  which launcher tab the tile sits in: 'app', 'utility' or
+      ::  'other'. A tile.json that does not say lands in 'other' — the
+      ::  junk drawer is the nudge to declare one. Tiles the shell itself
+      ::  ships set theirs; see the seed constructors below.
+      kind=@t
+      ::  system-owned: a tile the shell itself ships and the loader keeps
+      ::  current (%over), not a user's pinned link. The card shows its
+      ::  source as "grubbery" and withholds edit/delete — the constructor
+      ::  is the source of truth, so a hand edit would just revert on load.
+      own=?
   ==
 ::
+::  the seed local tile
+++  landscape-tile
+  ^-  json
+  %-  pairs:enjs:format
+  :~  title+s+'Landscape'
+      info+s+'Tlon'
+      color+s+'#1a1a1a'
+      href+s+'/apps/landscape'
+      image+s+'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Urbit_Logo.svg/3840px-Urbit_Logo.svg.png'
+      kind+s+'utility'
+      own+b+&
+  ==
+++  forge-tile
+  ^-  json
+  %-  pairs:enjs:format
+  :~  title+s+'Forge'
+      info+s+'git repos'
+      color+s+'#3d3a45'
+      href+s+'/grubbery/forge'
+      image+s+'/grubbery/tiles/icon/apps/shell/forge'
+      kind+s+'app'
+      own+b+&
+  ==
+++  github-tile
+  ^-  json
+  %-  pairs:enjs:format
+  :~  title+s+'GitHub'
+      info+s+'The ship\'s GitHub proxy'
+      color+s+'#24292f'
+      href+s+'/grubbery/github'
+      image+s+'/grubbery/tiles/icon/apps/shell/forge/github'
+      kind+s+'utility'
+      own+b+&
+  ==
 ::  each local tile is its own subdir /tiles/<name>/ holding tile.json
-::  (and optionally icon.svg); the tile's name is the subdir name.
+::  (and optionally icon.svg); the tile's name is the subdir name. They
+::  live in the shell's own root.
 ++  read-local-tiles
   =/  m  (fiber:fiber:nexus ,(list tile))
   ^-  form:m
-  ;<  tl=(unit lane:tarball)  bind:m  (resolve-link:io '@tiles')
-  ?.  ?=([~ %| *] tl)  (pure:m ~)
-  =/  tiles-root=path  p.u.tl
+  =/  tiles-root=path  /apps/shell
   ;<  =view:nexus  bind:m  (peek:io [%& %| (weld tiles-root /tiles)] ~)
   ?.  ?=([%ball *] view)
     (pure:m ~)
@@ -2790,8 +2689,33 @@
   ^-  (unit tile)
   =/  jon=(unit json)  (mole |.(!<(json (need-vase:tarball sang))))
   ?~  jon  ~
-  ?.  ?=(%o -.u.jon)  ~
-  =/  m  p.u.jon
+  (tile-from-json name u.jon)
+::  +tiles-from-sang: an app's tile.json as its tiles. One object is one
+::  tile, named by the app's slug; an array is several, the first named
+::  by the slug (the app's own tile, the one its icon file dresses) and
+::  the rest <slug>-2, <slug>-3, ... so each can be hidden on its own.
+::  An app housing more than one surface (the forge and its github
+::  proxy) puts a tile on the home page for each.
+::
+++  tiles-from-sang
+  |=  [slug=@ta =sang:tarball]
+  ^-  (list tile)
+  =/  jon=(unit json)  (mole |.(!<(json (need-vase:tarball sang))))
+  ?~  jon  ~
+  ?:  ?=(%o -.u.jon)  (drop (tile-from-json (crip "{(trip slug)}.json") u.jon))
+  ?.  ?=(%a -.u.jon)  ~
+  =/  n=@ud  1
+  |-  ^-  (list tile)
+  ?~  p.u.jon  ~
+  =/  name=@ta  ?:(=(1 n) (crip "{(trip slug)}.json") (crip "{(trip slug)}-{(a-co:co n)}.json"))
+  =/  one=(unit tile)  (tile-from-json name i.p.u.jon)
+  =/  rest  $(p.u.jon t.p.u.jon, n +(n))
+  ?~(one rest [u.one rest])
+++  tile-from-json
+  |=  [name=@ta jon=json]
+  ^-  (unit tile)
+  ?.  ?=(%o -.jon)  ~
+  =/  m  p.jon
   :-  ~
   :*  name
       (fall (bind (~(get by m) 'title') |=(=json ?>(?=(%s -.json) p.json))) '')
@@ -2799,27 +2723,29 @@
       (fall (bind (~(get by m) 'color') |=(=json ?>(?=(%s -.json) p.json))) '#333')
       (fall (bind (~(get by m) 'image') |=(=json ?>(?=(%s -.json) p.json))) '')
       (fall (bind (~(get by m) 'href') |=(=json ?>(?=(%s -.json) p.json))) '')
+      ::  no 'kind' means 'other' — an undeclared tile lands in the junk
+      ::  drawer until its tile.json says app or utility.
+      (fall (bind (~(get by m) 'kind') |=(=json ?>(?=(%s -.json) p.json))) 'other')
+      ::  'own' marks a shell-shipped tile; a user's pinned link has none.
+      (fall (bind (~(get by m) 'own') |=(=json ?>(?=(%b -.json) p.json))) %.n)
   ==
 ::
 ++  read-app-tiles
   =/  m  (fiber:fiber:nexus ,(list [tile path]))
   ^-  form:m
-  ;<  roots=(list path)  bind:m  app-roots
+  ;<  roots=(list path)  bind:m  all-app-roots
   =|  acc=(list [tile path])
   |-  ^-  form:m
   ?~  roots  (pure:m (flop acc))
   =/  root=path  i.roots
   =/  leaf=@ta  (rear root)
-  ?:  =('tiles.tiles' leaf)
-    $(roots t.roots)
   =/  slug=@ta  (app-slug leaf)
   ;<  kid-view=view:nexus  bind:m
     (peek:io [%& %& [root %'tile.json']] `[/ %json])
   ?.  ?=([%file *] kid-view)
     $(roots t.roots)
-  =/  tile-name=@ta  (crip "{(trip slug)}.json")
-  =/  made=(unit tile)  (json-to-tile tile-name sang.kid-view)
-  ?~  made  $(roots t.roots)
+  =/  tiles=(list tile)  (tiles-from-sang slug sang.kid-view)
+  ?~  tiles  $(roots t.roots)
   ::  an app that ships an icon file gets it as the tile image, addressed
   ::  by its full nexus-root path.
   ;<  kid-root=view:nexus  bind:m  (peek-shallow:io [%& %| root] ~)
@@ -2838,10 +2764,13 @@
     ?:  ?=([%apps @ %desk %data @ ~] root)  ~[i.t.root i.t.t.t.t.root]
     ?:  ?=([%apps @ ~] root)  ~[i.t.root]
     root
-  =/  til=tile
-    ?~  icon  u.made
-    u.made(image (crip "/grubbery/tiles/icon{(spud icon-segs)}"))
-  $(roots t.roots, acc [[til root] acc])
+  ::  the app's own tile (the first) wears its icon; the others keep the
+  ::  image they declared
+  =/  first=tile
+    ?~  icon  i.tiles
+    i.tiles(image (crip "/grubbery/tiles/icon{(spud icon-segs)}"))
+  =/  more=(list [tile path])  (turn t.tiles |=(t=tile [t root]))
+  $(roots t.roots, acc (weld (flop more) [[first root] acc]))
 ::
 ++  app-slug
   |=  name=@ta
@@ -2859,27 +2788,38 @@
 ++  app-roots
   =/  m  (fiber:fiber:nexus ,(list path))
   ^-  form:m
-  ::  built-in apps: every direct child of /apps (no neck check needed)
+  ::  USER DESKS ONLY. The shell manages discovery + approval for apps the
+  ::  user chose to install; built-ins are the trusted tier — they declare
+  ::  their /sys/link names in root.hoon and run open, so the shell never
+  ::  scans /apps root, follows them, or asks about them. Each desk wrapper's
+  ::  real apps are the children of its /desk/data (what apply-bill creates).
+  ;<  dv=view:nexus  bind:m
+    (peek-shallow:io [%& %| /apps/shell/desks] ~)
+  ?.  ?=([%ball *] dv)  (pure:m ~)
+  =/  desks=(list @ta)  ~(tap in ~(key by dir.ball.dv))
+  =|  out=(list path)
+  |-  ^-  form:m
+  ?~  desks  (pure:m (flop out))
+  ;<  sv=view:nexus  bind:m
+    (peek-shallow:io [%& %| /apps/shell/desks/[i.desks]/desk/data] ~)
+  =/  subs=(list path)
+    ?.  ?=([%ball *] sv)  ~
+    %+  turn  ~(tap in ~(key by dir.ball.sv))
+    |=(sub=@ta /apps/shell/desks/[i.desks]/desk/data/[sub])
+  $(desks t.desks, out (weld subs out))
+::  +all-app-roots: built-ins (every direct child of /apps) PLUS user desks.
+::  Only the tile reader uses this — a home-page tile is benign UI, so built-in
+::  apps (forge, …) surface theirs too; the discovery/approval machinery stays
+::  desks-only (+app-roots).
+++  all-app-roots
+  =/  m  (fiber:fiber:nexus ,(list path))
+  ^-  form:m
   ;<  av=view:nexus  bind:m  (peek-shallow:io [%& %| /apps] ~)
   =/  builtins=(list path)
     ?.  ?=([%ball *] av)  ~
     (turn ~(tap in ~(key by dir.ball.av)) |=(k=@ta /apps/[k]))
-  ::  desk apps: each child of /desks is a desk wrapper; its real apps
-  ::  are the children of /desk/data (what apply-bill creates).
-  ;<  dv=view:nexus  bind:m
-    (peek-shallow:io [%& %| /apps/'shell.shell'/desks] ~)
-  ?.  ?=([%ball *] dv)  (pure:m builtins)
-  =/  desks=(list @ta)  ~(tap in ~(key by dir.ball.dv))
-  =|  out=(list path)
-  |-  ^-  form:m
-  ?~  desks  (pure:m (weld builtins (flop out)))
-  ;<  sv=view:nexus  bind:m
-    (peek-shallow:io [%& %| /apps/'shell.shell'/desks/[i.desks]/desk/data] ~)
-  =/  subs=(list path)
-    ?.  ?=([%ball *] sv)  ~
-    %+  turn  ~(tap in ~(key by dir.ball.sv))
-    |=(sub=@ta /apps/'shell.shell'/desks/[i.desks]/desk/data/[sub])
-  $(desks t.desks, out (weld subs out))
+  ;<  desks=(list path)  bind:m  app-roots
+  (pure:m (weld builtins desks))
 ::  +read-app-aliases: scan every app root (descending desks) for its
 ::  link.json, building @name -> menu options. Each root is a nexus; its
 ::  option path is the nexus root. `name` may be a string or a list of
@@ -2907,20 +2847,40 @@
     ?.  ?=(%a -.u.nv)  ~
     (murn p.u.nv |=(j=json ?.(?=(%s -.j) ~ `p.j)))
   ?:  =(~ names)  $(roots t.roots)
-  =/  opt=json
+  ::  an option: `path` is where the name points, `app` the app that
+  ::  claims it (the approval is the app's). The app's own name points at
+  ::  its root; an alias (`aliases: [{name, path, description}]`) points at
+  ::  a place INSIDE the app, so one app can claim several names: the
+  ::  forge claims @github for the github proxy it houses at /github.
+  =/  opt
+    |=  [sub=path desc=@t]
+    ^-  json
     %-  pairs:enjs:format
-    :~  ['path' s+(crip (spud root))]
-        ['description' s+(fall (jget u.jon 'description') '')]
+    :~  ['path' s+(crip (spud (weld root sub)))]
+        ['app' s+(crip (spud root))]
+        ['description' s+desc]
         ['source' s+src]
     ==
+  =/  claims=(list [nm=@t o=json])
+    %+  weld
+      (turn names |=(n=@t [n (opt / (fall (jget u.jon 'description') ''))]))
+    %+  murn
+      =/  al  (~(get by p.u.jon) 'aliases')
+      ?.(?=([~ %a *] al) ~ p.u.al)
+    |=  a=json
+    ^-  (unit [@t json])
+    =/  n=@t  (fall (jget a 'name') '')
+    =/  sub=(unit path)  (rush (fall (jget a 'path') '/') stap)
+    ?:  |(=('' n) ?=(~ sub))  ~
+    `[n (opt u.sub (fall (jget a 'description') ''))]
   =/  acc2=(map @t (list json))
-    =/  ns=(list @t)  names
+    =/  cs=(list [nm=@t o=json])  claims
     =/  a=(map @t (list json))  acc
     |-  ^-  (map @t (list json))
-    ?~  ns  a
-    =/  aname=@t  (cat 3 '@' i.ns)
+    ?~  cs  a
+    =/  aname=@t  (cat 3 '@' nm.i.cs)
     =/  cur=(list json)  (fall (~(get by a) aname) ~)
-    $(ns t.ns, a (~(put by a) aname (snoc cur opt)))
+    $(cs t.cs, a (~(put by a) aname (snoc cur o.i.cs)))
   $(roots t.roots, acc acc2)
 ::  +build-alias-menus: the full alias directory as menus. Merges the
 ::  app-scanned options with the user's stored aliases (each a `you`-
@@ -2928,11 +2888,75 @@
 ::  source}, ...]}. Stored user options are authoritative; app options
 ::  are derived. This is what the permission manager renders.
 ::
+::  +read-link-names: every name /sys/link actually holds, and where it
+::  points. THE RECORD IS THE ANSWER: a name resolves because it is in
+::  /sys/link, not because an app claimed it in a link.json, and the
+::  built-in nexuses (notifications, explorer, forge, …) register theirs
+::  there directly. Reading claimants alone left those names invisible —
+::  resolvable by the kernel, unresolvable to this page.
+::
+++  read-link-names
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(map @t (list json)))
+  ^-  form:m
+  ;<  lv=view:nexus  bind:m  (peek-shallow:io [%& %| /sys/link] ~)
+  ?.  ?=([%ball *] lv)  (pure:m ~)
+  =/  names=(list @ta)  ~(tap in ~(key by dir.ball.lv))
+  =|  acc=(map @t (list json))
+  |-  ^-  form:m
+  ?~  names  (pure:m acc)
+  ;<  dest=(unit lane:tarball)  bind:m  (resolve-link:io (cat 3 '@' i.names))
+  ?.  ?=([~ %| *] dest)  $(names t.names)
+  =/  pax=@t  (crip (spud p.u.dest))
+  =/  opt=json
+    %-  pairs:enjs:format
+    :~  ['path' s+pax]
+        ['app' s+pax]
+        ['description' s+'a name the link record holds']
+        ['source' s+'link']
+    ==
+  $(names t.names, acc (~(put by acc) (cat 3 '@' i.names) ~[opt]))
+::  +read-aliases: the whole alias directory — what /sys/link holds,
+::  what apps claim on top of it, and the names you declare in
+::  permit/link.json. Yours lead, so a name you point resolves your way
+::  by default.
+::
+++  read-aliases
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(map @t (list json)))
+  ^-  form:m
+  ;<  links=(map @t json)  bind:m  (read-links rail)
+  ;<  held=(map @t (list json))  bind:m  (read-link-names rail)
+  ;<  claimed=(map @t (list json))  bind:m  read-app-aliases
+  ::  a claimant says more about a name than the bare record does, so it
+  ::  leads; the record's own option stays behind it, and a name nobody
+  ::  claims is still a name.
+  =/  apps=(map @t (list json))
+    %-  ~(uni by held)
+    %-  ~(urn by claimed)
+    |=  [nm=@t opts=(list json)]
+    =/  from-link=(list json)  (fall (~(get by held) nm) ~)
+    =/  seen=(set @t)  (silt (turn opts |=(o=json (fall (jget o 'path') ''))))
+    (weld opts (skip from-link |=(o=json (~(has in seen) (fall (jget o 'path') '')))))
+  %-  pure:m
+  %+  roll  ~(tap by links)
+  |=  [[nm=@t e=json] acc=_apps]
+  =/  pax=@t  ?.(?=(%o -.e) '' (fall (jget e 'path') ''))
+  ?:  =('' pax)  acc
+  =/  aname=@t  (cat 3 '@' nm)
+  =/  opt=json
+    %-  pairs:enjs:format
+    :~  ['path' s+pax]
+        ['app' s+'']
+        ['description' s+'a name you declared']
+        ['source' s+'you']
+    ==
+  (~(put by acc) aname [opt (fall (~(get by acc) aname) ~)])
 ++  build-alias-menus
-  |=  [suppressed=json show-hidden=?]
+  |=  [rail=rail:tarball suppressed=json show-hidden=?]
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
-  ;<  menus=(map @t (list json))  bind:m  read-app-aliases
+  ;<  menus=(map @t (list json))  bind:m  (read-aliases rail)
   ::  suppressed (hidden) options: for the directory view (show-hidden)
   ::  they stay, marked `hidden`, so they can be un-hidden; for resolution
   ::  they're dropped (a hidden option is never offered / resolvable).
@@ -2968,257 +2992,6 @@
   ^-  path
   =/  bare=tape  ?~((trip nm) ~ (slag 1 (trip nm)))
   (weld /sys/link (stab (crip (weld "/" bare))))
-::  +json-strs: the string elements of a (unit json) array, in order.
-::
-++  json-strs
-  |=  j=(unit json)
-  ^-  (list @t)
-  ?~  j  ~
-  ?.  ?=([%a *] u.j)  ~
-  (murn p.u.j |=(x=json ?:(?=([%s *] x) `p.x ~)))
-::  +colls: parse targets.json into the collection registry. Each entry is
-::  {name, docs, sources}: `name` is the collection's identity (its URL key),
-::  `docs` the namespace dir its handbook prose lives in, `sources` the tagged
-::  source roots it documents. A live block or scope selector names a source by
-::  its tag as the leading path segment (/gub/lib/build.hoon), so the tag is
-::  literally where that source mounts under the collection's mirror.
-++  colls
-  |=  j=(unit json)
-  ^-  (list [name=@t docs=path sources=(list [tag=@t path=path])])
-  ?~  j  ~
-  ?.  ?=([%a *] u.j)  ~
-  %+  murn  p.u.j
-  |=  x=json
-  ^-  (unit [name=@t docs=path sources=(list [tag=@t path=path])])
-  ?.  ?=([%o *] x)  ~
-  =/  nm  (~(get by p.x) 'name')
-  ?.  ?=([~ %s *] nm)  ~
-  =/  dc  (~(get by p.x) 'docs')
-  =/  docs=path  ?.(?=([~ %s *] dc) ~ (stab p.u.dc))
-  =/  sj  (~(get by p.x) 'sources')
-  =/  sources=(list [tag=@t path=path])
-    ?.  ?=([~ %a *] sj)  ~
-    %+  murn  p.u.sj
-    |=  s=json
-    ^-  (unit [tag=@t path=path])
-    ?.  ?=([%o *] s)  ~
-    =/  tg  (~(get by p.s) 'tag')
-    =/  pp  (~(get by p.s) 'path')
-    ?.  ?&(?=([~ %s *] tg) ?=([~ %s *] pp))  ~
-    `[p.u.tg (stab p.u.pp)]
-  `[p.u.nm docs sources]
-::  +col-name: a collection path's identity — its single name segment.
-++  col-name
-  |=  c=path
-  ^-  @t
-  ?~(c '' i.c)
-::  +coll-rec: the registry record for a collection path, matched by name.
-++  coll-rec
-  |=  [=rail:tarball c=path]
-  =/  m  (fiber:fiber:nexus ,(unit [name=@t docs=path sources=(list [tag=@t path=path])]))
-  ^-  form:m
-  ;<  tg=(unit json)  bind:m
-    (peek-as:io (nex-road:io rail [%& /docs %'targets.json']) ,json)
-  =/  hit  (skim (colls tg) |=([nm=@t *] =(nm (col-name c))))
-  (pure:m ?~(hit ~ `i.hit))
-::  +src-path: a source's configured path to the namespace path it names. A path
-::  rooted at a known namespace top (/code, /sys, /apps, /docs) is taken as-is
-::  — so a source can point at raw desk source under /sys/clay/desks/<desk> —
-::  anything else is /code-relative (a bare "/lib/..." means "/code/lib/...").
-::
-++  src-path
-  |=  t=path
-  ^-  path
-  ?~  t  t
-  ?:  ?=(?(%code %sys %apps %docs) i.t)  t
-  [%code t]
-::  +coll-mirror: the mirror subtree holding a collection's CODE sources, each
-::  under its tag (/docs/mirror/<name>/<tag>/...). Coverage peeks this root, so a
-::  mirrored file keys as /<tag>/<desk-path> — the tag is just the first segment.
-++  coll-mirror
-  |=  c=path
-  ^-  path
-  (welp /docs/mirror c)
-::  +source-mirror: where one tagged source of a collection mounts.
-++  source-mirror
-  |=  [c=path tag=@t]
-  ^-  path
-  (welp (coll-mirror c) ~[tag])
-::  +coll-docs: the mirror subtree holding a collection's HANDBOOK prose (its
-::  docs home), under /docs/hb — kept out of /docs/mirror so the markdown never
-::  counts as code. nav/page/search read straight from here.
-++  coll-docs
-  |=  c=path
-  ^-  path
-  (welp /docs/hb c)
-::  +doc-lane: one handbook page by its nav path. The path may carry
-::  directories (faults/x.md); every segment but the last is a dir under
-::  the collection's docs mirror, the last is the file.
-++  doc-lane
-  |=  [c=path doc=@t]
-  ^-  lane:tarball
-  =/  seg=path  (stab (cat 3 '/' doc))
-  [%& (welp (coll-docs c) (snip seg)) (rear seg)]
-::  +mirror-jobs: the [dest src] copies that keep the mirror current — one per
-::  source (its namespace dir → /docs/mirror/<name>/<tag>) plus the handbook
-::  (its docs home → /docs/hb/<name>). do-mirror runs them; sync-keeps watches
-::  their src sides.
-++  mirror-jobs
-  |=  cs=(list [name=@t docs=path sources=(list [tag=@t path=path])])
-  ^-  (list [dest=path src=path])
-  %-  zing
-  %+  turn  cs
-  |=  co=[name=@t docs=path sources=(list [tag=@t path=path])]
-  ^-  (list [dest=path src=path])
-  =/  c=path  ~[name.co]
-  %+  weld
-    ?~(docs.co ~ ~[[(coll-docs c) docs.co]])
-  %+  turn  sources.co
-  |=  s=[tag=@t path=path]
-  [(source-mirror c tag.s) (src-path path.s)]
-::  +mirror-dir: mirror one target directory subtree into our own /docs/mirror
-::  in a single event — a deep peek of the whole subtree as a ball,
-::  written back with over-fold (the %over analog for directories). The
-::  namespace's own copy-a-directory primitive; no per-file walk. The mirror
-::  is a faithful grub copy; what counts toward coverage (ignore) is applied
-::  later, at compute time.
-::
-++  mirror-dir
-  |=  [=rail:tarball dest=path src=path prior=(unit @)]
-  =/  m  (fiber:fiber:nexus ,(unit @))
-  ^-  form:m
-  ;<  =view:nexus  bind:m  (peek:io [%& %| src] ~)
-  ?.  ?=([%ball *] view)  (pure:m ~)
-  ::  a mug of the source ball is the change check — same mug as last time
-  ::  means the source hasn't changed, so skip the (expensive) re-copy.
-  =/  mg=@  (mug ball.view)
-  ?:  =(`mg prior)  (pure:m ~)
-  =/  bol=bole:tarball  (ball-to-bole:tarball ball.view)
-  ::  preserve the dest dir's own neck (what on-load established) so the
-  ::  overwrite doesn't strip it — the same care sync-dir takes in nex/desk.
-  ;<  cur=view:nexus  bind:m  (peek:io (nex-road:io rail [%| dest]) ~)
-  =/  nek  ?.(?=([%ball *] cur) ~ ?~(fil.ball.cur ~ neck.u.fil.ball.cur))
-  =/  root=pulp:tarball  (fall fil.bol `pulp:tarball`[~ ~ %.n ~])
-  =.  bol  bol(fil `root(neck nek))
-  ;<  ~  bind:m  (over-fold:io (nex-road:io rail [%| dest]) bol)
-  (pure:m `mg)
-::  +triml: drop leading spaces from a tape.
-::
-++  triml
-  |=  t=tape
-  ^-  tape
-  ?~  t  t
-  ?:  =(' ' i.t)  $(t t.t)
-  t
-::  +parse-ref: one live-block ref line -> [file from to]. "path a-b" is a
-::  line range; "path" alone is the whole file (to=0 sentinel). ~ if unparsable.
-::
-++  parse-ref
-  |=  ln=tape
-  ^-  (unit [file=@t from=@ud to=@ud])
-  =/  t=tape  (triml ln)
-  ?~  t  ~
-  =/  full=tape  t
-  =/  sp=(unit @ud)  (find " " full)
-  ?~  sp
-    `[(crip full) 1 0]
-  =/  file=@t   (crip (scag u.sp full))
-  =/  rest=tape  (triml (slag +(u.sp) full))
-  =/  dash=(unit @ud)  (find "-" rest)
-  ?~  dash
-    =/  n=(unit @ud)  (rush (crip rest) dem)
-    ?~(n `[file 1 0] `[file u.n u.n])
-  =/  from=(unit @ud)  (rush (crip (scag u.dash rest)) dem)
-  =/  to=(unit @ud)    (rush (crip (slag +(u.dash) rest)) dem)
-  ?:  |(?=(~ from) ?=(~ to))  ~
-  `[file u.from u.to]
-::  +parse-anchors: the live-block anchors in one doc's markdown — each a
-::  ` ```live ` fence whose body is "path range". Returns [file from to] list.
-::
-++  parse-anchors
-  |=  md=@t
-  ^-  (list [file=@t from=@ud to=@ud])
-  =/  lines=(list tape)  (turn (to-wain:format md) trip)
-  =|  out=(list [@t @ud @ud])
-  =/  live=?  %.n
-  |-  ^-  (list [@t @ud @ud])
-  ?~  lines  (flop out)
-  =/  ln=tape  (triml i.lines)
-  ?:  live
-    ?:  =("```" (scag 3 ln))  $(lines t.lines, live |)
-    =/  a=(unit [@t @ud @ud])  (parse-ref ln)
-    ?~  a  $(lines t.lines, live |)
-    $(lines t.lines, out [u.a out], live |)
-  ?:  =("```live" (scag 7 ln))  $(lines t.lines, live &)
-  $(lines t.lines)
-::  +gather-all-anchors: every live-block anchor across all docs, tagged with
-::  its doc. Reads each /docs grub, parses its fences.
-::
-++  gather-all-anchors
-  |=  [=rail:tarball c=path]
-  =/  m  (fiber:fiber:nexus ,(list [doc=@t file=@t from=@ud to=@ud]))
-  ^-  form:m
-  ;<  [* nav=json]  bind:m  (read-docs-config rail c)
-  =/  items=(list [path=@t title=@t])  (nav-items nav)
-  =|  all=(list [@t @t @ud @ud])
-  |-  ^-  form:m
-  ?~  items  (pure:m (flop all))
-  ;<  fv=view:nexus  bind:m
-    (peek:io (nex-road:io rail (doc-lane c path.i.items)) ~)
-  =/  txt=@t  (grub-text fv)
-  =.  all
-    %+  weld  all
-    %+  turn  (parse-anchors txt)
-    |=([file=@t from=@ud to=@ud] [path.i.items file from to])
-  $(items t.items)
-::  +ranges: a set of line numbers as a compact list of contiguous [lo hi]
-::  runs, for painting the heatmap without shipping every line number.
-::
-++  ranges
-  |=  s=(set @ud)
-  ^-  (list [@ud @ud])
-  =/  ns=(list @ud)  (sort ~(tap in s) lth)
-  ?~  ns  ~
-  =/  lo=@ud  i.ns
-  =/  hi=@ud  i.ns
-  =/  rest  t.ns
-  =|  out=(list [@ud @ud])
-  |-  ^-  (list [@ud @ud])
-  ?~  rest  (flop [[lo hi] out])
-  ?:  =(i.rest +(hi))  $(hi i.rest, rest t.rest)
-  $(out [[lo hi] out], lo i.rest, hi i.rest, rest t.rest)
-::  +ignored: is a source path excluded by the ignore list (itself or under
-::  an ignored directory)?
-::
-++  ignored
-  |=  [src=@t ign=(list @t)]
-  ^-  ?
-  %+  lien  ign
-  |=  ip=@t
-  =/  ipt=tape  (trip ip)
-  =(ip (crip (scag (lent ipt) (trip src))))
-::  +grub-text: raw text of a source grub view. A .hoon/.js/.css grub holds
-::  its source in the vase as a @t; %txt is a wain; %mime carries octs.
-::  Empty for a boom or a shape we can't read.
-::
-++  grub-text
-  |=  =view:nexus
-  ^-  @t
-  ?.  ?=([%file *] view)  ''
-  (sang-text sang.view)
-::  +sang-text: the raw text of a grub's sang directly (for enumerating a
-::  mirrored ball, where we hold the sang, not a file view).
-::
-++  sang-text
-  |=  =sang:tarball
-  ^-  @t
-  ?:  ?=(%| -.q.sang)  ''
-  =/  =sage:tarball  (need-sage:tarball sang)
-  =/  mk=@tas  name.p.sage
-  ?:  =(%txt mk)   (of-wain:format !<(wain q.sage))
-  ?:  =(%md mk)    (of-wain:format !<(wain q.sage))
-  ?:  =(%mime mk)  `@t`q.q:!<(mime q.sage)
-  (fall (mole |.(!<(@t q.sage))) '')
 ::  +spawn-followers: ensure a /sync/<app> follower grub exists for every
 ::  top-level app in /apps. Making the grub starts its follower fiber (the
 ::  [[%sync ~] @] case). Idempotent — skips ones already present. (Culling
@@ -3226,7 +2999,7 @@
 ::
 ::  +sync-lane: the /sync grub lane for an app-root path. Built-in apps
 ::  at /apps/<name> mirror as /sync/<name>; desk sub-apps at
-::  /apps/shell.shell/desks/<desk>/desk/data/<sub> mirror as
+::  /apps/shell/desks/<desk>/desk/data/<sub> mirror as
 ::  /sync/<desk>/<sub>. ~ for anything unrecognized.
 ::
 ++  sync-lane
@@ -3235,12 +3008,21 @@
   ?+  ap  ~
     [%apps @ ~]
       `[%& [/sync i.t.ap]]
-    [%apps %'shell.shell' %desks @ %desk %data @ ~]
+    [%apps %shell %desks @ %desk %data @ ~]
       `[%& [/sync/[i.t.t.t.ap] i.t.t.t.t.t.t.ap]]
   ==
 ::  +app-path-of: inverse — the app-root path a /sync follower watches,
 ::  from the follower's own rail.
 ::
+::  +share-road: where an app's share.usergroups lives. A desk's apps
+::  share as one desk: the file sits on the desk dir, not under the app.
+::
+++  share-road
+  |=  ap=path
+  ^-  road:tarball
+  ?:  ?=([%apps %shell %desks @ %desk %data @ ~] ap)
+    [%& %& /apps/shell/desks/[i.t.t.t.ap] %'share.usergroups']
+  [%& %& ap %'share.usergroups']
 ++  app-path-of
   |=  =rail:tarball
   ^-  (unit path)
@@ -3248,7 +3030,7 @@
     [%sync ~]
       `~[%apps name.rail]
     [%sync @ ~]
-      `~[%apps %'shell.shell' %desks i.t.path.rail %desk %data name.rail]
+      `~[%apps %shell %desks i.t.path.rail %desk %data name.rail]
   ==
 ::  +drop-stale-subs: subscriptions persist across fiber restarts and are
 ::  never auto-cleaned. An earlier follower version kept its app's WHOLE
@@ -3266,7 +3048,7 @@
   ?~  stale  (pure:m ~)
   ;<  ~  bind:m  (drop:io /follow [%| i.stale])
   $(stale t.stale)
-::  +take-reg-wake: wake the registry liaison — any news (share.json or
+::  +take-reg-wake: wake the group derivation — any news (the record or
 ::  the public group's weir) or any poke.
 ::
 ++  take-reg-wake
@@ -3289,22 +3071,8 @@
   ?+  in  [%skip ~]
       ~  [%wait ~]
       [~ %news * *]
-    ?:  |(=(/alias wire.u.in) =(/weir wire.u.in))  [%done ~]
+    ?:  |(=(/alias wire.u.in) =(/weir wire.u.in) =(/groups wire.u.in))  [%done ~]
     [%skip ~]
-  ==
-::  +take-mirror-news: wake on ANY news this fiber receives. The mirror.sig
-::  fiber only holds mirror subscriptions (the registry + each target dir), so
-::  every news that reaches it is one of ours — unlike +take-any-news, which is
-::  wired to the usergroups fiber's /alias and /weir and drops everything else.
-::
-++  take-mirror-news
-  =/  m  (fiber:fiber:nexus ,wire)
-  ^-  form:m
-  |=  input:fiber:nexus
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-    ~              [%wait ~]
-    [~ %news * *]  [%done wire.u.in]
   ==
 ::  +spawn-followers: ensure a /sync follower grub exists for every app-root
 ::  (descending desks, via app-roots). Making the grub starts its follower
@@ -3320,6 +3088,11 @@
   ?~  roots  (pure:m made)
   =/  syn=(unit lane:tarball)  (sync-lane i.roots)
   ?~  syn  $(roots t.roots)
+  ::  a desk's apps share as one desk: one share listener per desk dir,
+  ::  ensured whether or not this app's own follower already exists
+  ;<  ~  bind:m
+    ?.  ?=([%& [%sync @ *] *] u.syn)  (pure:(fiber:fiber:nexus ,~) ~)
+    (ensure-share-listener rail i.t.path.p.u.syn)
   =/  fr=road:tarball  (nex-road:io rail u.syn)
   ;<  has=?  bind:m  (peek-exists:io fr)
   ?:  has  $(roots t.roots)
@@ -3337,6 +3110,18 @@
   ;<  err=(unit tang)  bind:m  (make-soft:io fr |+[[[/ %sig] ~] ~])
   ~?  >>>  ?=(^ err)  [%shell-sync-spawn-failed i.roots]
   $(roots t.roots, made |(made ?=(~ err)))
+::  +ensure-share-listener: /sync/<desk>/share.sig exists
+::
+++  ensure-share-listener
+  |=  [rail=rail:tarball desk=@ta]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road:io rail [%& /sync/[desk] %'share.sig'])
+  ;<  has=?  bind:m  (peek-exists:io rd)
+  ?:  has  (pure:m ~)
+  ;<  err=(unit tang)  bind:m  (make-soft:io rd |+[[[/ %sig] ~] ~])
+  ~?  >>>  ?=(^ err)  [%shell-share-listener-failed desk]
+  (pure:m ~)
 ::  +build-links: materialize the discovery registry at /sys/link/. For
 ::  each @name, write /sys/link/<segments>/dest.lanes — a (list lane:tarball)
 ::  of target locations, earliest claimant first. Only writes on genuine
@@ -3355,7 +3140,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ;<  =view:nexus  bind:m
-    (peek-shallow:io [%& %| /apps/'shell.shell'/desks] ~)
+    (peek-shallow:io [%& %| /apps/shell/desks] ~)
   ?.  ?=([%ball *] view)  (pure:m ~)
   =/  kids=(list @ta)  ~(tap in ~(key by dir.ball.view))
   ;<  pairs=(list [grp=path entry=json])  bind:m  (gather-shares kids)
@@ -3381,7 +3166,7 @@
   ^-  form:m
   ?~  kids  (pure:m ~)
   ;<  shr=(unit (set path))  bind:m
-    (peek-as:io [%& %& /apps/'shell.shell'/desks/[i.kids] %'share.usergroups'] ,(set path))
+    (peek-as:io [%& %& /apps/shell/desks/[i.kids] %'share.usergroups'] ,(set path))
   ;<  rest=(list [path json])  bind:m  $(kids t.kids)
   ?~  shr  (pure:m rest)
   =/  entry=json  (desk-entry i.kids)
@@ -3396,25 +3181,57 @@
   %-  pairs:enjs:format
   :~  ['name' s+(app-slug name)]
       ['dir' s+name]
-      ['code' s+(crip "/apps/shell.shell/desks/{(trip name)}/desk/code")]
+      ['code' s+(crip "/apps/shell/desks/{(trip name)}/desk/code")]
   ==
 ::
 ++  build-links
   |=  rail=rail:tarball
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ;<  menus=(map @t (list json))  bind:m  read-app-aliases
-  =/  entries=(list [nm=@t opts=(list json)])  ~(tap by menus)
+  ;<  menus=(map @t (list json))  bind:m  (read-aliases rail)
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ::  a desk earns its /sys/link name only once the user approves it — being
+  ::  reachable by name is a capability, gated like a road. Drop every opt
+  ::  whose app isn't approved, and any name left with no approved claimant.
+  ::  A name you declared yourself needs no approval; it is your decision.
+  ::  (Built-in names aren't here at all; root.hoon seeds those directly.)
+  =/  entries=(list [nm=@t opts=(list json)])
+    %+  murn  ~(tap by menus)
+    |=  [nm=@t opts=(list json)]
+    ^-  (unit [@t (list json)])
+    =/  keep=(list json)
+      %+  skim  opts
+      |=  o=json
+      ?|  =('you' (fall (jget o 'source') ''))
+          (~(has by approved) (fall (jget o 'app') (fall (jget o 'path') '')))
+      ==
+    ?~(keep ~ `[nm keep])
   =/  want=(set path)  (silt (turn entries |=([nm=@t *] (link-dir nm))))
   |-  ^-  form:m
   ?~  entries
-    ::  cull pass: drop /sys/link dirs whose link no longer has any claimant
+    ::  cull pass: drop /sys/link dirs whose link no longer has any claimant.
+    ::  Only names the SHELL registered, i.e. whose lanes point into its
+    ::  desks: the built-ins' names are root.hoon's seeds, pointing at
+    ::  /apps/<app>, and a name claimed by anything outside the desks tree
+    ::  is not ours to remove. (Culling them here was what emptied /sys/link
+    ::  of @github/@forge/… on every sweep and broke every clone.)
     ;<  bv=view:nexus  bind:m  (peek-shallow:io [%& %| /sys/link] ~)
     ?.  ?=([%ball *] bv)  (pure:m ~)
     =/  haves=(list @ta)  ~(tap in ~(key by dir.ball.bv))
+    =/  desks-root=path  /apps/shell/desks
     |-  ^-  form:m
     ?~  haves  (pure:m ~)
     ?:  (~(has in want) /sys/link/[i.haves])  $(haves t.haves)
+    ;<  cur=view:nexus  bind:m  (peek:io [%& %& /sys/link/[i.haves] %'dest.lanes'] `[/ %lanes])
+    =/  lanes=(list lane:tarball)
+      ?.  ?=([%file *] cur)  ~
+      (fall (mole |.(!<((list lane:tarball) (need-vase:tarball sang.cur)))) ~)
+    =/  ours=?
+      %+  levy  lanes
+      |=  l=lane:tarball
+      ?.  ?=(%| -.l)  %.n
+      =((scag (lent desks-root) p.l) desks-root)
+    ?.  ours  $(haves t.haves)
     ;<  *  bind:m  (cull-soft:io [%& %| /sys/link/[i.haves]])
     $(haves t.haves)
   =/  road=road:tarball  (link-road nm.i.entries)
@@ -3448,7 +3265,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ;<  hidden=json  bind:m  (read-hidden rail)
-  ;<  want=json    bind:m  (build-alias-menus hidden %.y)
+  ;<  want=json    bind:m  (build-alias-menus rail hidden %.y)
   ;<  cur=view:nexus  bind:m
     (peek:io (nex-road:io rail [%& /cache %'aliases.json']) `[/ %json])
   =/  have=(unit json)
@@ -3465,7 +3282,7 @@
   ^-  form:m
   ;<  approved=(map @t json)  bind:m  (read-approved rail)
   ;<  hidden=json  bind:m  (read-hidden rail)
-  ;<  want=json    bind:m  (read-approved-weirs approved hidden)
+  ;<  want=json    bind:m  (read-approved-weirs rail approved hidden)
   ;<  cur=view:nexus  bind:m
     (peek:io (nex-road:io rail [%& /cache %'weirs.json']) `[/ %json])
   =/  have=(unit json)
@@ -3487,9 +3304,16 @@
   ?~  jon  (pure:m ~)
   ?.  ?=(%o -.u.jon)  (pure:m ~)
   =/  app=@t  (crip (spud ap))
-  =/  ask=json  [%o (~(put by p.u.jon) 'app' s+app)]
+  ;<  gkeys=json  bind:m  (read-app-group-keys ap)
+  =/  ask=json  [%o (~(put by (~(put by p.u.jon) 'app' s+app)) 'groups' gkeys)]
   ;<  approved=(map @t json)  bind:m  (read-approved rail)
   ?:  (is-settled ask approved)  (pure:m ~)
+  ::  an app under a %boot stock entry is answered by +auto-consent on the
+  ::  same scan that found it: nothing to tell the user
+  ?:  (under-boot-entry app)  (pure:m ~)
+  ::  every other app asks, the ones that ship with grubbery included. An
+  ::  app shipping in the box is a reason to trust its author, not a reason
+  ::  to decide for the user what it may reach or open to other ships.
   ::  already told the user about this exact pending ask? don't re-ping on a
   ::  reload. A changed ask fails the match below and notifies afresh.
   ;<  notified=(map @t json)  bind:m  (read-notified rail)
@@ -3509,7 +3333,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ;<  hidden=json      bind:m  (read-hidden rail)
-  ;<  menus=json       bind:m  (build-alias-menus hidden %.n)
+  ;<  menus=json       bind:m  (build-alias-menus rail hidden %.n)
   ;<  asks=(list json)  bind:m  read-app-weirs
   =/  marked=(list json)  (turn asks |=(a=json (mark-unresolved a menus)))
   =/  want=json  [%a marked]
@@ -3518,8 +3342,56 @@
   =/  have=(unit json)
     ?.  ?=([%file *] cur)  ~
     (mole |.(!<(json (need-vase:tarball sang.cur))))
+  ::  a %boot entry's apps are answered on the same scan that found them,
+  ::  so the page never shows them pending and then grants them out from
+  ::  under it
+  ;<  ~  bind:m  (auto-consent rail marked)
   ?:  =(`want have)  (pure:m ~)
   (put:io (nex-road:io rail [%& /cache %'asks.json']) [[/ %json] want])
+::  +auto-consent: grant, once, the asks of apps under a %boot stock entry.
+::  Only an app with no approved entry at all is touched: a grant the user
+::  has since narrowed, frozen or dropped stands, and a later change to
+::  that app's ask pends like any other. Granted at install, not always
+::  granted.
+::
+++  auto-consent
+  |=  [rail=rail:tarball asks=(list json)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ;<  hidden=json             bind:m  (read-hidden rail)
+  ;<  now=@da                 bind:m  get-time:io
+  =/  todo=(list [app=@t ask=json])
+    %+  murn  asks
+    |=  a=json
+    ^-  (unit [@t json])
+    =/  app=@t  (fall (jget a 'app') '')
+    ?:  =('' app)                 ~
+    ?:  (~(has by approved) app)  ~
+    ?.  (under-boot-entry app)    ~
+    `[app a]
+  |-  ^-  form:m
+  ?~  todo  (pure:m ~)
+  ~?  dbg  [%shell-auto-consent app.i.todo]
+  ::  the ask itself as the granted set: everything it declared
+  ;<  ~  bind:m  (do-approve-weir rail app.i.todo [%o ~] ask.i.todo hidden now)
+  =/  tp=(unit path)  (soft-path app.i.todo)
+  ;<  ~  bind:m  ?~(tp (pure:m ~) (reload:io [%& %| u.tp]))
+  $(todo t.todo)
+::  +under-boot-entry: is this app under the desk of a %boot stock entry?
+::  Compared as text: the app is a cord here and the prefix is built as
+::  one.
+::
+++  under-boot-entry
+  |=  app=@t
+  ^-  ?
+  %+  lien  default-repos
+  |=  e=stock-entry
+  ^-  ?
+  ?.  =(%boot setup.e)  %.n
+  =/  pre=@t
+    (crip "/apps/shell/desks/{(trip (stock-name e))}.desk/desk/data/")
+  =(pre (end [3 (met 3 pre)] app))
 ::  +read-app-weirs: scan /apps for each app's weir.json — its complete
 ::  declared permission ask ({poke, peek, make} lists of target roads,
 ::  some `@alias` refs). Returns one json per app {app, path, poke,
@@ -3530,7 +3402,7 @@
   ^-  form:m
   ;<  roots=(list path)  bind:m  app-roots
   ::  A root instance /apps/X whose code has moved into a desk - the same X
-  ::  installed at /apps/shell.shell/desks/<d>/desk/data/X - is dormant: its
+  ::  installed at /apps/shell/desks/<d>/desk/data/X - is dormant: its
   ::  code left the ball, its data was carried, and it keeps its weir.json.
   ::  It is not an ask anyone can act on, and listing it puts a permanent
   ::  "pending" on every ship that ever migrated an app. Skip it.
@@ -3560,6 +3432,8 @@
   ::  the app id IS its nexus-root path (disambiguates two nexuses of the
   ::  same name in different desks); path is the same.
   =/  ap=@t  (crip (spud root))
+  ;<  names=json  bind:m  (read-app-shares ap)
+  ;<  groups=json  bind:m  (read-app-group-keys root)
   =/  ask=json
     %-  pairs:enjs:format
     :~  ['app' s+ap]
@@ -3567,8 +3441,76 @@
         ['poke' (fall (~(get by p.u.jon) 'poke') [%a ~])]
         ['peek' (fall (~(get by p.u.jon) 'peek') [%a ~])]
         ['make' (fall (~(get by p.u.jon) 'make') [%a ~])]
+        ::  names it claims, and the groups it wants them opened to
+        ::  (link.json)
+        ['names' names]
+        ::  the usergroups it wants: the top-level keys of its groups.json
+        ::  — a group it opens its own roads into, or a prefix (trailing
+        ::  slash) it runs groups under
+        ['groups' groups]
     ==
   $(roots t.roots, acc [ask acc])
+::  +read-app-group-keys: the usergroups an app asks for — the top-level
+::  keys of the groups.json at its root. The contents are the app's
+::  facts about them, read at derivation within the keys approved.
+::
+++  read-app-group-keys
+  |=  root=path
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ;<  gv=(unit json)  bind:m  (peek-as:io [%& %& root %'groups.json'] ,json)
+  ?~  gv  (pure:m [%a ~])
+  ?.  ?=(%o -.u.gv)  (pure:m [%a ~])
+  (pure:m a+(turn (sort ~(tap in ~(key by p.u.gv)) aor) |=(k=@t s+k)))
+::  +read-app-shares: the names an app asks to open to usergroups, from
+::  its link.json: [{alias, groups}] for every claimed name carrying a
+::  `share` list (the app's own name reads the top-level `share`; an
+::  alias entry its own). A share is a request like a road: the user
+::  grants it on Permits, and the grant is the group's peek on
+::  /sys/link/<alias>/dest.lanes, nothing more.
+::
+++  read-app-shares
+  |=  app=@t
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  =/  tp=(unit path)  (soft-path app)
+  ?~  tp  (pure:m [%a ~])
+  ;<  lv=view:nexus  bind:m
+    (peek:io [%& %& [u.tp %'link.json']] `[/ %json])
+  ?.  ?=([%file *] lv)  (pure:m [%a ~])
+  =/  jon=(unit json)  (mole |.(!<(json (need-vase:tarball sang.lv))))
+  ?~  jon  (pure:m [%a ~])
+  ?.  ?=(%o -.u.jon)  (pure:m [%a ~])
+  =/  groups-of
+    |=  j=json
+    ^-  (list @t)
+    ?.  ?=([%a *] j)  ~
+    (murn p.j |=(g=json ?.(?=([%s *] g) ~ `p.g)))
+  =/  names=(list @t)
+    =/  nv  (~(get by p.u.jon) 'name')
+    ?~  nv  ~
+    ?:  ?=(%s -.u.nv)  ~[p.u.nv]
+    ?.  ?=(%a -.u.nv)  ~
+    (murn p.u.nv |=(j=json ?.(?=(%s -.j) ~ `p.j)))
+  =/  own=(list @t)  (groups-of (fall (~(get by p.u.jon) 'share') [%a ~]))
+  =/  entry
+    |=  [alias=@t groups=(list @t)]
+    ^-  json
+    (pairs:enjs:format ~[['alias' s+alias] ['groups' a+(turn groups |=(g=@t s+g))]])
+  =/  out=(list json)
+    %+  weld
+      ?~  own  ~
+      (turn names |=(n=@t (entry n own)))
+    %+  murn
+      =/  al  (~(get by p.u.jon) 'aliases')
+      ?.(?=([~ %a *] al) ~ p.u.al)
+    |=  a=json
+    ^-  (unit json)
+    =/  n=@t  (fall (jget a 'name') '')
+    =/  gs=(list @t)  ?.(?=(%o -.a) ~ (groups-of (fall (~(get by p.a) 'share') [%a ~])))
+    ?:  |(=('' n) =(~ gs))  ~
+    `(entry n gs)
+  (pure:m a+out)
 ::  +read-app-weir-json: one app's declared weir.json, if any. `app` is
 ::  its nexus-root path.
 ::
@@ -3595,17 +3537,20 @@
   %+  murn  p.u.v
   |=  j=json
   ?:  ?=(%s -.j)  `p.j
-  ?.  ?=(%o -.j)  ~
+  ?.  ?=([%o *] j)  ~
   =/  r  (~(get by p.j) 'road')
   ?.(?=([~ %s *] r) ~ `p.u.r)
 ::  +narrow-to-ask: the granted roads that the app's own ask declares, per
-::  category, as bare road strings.
+::  category, as bare road strings. Every other key of the grant (the
+::  usergroups and name shares Permits sends) passes through as it came.
 ::
 ++  narrow-to-ask
   |=  [granted=json ask=json]
   ^-  json
   :-  %o
-  %-  ~(gas by *(map @t json))
+  %-  %~  gas  by
+      ?.  ?=(%o -.granted)  *(map @t json)
+      p.granted
   %+  turn  `(list @t)`~['poke' 'peek' 'make']
   |=  cat=@t
   =/  ok=(set @t)  (silt (road-strs ask cat))
@@ -3662,6 +3607,65 @@
 ::  the sub-path. Supports @'multi/segment' names. '' when the alias
 ::  has no options.
 ::
+::  +regrant-moved: an approved app's @name bindings were resolved when
+::  it was granted, and its sand set from them. When the registry moves
+::  a name, or a name it was granted against appears, the recorded path
+::  is stale and the sand with it. Re-resolve every granted app that
+::  references a name; one whose paths changed is granted again and
+::  rebooted so its fibers hold the new roads.
+::
+++  regrant-moved
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ;<  hidden=json  bind:m  (read-hidden rail)
+  ;<  menus=json  bind:m  (build-alias-menus rail hidden %.n)
+  =/  todo=(list [app=@t entry=json])  ~(tap by approved)
+  |-  ^-  form:m
+  ?~  todo  (pure:m ~)
+  =/  entry=json  entry.i.todo
+  ?.  ?=([%o *] entry)  $(todo t.todo)
+  ?.  =('granted' (fall (jget entry 'verdict') ''))  $(todo t.todo)
+  =/  bindings=json  (fall (~(get by p.entry) 'bindings') [%o ~])
+  ?.  ?=([%o *] bindings)  $(todo t.todo)
+  =/  bmap=(map @t json)  p.bindings
+  ?:  =(~ bmap)  $(todo t.todo)
+  ::  a recorded pick the registry still offers stays the user's choice;
+  ::  one that is empty or gone falls back to the registry's first option
+  =/  picks=json
+    :-  %o
+    %-  ~(gas by *(map @t json))
+    %+  murn  ~(tap by bmap)
+    |=  [n=@t v=json]
+    ^-  (unit [@t json])
+    ?.  ?=([%s *] v)  ~
+    ?:  =('' p.v)  ~
+    ?.  (offered menus n p.v)  ~
+    `[n v]
+  =/  moved=?
+    %+  lien  ~(tap by bmap)
+    |=  [n=@t v=json]
+    =/  was=@t  ?:(?=([%s *] v) p.v '')
+    !=(was (resolve-alias-ref picks menus n))
+  ?.  moved  $(todo t.todo)
+  ~&  >  [%shell-regrant-moved app.i.todo]
+  =/  granted=json  (fall (~(get by p.entry) 'declared') [%o ~])
+  ;<  now=@da  bind:m  get-time:io
+  ;<  ~  bind:m  (do-approve-weir rail app.i.todo picks granted hidden now)
+  =/  tp=(unit path)  (soft-path app.i.todo)
+  ;<  ~  bind:m  ?~(tp (pure:m ~) (reload:io [%& %| u.tp]))
+  $(todo t.todo)
+::  +offered: is this path one of the registry's options for the name
+::
+++  offered
+  |=  [menus=json n=@t p=@t]
+  ^-  ?
+  ?.  ?=([%o *] menus)  %.n
+  =/  opts=(unit json)  (~(get by p.menus) n)
+  ?~  opts  %.n
+  ?.  ?=([%a *] u.opts)  %.n
+  (lien p.u.opts |=(o=json =(p (fall (jget o 'path') ''))))
 ++  resolve-alias-ref
   |=  [picks=json menus=json ref=@t]
   ^-  @t
@@ -3701,11 +3705,17 @@
       ['poke' (cat-arr granted 'poke')]
       ['peek' (cat-arr granted 'peek')]
       ['make' (cat-arr granted 'make')]
+      ::  no granted `names` here: a name's share is a property of the
+      ::  name and lives once, in permit/link.json. `declared` keeps what
+      ::  the app asked, which is what settling compares.
+      ['groups' (cat-arr granted 'groups')]
       :-  'declared'
       %-  pairs:enjs:format
       :~  ['poke' (cat-arr declared 'poke')]
           ['peek' (cat-arr declared 'peek')]
           ['make' (cat-arr declared 'make')]
+          ['names' (cat-arr declared 'names')]
+          ['groups' (cat-arr declared 'groups')]
       ==
       ['bindings' bindings]
       ['verdict' s+verdict]
@@ -3751,7 +3761,7 @@
   %-  silt
   %+  murn  p.u.v
   |=  j=json
-  ?.  ?=(%o -.j)  ~
+  ?.  ?=([%o *] j)  ~
   ?.  =(`[%b &] (~(get by p.j) 'optional'))  ~
   =/  r  (~(get by p.j) 'road')
   ?.(?=([~ %s *] r) ~ `p.u.r)
@@ -3797,10 +3807,10 @@
 ::  overlaid on the live weir at its target. The honest per-app picture.
 ::
 ++  read-approved-weirs
-  |=  [approved=(map @t json) hidden=json]
+  |=  [rail=rail:tarball approved=(map @t json) hidden=json]
   =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
-  ;<  menus=json  bind:m  (build-alias-menus hidden %.n)
+  ;<  menus=json  bind:m  (build-alias-menus rail hidden %.n)
   =|  out=(map @t json)
   =/  apps=(list [@t json])  ~(tap by approved)
   |-  ^-  form:m
@@ -3835,13 +3845,16 @@
   ?~  ask  (pure:m ~)
   ?.  ?=(%o -.u.ask)  (pure:m ~)
   ::  what gets sanded is the granted subset, not the whole declared ask,
-  ::  and a road the app never asked for is dropped whatever the POST says
+  ::  and a road the app never asked for is dropped whatever the POST
+  ::  says. When granted is not a JSON object the whole ask is sanded as
+  ::  before: (narrow-to-ask u.ask u.ask) is the identity, so the filter
+  ::  is a no-op on that branch and the semantics are unchanged.
   =/  sub=json  (narrow-to-ask ?:(?=(%o -.granted) granted u.ask) u.ask)
   ::  the alias directory costs a peek per installed app - most of this
   ::  fiber's time - and only an ask that names an @alias needs it.
   ;<  menus=json  bind:m
     ?:  =(~ (ref-aliases sub))  (pure:(fiber:fiber:nexus ,json) [%o ~])
-    (build-alias-menus hidden %.n)
+    (build-alias-menus rail hidden %.n)
   =/  tp=(unit path)  (soft-path app)
   ?~  tp  (pure:m ~)
   =/  target=path  u.tp
@@ -3851,6 +3864,7 @@
     (turn (road-strs sub 'peek') |=(t=@t (resolve-alias-ref picks menus t)))
   =/  make-res=(list @t)
     (turn (road-strs sub 'make') |=(t=@t (resolve-alias-ref picks menus t)))
+  =/  groups-given=json  (cat-arr sub 'groups')
   ::  TOTAL REPLACEMENT: the target weir becomes exactly the granted
   ::  subset — not a union with what was there. Safe because the sand
   ::  target is born-locked (a desk's data) or the whole app root, and
@@ -3876,15 +3890,31 @@
         ::  privileged walk to root (get-here-abs). It's just structural
         ::  boilerplate (/apps/<name> or /desks/<desk>/desk/data/<name>).
         ['here' s+app]
+        ::  the usergroups it holds: its groups.json is read within them
+        ['groups' groups-given]
     ==
   ;<  ~  bind:m  (put:io [%& %& [target %'grant.json']] [[/ %json] grant-json])
+  ::  the name shares ride the same record: what the app asked
+  ::  (link.json) and what the user ticked, so a changed ask shows up
+  ::  as pending the way a changed road does. The grant itself lives in
+  ::  permit/link.json (set-link-shares, written by the caller).
+  ;<  names-asked=json  bind:m  (read-app-shares app)
+  ;<  groups-asked=json  bind:m  (read-app-group-keys target)
+  =/  ask-full=json
+    [%o (~(put by (~(put by p.u.ask) 'names' names-asked)) 'groups' groups-asked)]
+  =/  sub-full=json
+    ?.  ?=(%o -.sub)  sub
+    [%o (~(put by p.sub) 'groups' groups-given)]
   ::  freeze the FULL resolved binding map (amap), not just the explicit
   ::  picks — so a menu-of-one (auto-resolved, no picker) still records what
   ::  it dereferenced to, and the applied overlay shows the concrete path.
-  =/  entry=json  (approval-entry app u.ask sub 'granted' amap now)
+  =/  entry=json  (approval-entry app ask-full sub-full 'granted' amap now)
   ;<  cur=(map @t json)  bind:m  (read-approved rail)
   ;<  ~  bind:m
     (put:io (nex-road:io rail [%& /permit %'approved.json']) [[/ %json] [%o (~(put by cur) app entry)]])
+  ::  the prefixes an app may state groups under may have changed
+  ;<  ~  bind:m
+    (poke:io (nex-road:io rail [%& / %'usergroups.sig']) [[/ %json] [%o ~]])
   ::  this one app's live-weir overlay, written now: the page reloads the
   ::  moment this answers and must see the grant applied, not the stale
   ::  cache. The full rebuild (every app, a peek each) runs behind it.
@@ -3938,17 +3968,80 @@
     `r
   [%o (~(put by p.ask) 'unresolved' [%a (turn bad |=(r=@t s+r))])]
 ::
-++  hidden-tiles
-  ^-  (set path)
-  (sy ~[/apps/'github.github'])
+::  +color-hex: a docket's @ux color (e.g. 0xde.dede) as a CSS hex string
+::  '#dedede', left-padded to six digits.
+++  color-hex
+  |=  c=@ux
+  ^-  @t
+  =/  s=tape  (scow %ux c)
+  =/  hx=tape  (skip (slag 2 s) |=(ch=@tD =('.' ch)))
+  =/  n=@ud  (lent hx)
+  =/  pad=tape  ?:((gte n 6) hx (weld (reap (sub 6 n) '0') hx))
+  (crip (weld "#" pad))
+::  +docket-of: parse a mirrored desk.docket-0 grub (held as mime source
+::  text) into a docket. Muled: a malformed or hostile docket source must
+::  not bang the tile build -- it just drops that desk.
+++  docket-of
+  |=  =sang:tarball
+  ^-  (unit docket:dock)
+  ::  the clay mirror reads each file typed (.^ %cr), so desk.docket-0
+  ::  usually lands as a parsed docket-0 grub -- read it straight. Fall
+  ::  back to parsing mime source for a mirror that kept it raw. Both
+  ::  muled: a bad docket drops its desk, never bangs the build.
+  =/  direct=(each docket:dock tang)
+    (mule |.(!<(docket:dock (need-vase:tarball sang))))
+  ?:  ?=(%& -.direct)  `p.direct
+  =/  parsed=(each (unit docket:dock) tang)
+    %-  mule
+    |.  ^-  (unit docket:dock)
+    =/  mim=mime  !<(mime (need-vase:tarball sang))
+    %-  from-clauses:mime:dock
+    !<((list clause:dock) (slap !>(~) (ream q.q.mim)))
+  ?:(?=(%& -.parsed) p.parsed ~)
+::  +docket-tile: a classic app's docket as a launcher tile. The href is
+::  /apps/<base>/ for a globbed app, or the %site path verbatim; the kind
+::  is 'app' (classic Landscape apps are user-facing).
+++  docket-tile
+  |=  [dk=@ta =docket:dock]
+  ^-  tile
+  =/  img=@t  ?~(image.docket '' u.image.docket)
+  =/  url=@t
+    ?-  -.href.docket
+      %site  (spat path.href.docket)
+      %glob  (cat 3 (cat 3 '/apps/' base.href.docket) '/')
+    ==
+  [dk title.docket info.docket (color-hex color.docket) img url 'app' %.n]
+::  +read-docket-tiles: a tile for every mounted clay desk that ships a
+::  desk.docket-0. The desks are mirrored under /sys/clay/desks by the
+::  mount-all sync; grubbery and the kernel desks carry no app docket.
+++  read-docket-tiles
+  =/  m  (fiber:fiber:nexus ,(list tile))
+  ^-  form:m
+  ;<  =view:nexus  bind:m  (peek-shallow:io [%& %| /sys/clay/desks] ~)
+  ?.  ?=([%ball *] view)  (pure:m ~)
+  =/  desks=(list @ta)  ~(tap in ~(key by dir.ball.view))
+  =|  acc=(list tile)
+  |-  ^-  form:m
+  ?~  desks  (pure:m (flop acc))
+  =/  dk=@ta  i.desks
+  ?:  ?=(?(%grubbery %base %kids) dk)  $(desks t.desks)
+  ;<  dv=view:nexus  bind:m
+    (peek:io [%& %& /sys/clay/desks/[dk] %'desk.docket-0'] ~)
+  ?.  ?=([%file *] dv)  $(desks t.desks)
+  =/  doc=(unit docket:dock)  (docket-of sang.dv)
+  ?~  doc  $(desks t.desks)
+  $(desks t.desks, acc [(docket-tile dk u.doc) acc])
+::
 ++  read-all-tiles
-  =/  m  (fiber:fiber:nexus ,(list [tile root=(unit path)]))
+  =/  m  (fiber:fiber:nexus ,(list [tile root=(unit path) docket=?]))
   ^-  form:m
   ;<  local=(list tile)  bind:m  read-local-tiles
   =/  local-names=(set @ta)  (sy (turn local |=(t=tile name.t)))
   ;<  app-pairs=(list [tile path])  bind:m  read-app-tiles
+  ::  classic Landscape apps, read from their mounted desk.docket-0
+  ;<  docket-tiles=(list tile)  bind:m  read-docket-tiles
   ::  A root instance /apps/X whose code has moved into a desk - the same X
-  ::  installed at /apps/shell.shell/desks/<d>/desk/data/X - is dormant: it
+  ::  installed at /apps/shell/desks/<d>/desk/data/X - is dormant: it
   ::  keeps its tile.json but nothing behind it runs, and its address is
   ::  the desk install's now. One icon, not two. Same rule as read-app-weirs.
   =/  leaves=(list @ta)
@@ -3964,29 +4057,36 @@
     ?.  ?=([%apps @ta ~] r)  |
     =/  leaf=@ta  i.t.r
     (lien leaves |=(l=@ta =(l leaf)))
-  ::  infrastructure the shell itself depends on is not a launcher app:
-  ::  github is how desks get their code. Its instance stays; its tile
-  ::  does not.
-  =.  app-pairs
-    %+  skip  app-pairs
-    |=  [* r=path]
-    (~(has in hidden-tiles) r)
   ::  local tiles have no app root (not uninstallable); app tiles carry
   ::  theirs so the UI can offer uninstall.
-  =/  merged=(list [tile (unit path)])
-    %+  weld  (turn local |=(t=tile [t *(unit path)]))
+  =/  app-names=(set @ta)  (sy (turn app-pairs |=([t=tile *] name.t)))
+  ::  each entry carries its SOURCE as a flag: a root path means a grubbery
+  ::  desk app, `docket` means a classic app read from its desk.docket-0,
+  ::  and neither means a pure pinned link. The UI shows this, and a docket
+  ::  tile is read-only (its fields come from the desk, not the user).
+  =/  merged=(list [tile root=(unit path) docket=?])
+    %+  weld  (turn local |=(t=tile [t *(unit path) %.n]))
     %+  murn  app-pairs
     |=  [t=tile r=path]
-    ^-  (unit [tile (unit path)])
-    ?:((~(has in local-names) name.t) ~ `[t `r])
+    ^-  (unit [tile (unit path) ?])
+    ?:((~(has in local-names) name.t) ~ `[t `r %.n])
+  ::  a docket tile is dropped if a native local or app tile already owns
+  ::  that name -- the grubbery-native tile wins over the classic one.
+  =.  merged
+    %+  weld  merged
+    %+  murn  docket-tiles
+    |=  t=tile
+    ^-  (unit [tile (unit path) ?])
+    ?:  |((~(has in local-names) name.t) (~(has in app-names) name.t))  ~
+    `[t *(unit path) %.y]
   (pure:m (sort merged |=([a=[tile *] b=[tile *]] (aor name.-.a name.-.b))))
 ::
 ++  tiles-to-json
-  |=  tiles=(list [t=tile root=(unit path)])
+  |=  [tiles=(list [t=tile root=(unit path) docket=?]) hidden=(set @t)]
   ^-  json
   :-  %a
   %+  turn  tiles
-  |=  [t=tile root=(unit path)]
+  |=  [t=tile root=(unit path) docket=?]
   %-  pairs:enjs:format
   :~  name+s+name.t
       title+s+title.t
@@ -3994,6 +4094,23 @@
       color+s+color.t
       image+s+image.t
       href+s+href.t
+      kind+s+kind.t
+      ::  source: where the tile comes from, for the card's origin row.
+      ::  a shell-shipped tile is 'grubbery'; a classic app 'docket'; a
+      ::  grubbery desk 'desk' (it carries a root); a pure pinned link 'link'.
+      source+s+?:(own.t 'grubbery' ?:(docket 'docket' ?~(root 'link' 'desk')))
+      own+b+own.t
       root+?~(root ~ s+(crip (spud u.root)))
+      hidden+b+(~(has in hidden) name.t)
   ==
+::  +read-hidden-tiles: the user's hidden-tile preference — the set of tile
+::  names suppressed from the home grid, from /hidden-tiles.json. ~ = none.
+++  read-hidden-tiles
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(set @t))
+  ^-  form:m
+  ;<  hv=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& / %'hidden-tiles.json']) ,json)
+  ?.  ?=([~ %a *] hv)  (pure:m ~)
+  (pure:m (silt (murn p.u.hv |=(j=json ?:(?=([%s *] j) `p.j ~)))))
 --

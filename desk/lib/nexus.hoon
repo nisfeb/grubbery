@@ -83,19 +83,24 @@
 +$  wave  (axal [fold=cass:clay file=(map @ta cass:clay)])
 +$  view
   $%  [%ball =wave ball=ball:tarball]
-      [%file =cass:clay =sang:tarball]
+      ::  bang: this grub is INERT until rebuilt, and why. A peek of the
+      ::  grub itself carries it, so a fiber following a grub learns it
+      ::  banged from the thing it already watches -- before this, a bang
+      ::  was only visible by peeking the PARENT directory's ball. The
+      ::  grub's value is untouched: a bang sits beside it (+set-bang).
+      [%file =cass:clay =sang:tarball bang=(unit tang)]
       [%none ~]
       [%miss ~]
       [%veto ~]
-      [%tomb ~]
   ==
 +$  cite
-  $%  [%file =cass:clay lobe=jobe conv=(unit blot:tarball)]
+  ::  at: the grub's position, where its mark resolves from. The path it
+  ::  was read at; for a remote grub, its stand-in under /sys/ames.
+  $%  [%file =cass:clay lobe=jobe conv=(unit blot:tarball) at=path]
       [%ball =wave lobe=jobe deep=?]
       [%none ~]
       [%miss ~]
       [%veto ~]
-      [%tomb ~]
   ==
 :: dart payload
 ::
@@ -123,7 +128,7 @@
       [%drop ~]                 :: unsubscribe from dest
       [%lose =lose]             :: drop hist entries, decrement silo refs
       [%gain flag=?]            :: set gain flag (recursive on directories)
-      [%firm ~]                 :: promote current entry to %firm
+      [%firm tags=(set @t)]     :: promote current entry to %firm, with labels
       [%tags case=(unit case) tags=(set @t)]  :: set tags on hist entry (~ = current)
       [%seek =nobe]              :: find all [rail cass] pairs with this hash
       [%peep =find]
@@ -211,7 +216,7 @@
 ::  wire each was passed on. Lets a yawn cancel by duct (ames %yawn
 ::  matches the listener's duct, i.e. the original wire) exactly the
 ::  requesting grub's keens at a spar, leaving other grubs' keens at
-::  the same spar parked — the longpoll pattern has many grubs on one
+::  the same spar waiting — the longpoll pattern has many grubs on one
 ::  name, so a by-spar %wham would cancel them all.
 ::  Stored as a grub at /sys/scry/main.scry-state.
 ::
@@ -248,15 +253,6 @@
       [%unsubscribe sub-id=@ta]
       [%send =push-send:push eny=@]
       [%init eny=@ sub=@t]
-  ==
-::  Usergroups registry action.
-::  Poked to /sys/ames/registry with blot [/usergroups %registry-action].
-::
-+$  registry-action
-  $%  [%register =rail:tarball pax=path]
-      [%deregister =rail:tarball clean=?]
-      [%how group=path =weir]
-      [%gc ~]
   ==
 ::  Clay desk sync service state.
 ::  Stored as a grub at /sys/clay/main.clay-state.
@@ -296,7 +292,7 @@
         [%held =wire err=(unit tang)] :: response to firm
         [%seek =wire res=(each (list [=rail:tarball =cass:clay]) tang)] :: response to seek
         [%peep =wire res=(each (list [=cass:clay =sage:tarball]) tang)] :: response to peep
-        [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)] :: hist metadata
+        [%born =wire res=(each (list [=cass:clay tags=(set @t)]) tang)] :: hist metadata
 
         [%fell =wire]                 :: subscription canceled (weir change, deletion, etc)
         [%news =wire =wave] :: subscription wave (initial or update)
@@ -323,7 +319,7 @@
         [%gain =wire err=(unit tang)]
         [%held =wire err=(unit tang)]
         [%seek =wire res=(each (list [=rail:tarball =cass:clay]) tang)]
-        [%born =wire res=(each (list [=cass:clay tags=(set @t) tomb=?]) tang)]
+        [%born =wire res=(each (list [=cass:clay tags=(set @t)]) tang)]
         [%fell =wire]
         [%veto =dart]
         [%here =wire =here]
@@ -337,7 +333,25 @@
   +$  take  [give=(unit give) in=(unit pend)]
   :: Three situations for process initialization
   ::
-  +$  prod  (unit tang)    :: ~ = clean start, [~ tang] = crash recovery
+  ::  TODO: +prod IS OBSOLETE -- REMOVE IT.
+  ::
+  ::    It carried a crash tang into a restarting fiber, for the single
+  ::    purpose of letting that fiber wait for a poke instead of
+  ::    re-running (+rise-wait / +rise-later). Nothing auto-restarts any
+  ::    more: a crash or a %fail BANGS the grub, and it is rebuilt only
+  ::    when a later take needs it -- so the trigger is already an
+  ::    external event and there is nothing to defend against.
+  ::
+  ::    Every caller now passes ~, so every +rise-wait is the clean-start
+  ::    path. The type stays only because removing it rewrites ~92 call
+  ::    sites across ~28 nexuses for zero change in behaviour; that churn
+  ::    belongs in its own commit, not in the one that changed what a
+  ::    crash means. When it goes, +spool stops needing to be
+  ::    $-(prod process) and can simply BE a process -- which also
+  ::    removes one of the two build-time bangs (the "spool crash", where
+  ::    applying the spool fails), leaving only "it would not compile".
+  ::
+  +$  prod  (unit tang)    :: always ~; see the TODO above
   ::
   ::  THE TRANSACTION IS THE ARROW: a form is $-(input output), and
   ::  one invocation — one input (a null kick counts) in, one verb
@@ -436,10 +450,20 @@
 ::
 :: version history for files and directories
 ::
+::  A VERSION ALWAYS REFERENCES CONTENT. It cannot say "nothing was
+::  here": what exists is $peak's business, what it held is born's, and
+::  a version that could reference emptiness let the two blur. A path
+::  with a peak above born's top is a path that no longer exists -- the
+::  absence is READ FROM THE PAIR, never stored.
+::
+::  There is no tomb pace: a dropped version is simply absent, and its
+::  number lives on in $peak. It might be nice to have one that carries
+::  the hash of what it replaced, as remote scry's does, so a history
+::  could say "this cass was X and was dropped" and a remote holder of
+::  X could verify it.
 +$  pace
-  $%  [%firm p=(unit jobe)]
-      [%temp p=(unit jobe)]
-      [%tomb ~]
+  $%  [%firm lobe=jobe]
+      [%temp lobe=jobe]
   ==
 ++  hist
   =<  hist
@@ -484,6 +508,16 @@
   --
 ::
 +$  born  (axal [fold=hist file=(map @ta hist)])
+::  +$peak: born's shadow. Born's skeleton with every hist collapsed to
+::  its high-water cass: the top number every rail ever written has
+::  reached. Raised with every write, never deleted. Numbering lives
+::  here; born is history, and a born record may be dropped at any time
+::  (a directory of short-lived grubs, one per HTTP request, stays
+::  small) while a re-creation still numbers after everything that rail
+::  was ever called. [rail cass] never rebinds. Destroy everything about
+::  a name except what number comes next.
+::
++$  peak  (axal [fold=(unit cass:clay) file=(map @ta cass:clay)])
 ::  jobe/nobe: same atom as lobe:clay, but the alias says which
 ::  silo store the hash names. Pace and cite lobes are always
 ::  jobes; leaf content and bangs are always nobes. Use the alias
@@ -563,10 +597,10 @@
 ::  a level produces the same hash.
 ::
 ++  record-trees
-  |=  [=born =silo =code now=@da dir=path]
+  |=  [=born =silo =peak =code now=@da dir=path]
   ^-  [^born ^silo]
   =/  res=[bumped=(set lane:tarball) bon=^born sil=^silo]
-    (record-trees-lanes born silo code now dir ~)
+    (record-trees-lanes born silo peak code now dir ~)
   [bon.res sil.res]
 ::  +record-trees-lanes: +record-trees, reporting the dirs it bumped.
 ::
@@ -576,7 +610,7 @@
 ::    instead of rediscovering it with a whole-namespace diff.
 ::
 ++  record-trees-lanes
-  |=  [=born =silo =code now=@da dir=path bumped=(set lane:tarball)]
+  |=  [=born =silo =peak =code now=@da dir=path bumped=(set lane:tarball)]
   ^-  [(set lane:tarball) ^born ^silo]
   =/  sub-born=^born  (~(dip of born) dir)
   =/  boo  ~(. bo now born)
@@ -590,9 +624,7 @@
     ?~  fold-top  ~
     =/  got=(unit pace:hist)  (get-pace:hist fold.node u.fold-top)
     ?~  got  ~
-    ?:  ?=(%tomb -.u.got)  ~
-    ?~  p.u.got  ~
-    =/  jot  (~(get by jects.silo) u.p.u.got)
+    =/  jot  (~(get by jects.silo) lobe.u.got)
     ?~  jot  ~
     ?.  ?=(%tree -.ject.u.jot)  ~
     `tree.ject.u.jot
@@ -621,11 +653,15 @@
     |=  [[name=@ta sk=hist] out=(map @ta jobe)]
     =/  cas=(unit cass:clay)  (top-hist sk)
     ?~  cas  out
+    ::  GONE: a rail whose peak stands above its top is not here any
+    ::  more, however much of it born still holds. Retention keeps the
+    ::  record of a gained path past its death, so born's top is no
+    ::  longer the question -- without this the rebuild reads that
+    ::  record and puts the grub back, and the cull never took.
+    ?:  (~(gone-file pk peak) [dir name] u.cas)  out
     =/  val=(unit pace:hist)  (get-pace:hist sk u.cas)
     ?~  val  out
-    ?:  ?=(%tomb -.u.val)  out
-    ?~  p.u.val  out
-    (~(put by out) name u.p.u.val)
+    (~(put by out) name lobe.u.val)
   ::  dir: each child's latest tree lobe + weir from existing tree
   =/  dir-map=(map @ta [jobe weir=(unit weir)])
     %-  ~(rep by dir.sub-born)
@@ -634,23 +670,23 @@
     ?~  kid-node  out
     =/  cas=(unit cass:clay)  (top-fold fold.u.kid-node)
     ?~  cas  out
+    ::  gone, the same way a grub is
+    ?:  (~(gone-fold pk peak) (snoc dir name) u.cas)  out
     =/  got=(unit pace:hist)
       (get-pace:hist fold.u.kid-node u.cas)
     ?~  got  out
-    ?:  ?=(%tomb -.u.got)  out
-    ?~  p.u.got  out
     =/  kid-weir=(unit weir)
       ?~  existing-tree  ~
       =/  entry  (~(get by dir.u.existing-tree) name)
       ?~  entry  ~
       weir.u.entry
-    (~(put by out) name [u.p.u.got kid-weir])
+    (~(put by out) name [lobe.u.got kid-weir])
   ::  Build tree object + store via put-tree
   =/  tree-gain=?  ?~(existing-tree %.n gain.u.existing-tree)
   =/  tree-bang=(unit nobe)  ?~(existing-tree ~ bang.u.existing-tree)
   =/  =tree  [nek tree-gain tree-bang fil dir-map]
   =/  [changed=? new-born=^born new-silo=^silo]
-    (put-tree born silo now dir node tree)
+    (put-tree born silo peak now dir node tree)
   ?.  changed  [bumped born silo]
   =.  bumped  (~(put in bumped) |+dir)
   ?~  dir  [bumped new-born new-silo]
@@ -659,7 +695,7 @@
 ::  Returns [changed born silo].
 ::
 ++  put-tree
-  |=  [=born =silo now=@da dir=path node=[fold=hist file=(map @ta hist)] =tree]
+  |=  [=born =silo =peak now=@da dir=path node=[fold=hist file=(map @ta hist)] =tree]
   ^-  [changed=? ^born ^silo]
   =/  new-lobe=jobe  `@uvI`(sham [%tree tree])
   =/  top-fold  top:hist
@@ -669,22 +705,32 @@
       ?~  fold-cas  ~
       (get-pace:hist fold.node u.fold-cas)
     ?~  cur-pace  ~
-    ?:  ?=(%tomb -.u.cur-pace)  ~
-    p.u.cur-pace
+    `lobe.u.cur-pace
   ?:  =(`new-lobe cur-lobe)
     [%.n born silo]
   =/  [* new-silo=^silo]
     (~(put-ject si silo) [%tree tree])
-  ::  Tombstone previous %temp fold entry
+  ::  the previous %temp fold entry goes (delete, not tomb): a dir's
+  ::  fold hist is otherwise one entry per structural change, forever
   =/  [tombed-silo=^silo tombed-fold=hist]
     ?~  fold-cas  [new-silo fold.node]
-    (~(tomb-temp si new-silo) fold.node u.fold-cas)
+    (~(drop-temp si new-silo) fold.node u.fold-cas)
   =.  silo  tombed-silo
-  =/  old-fold=cass:clay  (fall fold-cas [0 now])
+  ::  NUMBER FROM THE PEAK, not from born alone. born's fold hist can be
+  ::  dropped (a cull, a migration), and numbering from what is left
+  ::  restarts low and spends numbers this rail already used -- [rail
+  ::  cass] rebinds, which is the one thing $peak exists to prevent.
+  ::  +record has always done this for a grub; a fold was numbering
+  ::  itself. So the floor is whichever of the two stands higher.
+  =/  mark=(unit cass:clay)  (~(get-fold pk peak) dir)
+  =/  old-fold=cass:clay
+    ?~  fold-cas  (fall mark [0 now])
+    ?~  mark  u.fold-cas
+    ?:((gth ud.u.mark ud.u.fold-cas) u.mark u.fold-cas)
   =/  new-fold=cass:clay
     =/  nex-da=@da  ?:((lth da.old-fold now) now +(da.old-fold))
     [+(ud.old-fold) nex-da]
-  =/  =pace:hist  ?:(gain.tree [%firm `new-lobe] [%temp `new-lobe])
+  =/  =pace:hist  ?:(gain.tree [%firm new-lobe] [%temp new-lobe])
   =/  new-hist=hist
     (put-pace:hist tombed-fold new-fold pace)
   =.  born  (~(put of born) dir node(fold new-hist))
@@ -696,26 +742,24 @@
 ::    - top of hist = current version; (top:hist fold) / (top:hist file)
 ::
 ::  Invariants:
-::    - A gained grub's born record is never deleted. It is the
-::      high-water mark that keeps version numbering monotonic across
-::      a delete and a later re-creation, which is what page history
-::      reads. An un-gained grub has no history to order, so its
-::      record goes when the grub does. Keeping it would leave every
-::      request fiber ever run sitting in its directory, and both the
-::      tree walk and the born diff scan that directory on every
-::      later write.
+::    - [rail cass] never rebinds. Numbering lives in $peak, raised
+::      with every write; a record here is history and may be dropped
+::      (a cull to peak drops it, so a directory of request fibers does
+::      not grow forever). +init starts a re-creation above the peak.
 ::    - Sack hist bumps IFF content changes
 ::    - Tote hist bumps on any descendant change (fold)
 ::    - Weir cass bumps on weir change at that directory
 ::
 ++  bo
   |_  [now=@da old=born]
-  ::  Default node with initial hist entry
+  ::  Default node: no versions yet. A rail gets its first entry from
+  ::  its first WRITE -- the placeholder that used to sit here was a
+  ::  leftover of the old [%file ~] / [%fold ~] kind sentinel, and under
+  ::  pace it read as a version holding nothing.
   ::
   ++  default-node
     ^-  [fold=hist file=(map @ta hist)]
-    =/  zero=cass:clay  [0 now]
-    [[[zero [[%temp ~] ~]] ~ ~] ~]
+    [~ ~]
   ::  Get hist for a file
   ::
   ++  get
@@ -733,8 +777,7 @@
     =/  node=[fold=hist file=(map @ta hist)]
       (fall (~(get of old) path.here) default-node)
     (~(put of old) path.here node(file (~(put by file.node) name.here sok)))
-  ::  Drop a file's hist entirely. Only ever called for a grub that was
-  ::  never gained, so there is no ordering high-water mark to lose.
+  ::  Drop a file's hist entirely. Its numbering lives on in $peak.
   ::
   ++  del
     |=  here=rail:tarball
@@ -762,16 +805,69 @@
     =/  nex-da=@da
       ?:((lth da.cass now) now +(da.cass))
     [+(ud.cass) nex-da]
-  ::  Init born for new file — reuse existing hist if present (re-creation)
+  ::  Init born for a new file: the rail, with no versions. Where its
+  ::  first one is NUMBERED is +record's business, from $peak -- here
+  ::  there is nothing to number yet.
   ::
   ++  init
     |=  here=rail:tarball
     ^-  born
     =/  existing=(unit hist)  (get here)
-    ?~  existing
-      =/  zero=cass:clay  [0 now]
-      (put here [[zero [[%temp ~] ~]] ~ ~])
-    (put here u.existing)
+    ?^  existing  (put here u.existing)
+    (put here ~)
+  --
+::  +pk: Pure operations on peak (born's shadow of dropped records)
+::
+++  pk
+  |_  =peak
+  ++  get-file
+    |=  here=rail:tarball
+    ^-  (unit cass:clay)
+    =/  node=(unit [fold=(unit cass:clay) file=(map @ta cass:clay)])
+      (~(get of peak) path.here)
+    ?~  node  ~
+    (~(get by file.u.node) name.here)
+  ::  record a file's top cass; a rail only ever rises
+  ++  put-file
+    |=  [here=rail:tarball =cass:clay]
+    ^-  ^peak
+    =/  node=[fold=(unit cass:clay) file=(map @ta cass:clay)]
+      (fall (~(get of peak) path.here) [~ ~])
+    =/  cur=(unit cass:clay)  (~(get by file.node) name.here)
+    ?:  &(?=(^ cur) (gte ud.u.cur ud.cass))  peak
+    (~(put of peak) path.here node(file (~(put by file.node) name.here cass)))
+  ::  the same for a DIRECTORY. A fold's number has to rise too, or a
+  ::  deleted directory is indistinguishable from one that never was:
+  ::  both read as "no versions". With it, a fold whose peak stands
+  ::  above its top is a directory that no longer exists.
+  ++  get-fold
+    |=  dir=fold:tarball
+    ^-  (unit cass:clay)
+    =/  node=(unit [fold=(unit cass:clay) file=(map @ta cass:clay)])
+      (~(get of peak) dir)
+    ?~(node ~ fold.u.node)
+  ++  put-fold
+    |=  [dir=fold:tarball =cass:clay]
+    ^-  ^peak
+    =/  node=[fold=(unit cass:clay) file=(map @ta cass:clay)]
+      (fall (~(get of peak) dir) [~ ~])
+    ?:  &(?=(^ fold.node) (gte ud.u.fold.node ud.cass))  peak
+    (~(put of peak) dir node(fold `cass))
+  ::  +gone-file / +gone-fold: is this rail dead? A death is a number
+  ::  in peak above born's top, never a version: retention may keep a
+  ::  gained path's record past its death, so born's top is not the
+  ::  question. Every tree rebuild asks this before it reads a record.
+  ::
+  ++  gone-file
+    |=  [here=rail:tarball top=cass:clay]
+    ^-  ?
+    =/  mark=(unit cass:clay)  (get-file here)
+    &(?=(^ mark) (gth ud.u.mark ud.top))
+  ++  gone-fold
+    |=  [here=fold:tarball top=cass:clay]
+    ^-  ?
+    =/  mark=(unit cass:clay)  (get-fold here)
+    &(?=(^ mark) (gth ud.u.mark ud.top))
   --
 ::  +si: Pure operations on silo (content-addressed object store)
 ::
@@ -824,9 +920,7 @@
     |-
     ?~  entries  silo
     =/  pv=pace:^hist  pace.val.i.entries
-    ?:  ?=(%tomb -.pv)  $(entries t.entries)
-    ?~  p.pv  $(entries t.entries)
-    $(entries t.entries, silo (drop-ject u.p.pv))
+    $(entries t.entries, silo (drop-ject lobe.pv))
   ::  Increment noun refcount by lobe (must exist).
   ::
   ++  bump-ref
@@ -975,18 +1069,14 @@
       $(fil-entries t.fil-entries)
     ==
   ::  Set bang on an existing ject.  Stores the tang as a noun,
-  ::  builds a new ject with bang=`tang-lobe, and returns the new
-  ::  ject lobe with the hist the new pace goes into.  The pace at
-  ::  .cas is replaced the way +record replaces one (+tomb-temp): a
-  ::  %temp pace is tombed with its ref dropped, a %firm one stays history
-  ::  and keeps its ref.  Dropping the ref and keeping the pace left a
-  ::  pace naming a ject nothing owned.
+  ::  builds a new ject with bang=`tang-lobe, drops the old ject,
+  ::  and returns the new ject lobe.
   ::
   ++  set-bang
-    |=  [=hist cas=cass:clay old-lobe=jobe err=tang]
-    ^-  [jobe ^silo ^hist]
+    |=  [old-lobe=jobe err=tang]
+    ^-  [jobe ^silo]
     =/  got  (~(get by jects.silo) old-lobe)
-    ?~  got  [old-lobe silo hist]
+    ?~  got  [old-lobe silo]
     ::  store tang noun in silo
     =/  [tang-lobe=nobe mid-silo=^silo]  (~(put si silo) err)
     ::  build new ject with bang set
@@ -997,16 +1087,17 @@
       ==
     =/  [new-jobe=jobe fin-silo=^silo]
       (~(put-ject si mid-silo) new-ject)
-    =/  [out-silo=^silo out-hist=^hist]
-      (~(tomb-temp si fin-silo) hist cas)
-    [new-jobe out-silo out-hist]
-  ::  Clear bang on an existing ject.  Builds a new ject with bang=~
-  ::  and replaces the pace at .cas as +set-bang does.
+    ::  the old ject STAYS. A bang is a new version, and the version it
+    ::  follows still names this ject -- releasing it here left records
+    ::  pointing at collected objects. Its release is +drop-temp's call,
+    ::  made with the entry it belongs to.
+    [new-jobe fin-silo]
+  ::  Clear bang on an existing ject.  Builds a new ject with bang=~.
   ::  Returns ~ if ject has no bang or doesn't exist.
   ::
   ++  clear-bang
-    |=  [=hist cas=cass:clay old-lobe=jobe]
-    ^-  (unit [lobe=jobe =^silo =^hist])
+    |=  old-lobe=jobe
+    ^-  (unit [lobe=jobe =^silo])
     =/  got  (~(get by jects.silo) old-lobe)
     ?~  got  ~
     =/  old-bang=(unit nobe)
@@ -1023,22 +1114,25 @@
       ==
     =/  [new-jobe=jobe mid-silo=^silo]
       (~(put-ject si silo) new-ject)
-    =/  [out-silo=^silo out-hist=^hist]
-      (~(tomb-temp si mid-silo) hist cas)
-    `[new-jobe out-silo out-hist]
-  ::  Tombstone previous %temp entry in hist, dropping silo refs.
-  ::  %firm entries are left untouched.
+    ::  as in +set-bang: the version being followed still names the old
+    ::  ject, so it is not released here
+    `[new-jobe mid-silo]
+  ::  +drop-temp: a %temp pace that is being replaced is deleted, not
+  ::  tombed. A hist then holds only readable paces, so a hot file does
+  ::  not carry its whole write count as tomb entries. Absence at a cass
+  ::  is terminal exactly as a tomb was: content goes to gone, never to
+  ::  other content, and the number is never reused (the new pace is
+  ::  always above it). A %firm pace is history and stays.
   ::
-  ++  tomb-temp
+  ++  drop-temp
     |=  [=hist prev-cas=cass:clay]
     ^-  [^silo ^hist]
     =/  prev-pace=(unit pace:^hist)  (get-pace:^hist hist prev-cas)
     ?~  prev-pace  [silo hist]
     ?.  ?=(%temp -.u.prev-pace)  [silo hist]
     =.  silo
-      ?~  p.u.prev-pace  silo
-      (~(drop-ject si silo) u.p.u.prev-pace)
-    [silo (put-pace:^hist hist prev-cas [%tomb ~])]
+      (~(drop-ject si silo) lobe.u.prev-pace)
+    [silo +:(del:hon:^hist hist prev-cas)]
   ::  Record a noun: insert into silo, update hist.
   ::  Returns [lobe new-silo new-hist].
   ::
@@ -1060,9 +1154,7 @@
     =/  prev-leaf=(unit leaf)
       =/  prev-pace=(unit pace:^hist)  (get-pace:^hist hist file-cass)
       ?~  prev-pace  ~
-      ?:  ?=(%tomb -.u.prev-pace)  ~
-      ?~  p.u.prev-pace  ~
-      =/  got  (~(get by jects.silo) u.p.u.prev-pace)
+      =/  got  (~(get by jects.silo) lobe.u.prev-pace)
       ?~  got  ~
       ?.  ?=(%leaf -.ject.u.got)  ~
       `leaf.ject.u.got
@@ -1084,10 +1176,12 @@
       silo(nouns (~(put by nouns.silo) noun-lobe [0 noun]))
     =/  [ject-lobe=jobe newer-silo=^silo]
       (~(put-ject si new-silo) [%leaf noun-lobe [blot ckey ns] gain prev-bang])
-    =/  [tombed-silo=^silo tombed-hist=^hist]
-      (~(tomb-temp si newer-silo) hist file-cass)
-    =/  =pace:^hist  ?:(gain [%firm `ject-lobe] [%temp `ject-lobe])
-    [noun-lobe tombed-silo (put-pace:^hist tombed-hist cass pace)]
+    ::  the pace this one replaces goes if it was %temp (delete, not
+    ::  tomb); a %firm one is kept history
+    =/  [dropped-silo=^silo dropped-hist=^hist]
+      (~(drop-temp si newer-silo) hist file-cass)
+    =/  =pace:^hist  ?:(gain [%firm ject-lobe] [%temp ject-lobe])
+    [noun-lobe dropped-silo (put-pace:^hist dropped-hist cass pace)]
   --
 ::  +stamp-mtimes: no-op (metadata removed from content)
 ::
@@ -1539,7 +1633,7 @@
   |=  sk=hist
   ^-  json
   %-  pairs:enjs:format
-  :~  ['file' (cass-to-json (need (top:hist sk)))]
+  :~  ['file' ?~(t=(top:hist sk) ~ (cass-to-json u.t))]
       :-  'hist'
       :-  %a
       %+  turn  (tap:hon:hist sk)
@@ -1549,16 +1643,12 @@
           ['da' s+(scot %da da.key)]
           :-  'pace'
           ?-  -.pace.val
-            %tomb  s+'tomb'
             %firm
-          ?~  p.pace.val  s+'deleted'
-          s+(cat 3 'firm+' (scot %uv u.p.pace.val))
+          s+(cat 3 'firm+' (scot %uv lobe.pace.val))
             %temp
-          ?~  p.pace.val  s+'deleted'
-          s+(cat 3 'temp+' (scot %uv u.p.pace.val))
+          s+(cat 3 'temp+' (scot %uv lobe.pace.val))
           ==
           :-  'tags'
-          ?:  ?=(%tomb -.pace.val)  ~
           a+(turn ~(tap in tags.val) |=(t=@t s+t))
       ==
   ==
@@ -1571,7 +1661,7 @@
     %-  pairs:enjs:format
     :~  :-  'fold'
         %-  pairs:enjs:format
-        :~  ['cass' (cass-to-json (need (top:hist fold.u.fil.b)))]
+        :~  ['cass' ?~(t=(top:hist fold.u.fil.b) ~ (cass-to-json u.t))]
             :-  'hist'
             :-  %a
             %+  turn  (tap:hon:hist fold.u.fil.b)
@@ -1581,16 +1671,12 @@
                 ['da' s+(scot %da da.key)]
                 :-  'pace'
                 ?-  -.pace.val
-                  %tomb  s+'tomb'
                   %firm
-                ?~  p.pace.val  s+'deleted'
-                s+(cat 3 'firm+' (scot %uv u.p.pace.val))
+                s+(cat 3 'firm+' (scot %uv lobe.pace.val))
                   %temp
-                ?~  p.pace.val  s+'deleted'
-                s+(cat 3 'temp+' (scot %uv u.p.pace.val))
+                s+(cat 3 'temp+' (scot %uv lobe.pace.val))
                 ==
                 :-  'tags'
-                ?:  ?=(%tomb -.pace.val)  ~
                 a+(turn ~(tap in tags.val) |=(t=@t s+t))
             ==
         ==
@@ -1605,6 +1691,28 @@
   %-  pairs:enjs:format
   :~  ['node' node-json]
       ['dirs' kids-json]
+  ==
+::
+::  +peak-to-json: born's shadow, as a tree. Read beside born-to-json:
+::  a rail whose peak stands above born's top no longer exists, and the
+::  peak's date is when it stopped.
+::
+++  peak-to-json
+  |=  p=peak
+  ^-  json
+  =/  kids=json  [%o (~(run by dir.p) |=(kid=peak ^$(p kid)))]
+  ?~  fil.p
+    ?:  =(~ dir.p)  ~
+    (pairs:enjs:format ~[['dirs' kids]])
+  %-  pairs:enjs:format
+  :~  :-  'node'
+      %-  pairs:enjs:format
+      :~  ['fold' ?~(f=fold.u.fil.p ~ (cass-to-json u.f))]
+          :-  'file'
+          :-  %o
+          (~(run by file.u.fil.p) cass-to-json)
+      ==
+      ['dirs' kids]
   ==
 ::
 ++  ball-weirs-to-json
