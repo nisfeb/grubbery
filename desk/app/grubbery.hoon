@@ -4358,6 +4358,12 @@
         ==
       =.  this  (handle-timer-rest here q.sage)
       (enqu-take here ~ ~ %pack wire.dart ~)
+    ::  dist: +reg-how:io from an app built for the dist kernel
+    ?:  ?&  =([/sys/ames %'registry'] dest)
+            =([/ %reg-how] p.sage)
+        ==
+      =^  err=(unit tang)  this  (handle-reg-how here q.sage)
+      (enqu-take here ~ ~ %pack wire.dart err)
     ?:  ?&  =([/sys/eyre %'main.server-state'] dest)
             =([/ %eyre-action] p.sage)
         ==
@@ -8835,6 +8841,73 @@
     ==
   (drop-bindings gone)
 ::
+::  +handle-reg-how: dist compatibility for +reg-how:io. develop has no
+::  registry: an app opens its roads into a group by naming them in the
+::  groups.json at its root, and the shell derives the group from that
+::  once the user approves it on Permits. A sandboxed app cannot see its
+::  own root, so the kernel does it: the root is the nearest directory
+::  at or above the sender that is a nexus, every road is resolved
+::  against the sender and must land inside that root, and the group's
+::  entry in the root's groups.json is replaced with those roads.
+::
+++  handle-reg-how
+  |=  [here=rail:tarball vaz=vase]
+  ^-  [(unit tang) _this]
+  =/  [group=path =weir:nexus]  !<([path weir:nexus] vaz)
+  =/  root=(unit path)
+    =/  pax=path  path.here
+    |-  ^-  (unit path)
+    ?:  (has-neck pax)  `pax
+    ?~  pax  ~
+    $(pax (snip `path`pax))
+  ?~  root  [`~[leaf+"reg-how: no nexus above {(spud path.here)}"] this]
+  =/  txt
+    |=  =road:tarball
+    ^-  (unit @t)
+    =/  ln=(unit lane:tarball)  (lane-from-road:tarball [%& here] road)
+    ?~  ln  ~
+    =/  [pax=path fil=(unit @ta)]
+      ?-(-.u.ln %& [path.p.u.ln `name.p.u.ln], %| [p.u.ln ~])
+    ?.  =(u.root (scag (lent u.root) pax))  ~
+    =/  sub=path  (slag (lent u.root) pax)
+    ?^  fil  `(crip (spud (snoc sub u.fil)))
+    ?~  sub  `'/'
+    `(crip (weld (spud sub) "/"))
+  =/  arr
+    |=  roads=(set road:tarball)
+    ^-  (unit json)
+    =/  got=(list (unit @t))  (turn ~(tap in roads) txt)
+    ?.  (levy got |=(u=(unit @t) ?=(^ u)))  ~
+    `a+(turn (murn got same) |=(t=@t s+t))
+  =/  mk  (arr make.weir)
+  =/  pk  (arr poke.weir)
+  =/  pe  (arr peek.weir)
+  ?.  &(?=(^ mk) ?=(^ pk) ?=(^ pe))
+    [`~[leaf+"reg-how: a road lands outside {(spud u.root)}"] this]
+  =/  at=rail:tarball  [u.root %'groups.json']
+  =/  cur=(unit json)
+    =/  old=(unit sang:tarball)  (peek-grub-now at)
+    ?~  old  ~
+    ((soft json) (sang-noun:tarball u.old))
+  =/  obj=(map @t json)  ?.(?=([~ %o *] cur) ~ p.u.cur)
+  =/  ent=json  (pairs:enjs:format ~[['make' u.mk] ['poke' u.pk] ['peek' u.pe]])
+  =/  new=json  [%o (~(put by obj) (spat group) ent)]
+  ?:  =(`new cur)  [~ this]
+  [~ (save-file at [[/ %json] new])]
+::  +has-neck: is the directory at .pax a nexus root?
+::
+++  has-neck
+  |=  pax=path
+  ^-  ?
+  =/  sub=born:nexus  (~(dip of born) pax)
+  ?~  fil.sub  %.n
+  =/  top=(unit [key=cass:clay val=entry:hist:nexus])
+    (ram:hon:hist:nexus fold.u.fil.sub)
+  ?~  top  %.n
+  =/  jot  (~(get by jects.silo) lobe.pace.val.u.top)
+  ?~  jot  %.n
+  ?.  ?=(%tree -.ject.u.jot)  %.n
+  ?=(^ nek.tree.ject.u.jot)
 ++  handle-eyre-action
   |=  [sender=rail:tarball =wire vaz=vase]
   ^+  this

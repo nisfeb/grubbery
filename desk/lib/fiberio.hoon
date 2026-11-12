@@ -2182,84 +2182,16 @@
   ;<  err=(unit tang)  bind:m  (reg-how-soft group weir)
   ?~  err  (pure:m ~)
   ~|(%reg-how-failed (mean u.err))
-::  +reg-how-soft: set .group's roads in the caller's app's groups.json.
-::  A sandboxed app cannot see its absolute path, so its root is found
-::  from what it can see: the deepest visible directory that is a nexus
-::  root. Roads, absolute or relative to the caller, must land inside
-::  that root; they are written relative to it, /dir/ for a directory,
-::  /dir/file for a file.
+::  +reg-how-soft: the kernel sets .group's roads in the caller's app's
+::  groups.json (+handle-reg-how), since a sandboxed app cannot see its
+::  own root. The app needs poke on /sys/ames/registry, which every app
+::  built for the dist kernel already asks for.
 ::
 ++  reg-how-soft
   |=  [group=path =weir:nexus]
   =/  m  (fiber ,(unit tang))
   ^-  form:m
-  ;<  =here:nexus  bind:m  get-here
-  =/  dirs=pant:nexus  pant.here
-  =/  idx=(unit @ud)
-    =/  i=@ud  (lent dirs)
-    |-  ^-  (unit @ud)
-    ?:  =(0 i)  ~
-    =/  ent  (snag (dec i) dirs)
-    ?^  neck.ent  `(dec i)
-    $(i (dec i))
-  ?~  idx  (pure:m `~[leaf+"reg-how: no nexus root above the caller"])
-  =/  rname=@ta  dir:(snag u.idx dirs)
-  ::  the caller's directory, relative to the app root
-  =/  below=path  (turn (slag +(u.idx) dirs) |=([d=@ta *] d))
-  =/  txt
-    |=  =road:tarball
-    ^-  (unit @t)
-    =/  got=(unit [pax=path fil=(unit @ta)])
-      ?-    -.road
-          %&
-        =/  [pax=path fil=(unit @ta)]
-          ?-(-.p.road %& [path.p.p.road `name.p.p.road], %| [p.p.road ~])
-        =/  at=(unit @ud)  (find ~[rname] pax)
-        ?~  at  ~
-        `[(slag +(u.at) pax) fil]
-          %|
-        =/  up=@ud  p.p.road
-        ?:  (gth up (lent below))  ~
-        =/  base=path  (scag (sub (lent below) up) below)
-        ?-  -.q.p.road
-          %&  `[(weld base path.p.q.p.road) `name.p.q.p.road]
-          %|  `[(weld base p.q.p.road) ~]
-        ==
-      ==
-    ?~  got  ~
-    ?^  fil.u.got  `(crip (spud (snoc pax.u.got u.fil.u.got)))
-    ?~  pax.u.got  `'/'
-    `(crip (weld (spud pax.u.got) "/"))
-  =/  arr
-    |=  roads=(set road:tarball)
-    ^-  (unit json)
-    =/  got=(list (unit @t))  (turn ~(tap in roads) txt)
-    ?.  (levy got |=(u=(unit @t) ?=(^ u)))  ~
-    `a+(turn (murn got same) |=(t=@t s+t))
-  =/  mk  (arr make.weir)
-  =/  pk  (arr poke.weir)
-  =/  pe  (arr peek.weir)
-  ?.  &(?=(^ mk) ?=(^ pk) ?=(^ pe))
-    (pure:m `~[leaf+"reg-how: a road lands outside the app root %{(trip rname)}"])
-  =/  =road:tarball  [%| (lent below) %& [/ %'groups.json']]
-  ;<  cur=(unit json)  bind:m  (peek-as road ,json)
-  =/  obj=(map @t json)  ?.(?=([~ %o *] cur) ~ p.u.cur)
-  =/  ent=json  (pairs:enjs:format ~[['make' u.mk] ['poke' u.pk] ['peek' u.pe]])
-  =/  new=json  [%o (~(put by obj) (spat group) ent)]
-  ?:  =(`new cur)  (pure:m ~)
-  ;<  =wire  bind:m  (nonce /make)
-  ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n |+[[[/ %json] new] ~])
-  |=  input
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %veto *]
-    [%done `(veto-error dart.u.in)]
-      [~ %made * *]
-    ?.  =(wire wire.u.in)
-      [%skip ~]
-    [%done err.u.in]
-  ==
+  (poke-soft reg-road [[/ %reg-how] [group weir]])
 ::  Discovery (/sys/link) helpers.
 ::
 ::  An app is addressed by NAME, not by where it is installed: a name
