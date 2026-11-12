@@ -167,8 +167,26 @@
       ::
       [~ %'main.sig']
     ;<  ~  bind:m  (rise-wait:io prod "%tools /main: failed")
+    ::  the last listing and when it was made (see %list)
+    =|  last=(unit [at=@da dyn=(map @t tool:nex-tools)])
     |-
-    ;<  [=from:fiber:nexus =sage:tarball]  bind:m  take-poke-from:io
+    ::  the next command. The ack or refusal of a list reply (sent
+    ::  without waiting on it, below) is taken and dropped here: left to
+    ::  +take-poke-from it would ride the skip queue, or a refusal would
+    ::  fail this fiber
+    ;<  got=(unit [=from:fiber:nexus =sage:tarball])  bind:m
+      =/  n  (fiber:fiber:nexus ,(unit [=from:fiber:nexus =sage:tarball]))
+      ^-  form:n
+      |=  input:fiber:nexus
+      :+  ~  q.state
+      ?+  in  [%skip ~]
+        ~              [%wait ~]
+        [~ %poke * *]  [%done `[from sage]:u.in]
+        [~ %pack * *]  [%done ~]
+        [~ %veto *]    [%done ~]
+      ==
+    ?~  got  $
+    =/  [=from:fiber:nexus =sage:tarball]  u.got
     ::  every command is a [/ %json] poke keyed by a "cmd" field —
     ::  reusing the json mark (no per-command marks to define, so the
     ::  queued poke stays hydrate-valid).
@@ -181,9 +199,24 @@
       ::  live listing: scan our own /code (relative, self-locating) and
       ::  poke the schema array straight back to whoever asked — a plain
       ::  request/response, no grub written anywhere.
-      ;<  dynamic=(map @t tool:nex-tools)  bind:m  (get-dynamic-tools rail)
+      ::  one code fetch per tool, and this supervisor serves calls in
+      ::  between: a listing made in the last minute is reused.
+      ::  ponytail: a minute's ttl, so a tool added just now may take
+      ::  that long to show; drop it on /code news if that matters.
+      ;<  now=@da  bind:m  get-time:io
+      =/  fresh=?  &(?=(^ last) (lth now (add at.u.last ~m1)))
+      ;<  dynamic=(map @t tool:nex-tools)  bind:m
+        ?:  fresh
+          (pure:(fiber:fiber:nexus ,(map @t tool:nex-tools)) ?>(?=(^ last) dyn.u.last))
+        (get-dynamic-tools rail)
+      =?  last  !fresh  `[now dynamic]
       =/  reply=road:tarball  [%| p.from [%& q.from]]
-      ;<  ~  bind:m  (poke:io reply [[/ %json] (list-json dynamic)])
+      ::  sent without waiting: an asker that has gone (its HTTP request
+      ::  timed out or was cancelled) never consumes it. A poke that
+      ::  waited banged this supervisor ("no process") or parked it for
+      ::  good, and every later tools/call queued behind it
+      ;<  ~  bind:m
+        (send-dart:io %node /list-reply reply %poke [[/ %json] (list-json dynamic)])
       $
     ?:  =('cull' cmd)
       =/  cid=@t  (~(dog jo:json-utils jon) /id so:dejs:format)
