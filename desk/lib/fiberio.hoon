@@ -2186,31 +2186,53 @@
   ?~  err  (pure:m ~)
   ~|(%reg-how-failed (mean u.err))
 ::  +reg-how-soft: set .group's roads in the caller's app's groups.json.
-::  The app's root is the nearest directory above the caller holding a
-::  weir.json. Roads must be absolute and inside that root; they are
-::  written relative to it, /dir/ for a directory, /dir/file for a file.
+::  A sandboxed app cannot see its absolute path, so its root is found
+::  from what it can see: the deepest visible directory that is a nexus
+::  root. Roads, absolute or relative to the caller, must land inside
+::  that root; they are written relative to it, /dir/ for a directory,
+::  /dir/file for a file.
 ::
 ++  reg-how-soft
   |=  [group=path =weir:nexus]
   =/  m  (fiber ,(unit tang))
   ^-  form:m
-  ;<  here=rail:tarball  bind:m  get-here-abs
-  ;<  root=(unit path)  bind:m  (app-root path.here)
-  ?~  root  (pure:m `~[leaf+"reg-how: no weir.json above {(spud path.here)}"])
+  ;<  =here:nexus  bind:m  get-here
+  =/  dirs=pant:nexus  pant.here
+  =/  idx=(unit @ud)
+    =/  i=@ud  (lent dirs)
+    |-  ^-  (unit @ud)
+    ?:  =(0 i)  ~
+    =/  ent  (snag (dec i) dirs)
+    ?^  neck.ent  `(dec i)
+    $(i (dec i))
+  ?~  idx  (pure:m `~[leaf+"reg-how: no nexus root above the caller"])
+  =/  rname=@ta  dir:(snag u.idx dirs)
+  ::  the caller's directory, relative to the app root
+  =/  below=path  (turn (slag +(u.idx) dirs) |=([d=@ta *] d))
   =/  txt
     |=  =road:tarball
     ^-  (unit @t)
-    ?.  ?=(%& -.road)  ~
-    =/  [pax=path fil=(unit @ta)]
-      ?-  -.p.road
-        %&  [path.p.p.road `name.p.p.road]
-        %|  [p.p.road ~]
+    =/  got=(unit [pax=path fil=(unit @ta)])
+      ?-    -.road
+          %&
+        =/  [pax=path fil=(unit @ta)]
+          ?-(-.p.road %& [path.p.p.road `name.p.p.road], %| [p.p.road ~])
+        =/  at=(unit @ud)  (find ~[rname] pax)
+        ?~  at  ~
+        `[(slag +(u.at) pax) fil]
+          %|
+        =/  up=@ud  p.p.road
+        ?:  (gth up (lent below))  ~
+        =/  base=path  (scag (sub (lent below) up) below)
+        ?-  -.q.p.road
+          %&  `[(weld base path.p.q.p.road) `name.p.q.p.road]
+          %|  `[(weld base p.q.p.road) ~]
+        ==
       ==
-    ?.  =(u.root (scag (lent u.root) pax))  ~
-    =/  sub=path  (slag (lent u.root) pax)
-    ?^  fil  `(crip (spud (snoc sub u.fil)))
-    ?~  sub  `'/'
-    `(crip (weld (spud sub) "/"))
+    ?~  got  ~
+    ?^  fil.u.got  `(crip (spud (snoc pax.u.got u.fil.u.got)))
+    ?~  pax.u.got  `'/'
+    `(crip (weld (spud pax.u.got) "/"))
   =/  arr
     |=  roads=(set road:tarball)
     ^-  (unit json)
@@ -2221,14 +2243,14 @@
   =/  pk  (arr poke.weir)
   =/  pe  (arr peek.weir)
   ?.  &(?=(^ mk) ?=(^ pk) ?=(^ pe))
-    (pure:m `~[leaf+"reg-how: a road is relative or outside {(spud u.root)}"])
-  ;<  cur=(unit json)  bind:m  (peek-as [%& %& u.root %'groups.json'] ,json)
+    (pure:m `~[leaf+"reg-how: a road lands outside the app root %{(trip rname)}"])
+  =/  =road:tarball  [%| (lent below) %& [/ %'groups.json']]
+  ;<  cur=(unit json)  bind:m  (peek-as road ,json)
   =/  obj=(map @t json)  ?.(?=([~ %o *] cur) ~ p.u.cur)
   =/  ent=json  (pairs:enjs:format ~[['make' u.mk] ['poke' u.pk] ['peek' u.pe]])
   =/  new=json  [%o (~(put by obj) (spat group) ent)]
   ?:  =(`new cur)  (pure:m ~)
   ;<  =wire  bind:m  (nonce /make)
-  =/  =road:tarball  [%& %& u.root %'groups.json']
   ;<  ~  bind:m  (send-dart %node wire road %make %.y %.n |+[[[/ %json] new] ~])
   |=  input
   :+  ~  q.state
@@ -2241,17 +2263,6 @@
       [%skip ~]
     [%done err.u.in]
   ==
-::  +app-root: the nearest directory at or above .pax holding a weir.json
-::
-++  app-root
-  |=  pax=path
-  =/  m  (fiber ,(unit path))
-  ^-  form:m
-  |-  ^-  form:m
-  ;<  has=?  bind:m  (peek-exists [%& %& pax %'weir.json'])
-  ?:  has  (pure:m `pax)
-  ?~  pax  (pure:m ~)
-  $(pax (snip `path`pax))
 ::  Discovery (/sys/link) helpers.
 ::
 ::  An app is addressed by NAME, not by where it is installed: a name
