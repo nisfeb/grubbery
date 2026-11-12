@@ -3753,6 +3753,9 @@
       (give-client-fact:acc id [%news news])
     ::  Remote watcher: poke wave to subscriber ship
     ?:  ?=([%sys %ames %ships @ *] path.watcher)
+      ::  a keep a peer made, before the shell moved, on a lane it may
+      ::  not have now (+peer-held) stays as quiet as it went then
+      ?:  (peer-held target)  acc
       =/  dest=@p  (slav %p i.t.t.t.path.watcher)
       =/  resp=intake:remo:nexus
         [wire target wave]
