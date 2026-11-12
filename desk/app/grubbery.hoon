@@ -1407,7 +1407,7 @@
     =/  target=lane:tarball
       ?~  name.op  [%| path.op]
       [%& [path.op u.name.op]]
-    ?:  ?=([~ %|] (allowed %peek caller `target))
+    ?:  ?=([~ %|] (allowed-quiet %peek caller `target))
       (give-client-fact chan.cmd [%ack `~[leaf+"vetoed by weir"]])
     =.  this  (sub-put target caller cwire ~)
     (give-client-fact chan.cmd [%ack ~])
@@ -1425,7 +1425,7 @@
     =/  dest=lane:tarball
       ?~  name.op  [%| path.op]
       [%& [path.op u.name.op]]
-    ?:  ?=([~ %|] (allowed %peek caller `dest))
+    ?:  ?=([~ %|] (allowed-quiet %peek caller `dest))
       (give-client-fact chan.cmd [%ack `~[leaf+"vetoed by weir"]])
     ?-    -.dest
         %&
@@ -1501,7 +1501,7 @@
   =/  dest-lane=lane:tarball  dest.req
   =/  at=lane:tarball  (canon-lane dest-lane)
   ?:  ?|  (peer-held dest-lane)
-          ?=([~ %|] (allowed %peek caller `dest-lane))
+          ?=([~ %|] (allowed-quiet %peek caller `dest-lane))
       ==
     (respond-transfer %peek [wire.req %veto dest-lane])
   =/  snap=(unit snap:remo:nexus)
@@ -1589,7 +1589,7 @@
   ^+  this
   ?>  ?=(%keep +<.req)
   ?:  ?|  (peer-held dest.req)
-          ?=([~ %|] (allowed %peek caller `dest.req))
+          ?=([~ %|] (allowed-quiet %peek caller `dest.req))
       ==
     this
   (keep caller dest.req wire.req)
@@ -3971,12 +3971,17 @@
       ~|  [%peer-bad-road name.here road.dart]
       !!
     (enqu-take here ~ ~ %veto dart)
-  =/  =filt:nexus  (allowed jump here dest)
+  ::  a peer refused is routine (any ship may ask for anything) and is
+  ::  told so; only our own grubs' refusals are worth the console
+  =/  peer=?  ?=([%sys %ames %ships @ ~] path.here)
+  =/  =filt:nexus
+    ?:(peer (allowed-quiet jump here dest) (allowed jump here dest))
   ?+    filt  (handle-dart here dart filt dest)
       [~ %|]
     ::  Vetoed — crash for foreign ship darts (gall nacks the sender),
     ::  send %veto intake back to source for internal darts.
-    ~&  >>>  [%process-dart-vetoed jump=jump here=here dest=dest filt=filt dart-type=-.dart]
+    ~?  >>>  !peer
+      [%process-dart-vetoed jump=jump here=here dest=dest filt=filt dart-type=-.dart]
     ?:  ?=([%sys %ames %ships @ ~] path.here)
       ~|  [%peer-vetoed name.here dest]
       !!
