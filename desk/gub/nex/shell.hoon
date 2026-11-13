@@ -3574,8 +3574,11 @@
       ['code' s+(crip "/apps/shell/desks/{(trip name)}/desk/code")]
   ==
 ::
-::  +lanes-dead: does every lane of a /sys/link name point at nothing?
-::  A name with no lanes at all is not judged dead.
+::  +lanes-dead: does every lane of a /sys/link name point at nothing? A
+::  directory lane is dead when the directory is gone or empty, with no
+::  files, no children and no neck: a removed app can leave its directory
+::  behind like that. A shell service holds data, so it stands. A name
+::  with no lanes at all is not judged dead.
 ::
 ++  lanes-dead
   |=  lanes=(list lane:tarball)
@@ -3585,8 +3588,19 @@
   =/  todo=(list lane:tarball)  lanes
   |-  ^-  form:m
   ?~  todo  (pure:m %.y)
-  ;<  has=?  bind:m  (peek-exists:io [%& i.todo])
-  ?:  has  (pure:m %.n)
+  ?:  ?=(%& -.i.todo)
+    ;<  has=?  bind:m  (peek-exists:io [%& i.todo])
+    ?:  has  (pure:m %.n)
+    $(todo t.todo)
+  ;<  v=view:nexus  bind:m  (peek-shallow:io [%& i.todo] ~)
+  ?:  ?&  ?=([%ball *] v)
+          ?|  !=(~ dir.ball.v)
+              ?&  ?=(^ fil.ball.v)
+                  |(?=(^ neck.u.fil.ball.v) !=(~ contents.u.fil.ball.v))
+              ==
+          ==
+      ==
+    (pure:m %.n)
   $(todo t.todo)
 ++  build-links
   |=  rail=rail:tarball
