@@ -3585,6 +3585,20 @@
       ['code' s+(crip "/apps/shell/desks/{(trip name)}/desk/code")]
   ==
 ::
+::  +lanes-dead: does every lane of a /sys/link name point at nothing?
+::  A name with no lanes at all is not judged dead.
+::
+++  lanes-dead
+  |=  lanes=(list lane:tarball)
+  =/  m  (fiber:fiber:nexus ,?)
+  ^-  form:m
+  ?~  lanes  (pure:m %.n)
+  =/  todo=(list lane:tarball)  lanes
+  |-  ^-  form:m
+  ?~  todo  (pure:m %.y)
+  ;<  has=?  bind:m  (peek-exists:io [%& i.todo])
+  ?:  has  (pure:m %.n)
+  $(todo t.todo)
 ++  build-links
   |=  rail=rail:tarball
   =/  m  (fiber:fiber:nexus ,~)
@@ -3632,7 +3646,11 @@
       |=  l=lane:tarball
       ?.  ?=(%| -.l)  %.n
       =((scag (lent desks-root) p.l) desks-root)
-    ?.  ours  $(haves t.haves)
+    ::  a name every lane of which points at nothing is dead, whoever made
+    ::  it: an app moved or removed leaves its built-in name behind, and
+    ::  root.hoon seeds a built-in again where it lives now
+    ;<  dead=?  bind:m  ?:(ours (pure:(fiber:fiber:nexus ,?) %.n) (lanes-dead lanes))
+    ?.  |(ours dead)  $(haves t.haves)
     ;<  *  bind:m  (cull-soft:io [%& %| /sys/link/[i.haves]])
     $(haves t.haves)
   =/  road=road:tarball  (link-road nm.i.entries)
