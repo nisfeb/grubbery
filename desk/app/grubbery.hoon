@@ -5295,9 +5295,11 @@
   =/  next=filt:nexus
     (next-filt:nexus filt (filter:nexus jump path.here dest-lane weir-here))
   ?:  ?=([~ %|] next)
-    ::  name the boundary that said no — a veto without a WHERE is torture
+    ::  name the boundary that said no — a veto without a WHERE is torture.
+    ::  Not the weir itself: a peer's is the whole /public grant, and
+    ::  printing it on every refusal kept a busy ship from answering.
     ~?  >>>  loud
-      [%weir-veto-at boundary=path.here weir=weir-here jump=jump dest=dest-lane]
+      [%weir-veto-at boundary=path.here jump=jump dest=dest-lane]
     [~ |]
   ::  Reached root - stop
   ?~  path.here
