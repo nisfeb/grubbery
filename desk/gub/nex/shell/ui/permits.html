@@ -234,9 +234,7 @@
       });
       return order.sort(function(x,y){ return (x.desk?0:1)-(y.desk?0:1); });
     }
-    // the shell's old spelling, /apps/shell.shell, is the shell where it lives
-    // now; apps still ask in it, so a road reads the same either way
-    function roadOf(it){ var r=typeof it==='string'?it:(it&&it.road)||''; return r.replace(/^\/apps\/shell\.shell(?=\/|$)/,'/apps/shell'); }
+    function roadOf(it){ return typeof it==='string'?it:(it&&it.road)||''; }
     function whyOf(it){ return typeof it==='string'?'':(it&&it.why)||''; }
     function optOf(it){ return typeof it==='object'&&it&&it.optional; }
     function sameRoads(a,b){ a=(a||[]).map(roadOf).slice().sort(); b=(b||[]).map(roadOf).slice().sort(); if(a.length!==b.length)return false; for(var i=0;i<a.length;i++)if(a[i]!==b[i])return false; return true; }

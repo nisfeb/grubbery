@@ -960,74 +960,97 @@
     ?:  =(from (scag n `tape`r))  (weld to (go (slag n `tape`r)))
     [i.r (go t.r)]
   --
-::  +canon-lane: /apps/shell.shell, the shell's old spelling, is the
-::  shell where it lives now. +migrate-shell moves the shell, but apps,
-::  their asks and the weirs sanded from those asks still spell the old
-::  place, and so do peers on an older grubbery. Every lane a dart, a
-::  weir road or a peer's request names is read through here, so the
-::  old spelling reaches the place the new one does. Where the move was
-::  refused the old shell is still a real place, and its spelling holds.
+::  +migrate-approvals: approvals recorded under the old app system, and
+::  the weirs they sanded, in the shape the shell and the kernel read
+::  now. A road spelling the shell's old place, /apps/shell.shell, is
+::  respelled /apps/shell, in each approval and in its app's weir. An
+::  approval with no groups whose grant let its app poke
+::  /sys/ames/registry (how an app opened its roads to groups before the
+::  shell asked about groups) is granted the groups its app's
+::  groups.json names. What is already in shape is left alone, so this
+::  runs on every load. Where the shell never moved, nothing is touched.
 ::
-++  canon-lane
-  |=  =lane:tarball
-  ^-  lane:tarball
-  =/  pax=path  ?-(-.lane %& path.p.lane, %| p.lane)
-  ?.  ?=([%apps @ *] pax)  lane
-  ?.  =('shell.shell' i.t.pax)  lane
-  ?:  (~(has in folds:(live-children /apps)) 'shell.shell')  lane
-  =/  new=path  [%apps %shell t.t.pax]
-  ?-(-.lane %& [%& new name.p.lane], %| [%| new])
-::  +peer-held: a peer names, in the old spelling, something of the
-::  shell's other than an app's data: a desk's code or version, or the
-::  storefront. Only an older grubbery does, and what lives there now
-::  needs the new kernel, so it stays refused, as it was before the old
-::  spelling was read, until that ship's own grubbery moves its shell
-::  and respells its sources. App data (desks/<d>/desk/data) it reaches.
+++  migrate-approvals
+  ^+  this
+  ?:  (~(has in folds:(live-children /apps)) 'shell.shell')  this
+  =/  at=path  /apps/shell/permit
+  =/  b=ball:tarball  (peek-ball-now at)
+  =/  got=(unit [=sang:tarball gain=? bang=(unit tang)])
+    ?~  fil.b  ~
+    (~(get by contents.u.fil.b) %'approved.json')
+  ?~  got  this
+  ?.  =([/ %json] p.sang.u.got)  this
+  =/  jon=(unit json)  (mole |.(;;(json (sang-noun:tarball sang.u.got))))
+  ?.  ?=([~ %o *] jon)  this
+  =/  old=(map @t json)  p.u.jon
+  =/  new=(map @t json)  (~(urn by old) migrate-approval)
+  =?  this  !=(new old)
+    ~>  %slog.[0 leaf+"grubbery: approvals from the old app system brought up to date"]
+    (save-file [at %'approved.json'] [[/ %json] [%o new]])
+  =/  apps=(list @t)  ~(tap in ~(key by new))
+  |-  ^+  this
+  ?~  apps  this
+  =/  pax=(unit path)  (rush i.apps stap)
+  ?~  pax  $(apps t.apps)
+  =/  w=(unit weir:nexus)  (peek-weir u.pax)
+  ?~  w  $(apps t.apps)
+  =/  fix=weir:nexus  (respell-weir u.w)
+  =?  this  !=(fix u.w)  (set-weir u.pax `fix)
+  $(apps t.apps)
+::  +respell-weir: a weir's roads into /apps/shell.shell, respelled
+::  /apps/shell (+migrate-approvals)
 ::
-++  peer-held
-  |=  =lane:tarball
-  ^-  ?
-  =/  pax=path  ?-(-.lane %& path.p.lane, %| p.lane)
-  ?&  !=(lane (canon-lane lane))
-      !?=([%apps @ %desks @ %desk %data *] pax)
-  ==
-::  +canon-weir: a weir whose roads are read through +canon-lane
-::
-++  canon-weir
+++  respell-weir
   |=  =weir:nexus
   ^-  weir:nexus
   =/  one
     |=  r=road:tarball
     ^-  road:tarball
     ?.  ?=(%& -.r)  r
-    [%& (canon-lane p.r)]
-  =/  fix
-    |=  roads=(set road:tarball)
-    ^-  (set road:tarball)
-    ?.  (~(any in roads) |=(r=road:tarball !=(r (one r))))  roads
-    (~(run in roads) one)
-  [(fix make.weir) (fix poke.weir) (fix peek.weir)]
-::  +canon-api-url: an api url naming the shell by its old spelling
-::  (/grubbery/api/<endpoint>/apps/shell.shell/...) names it where it
-::  lives now, before anything parses it. Apps' pages still keep their
-::  beacons at the old spelling.
+    =/  l=lane:tarball  p.r
+    =/  pax=path  ?-(-.l %& path.p.l, %| p.l)
+    ?.  ?=([%apps %'shell.shell' *] pax)  r
+    =/  to=path  [%apps %shell t.t.pax]
+    [%& ?-(-.l %& [%& to name.p.l], %| [%| to])]
+  [(~(run in make.weir) one) (~(run in poke.weir) one) (~(run in peek.weir) one)]
+::  +migrate-approval: one approval brought up to date (+migrate-approvals)
 ::
-++  canon-api-url
-  |=  url=@t
-  ^-  @t
-  =/  t=tape  (trip url)
-  =/  pre=tape  "/grubbery/api/"
-  ?.  =(pre (scag (lent pre) t))  url
-  =/  cut=(unit @ud)  (find "/" (slag (lent pre) t))
-  ?~  cut  url
-  =/  at=@ud  (add (lent pre) u.cut)
-  =/  old=tape  "/apps/shell.shell"
-  =/  tail=tape  (slag at t)
-  ?.  =(old (scag (lent old) tail))  url
-  =/  after=tape  (slag (lent old) tail)
-  ?.  ?~(after & |(=('/' i.after) =('?' i.after)))  url
-  ?:  (~(has in folds:(live-children /apps)) 'shell.shell')  url
-  (crip :(weld (scag at t) "/apps/shell" after))
+++  migrate-approval
+  |=  [app=@t rec=json]
+  ^-  json
+  =/  txt=tape  (trip (en:json:html rec))
+  =/  fix=tape
+    %+  respell  (respell txt "\"/apps/shell.shell\"" "\"/apps/shell\"")
+    ["/apps/shell.shell/" "/apps/shell/"]
+  =?  rec  !=(fix txt)  (fall (de:json:html (crip fix)) rec)
+  ?.  ?=(%o -.rec)  rec
+  ?:  (~(has by p.rec) 'groups')  rec
+  =/  pokes=(list json)
+    =/  v  (~(get by p.rec) 'poke')
+    ?.(?=([~ %a *] v) ~ p.u.v)
+  =/  reg=json  s+'/sys/ames/registry'
+  ?.  %+  lien  pokes
+      |=  j=json
+      ?|  =(reg j)
+          &(?=(%o -.j) =(`reg (~(get by p.j) 'road')))
+      ==
+    rec
+  =/  pax=(unit path)  (rush app stap)
+  ?~  pax  rec
+  =/  gb=ball:tarball  (peek-ball-now u.pax)
+  =/  gg=(unit [=sang:tarball gain=? bang=(unit tang)])
+    ?~  fil.gb  ~
+    (~(get by contents.u.fil.gb) %'groups.json')
+  =/  gj=(unit json)
+    ?~  gg  ~
+    (mole |.(;;(json (sang-noun:tarball sang.u.gg))))
+  =/  groups=json
+    :-  %a
+    ?.  ?=([~ %o *] gj)  ~
+    (turn (sort ~(tap in ~(key by p.u.gj)) aor) |=(k=@t s+k))
+  =/  dec=json  (fall (~(get by p.rec) 'declared') [%o ~])
+  =?  dec  ?=(%o -.dec)  [%o (~(put by p.dec) 'groups' groups)]
+  [%o (~(put by (~(put by p.rec) 'groups' groups)) 'declared' dec)]
 ++  cold-start
   ^-  _this
   ::  every step is gauged: under +mem each prints the loom on the way in,
@@ -1042,6 +1065,8 @@
   ::  the shell's spelling: a ship still holding it at /apps/shell.shell
   ::  has it moved to /apps/shell before the root rows run
   =.  this  (gage %migrate-shell |.(migrate-shell))
+  ::  approvals recorded under the old app system, in today's shape
+  =.  this  (gage %migrate-approvals |.(migrate-approvals))
   =.  this  (gage %reload-nexus-at-root |.((reload-nexus-at / root)))
   =.  this  (gage %spawn-all-files |.((spawn-all-files / (peek-bole-now /))))
   =.  this  (gage %sync-dill |.(sync-dill))
@@ -1496,19 +1521,14 @@
   |=  [caller=rail:tarball req=load:remo:nexus]
   ^+  this
   ?>  ?=(%peek +<.req)
-  ::  answered in the peer's own spelling, which is how it matches the
-  ::  answer to its peek; read where that spelling leads (+canon-lane)
   =/  dest-lane=lane:tarball  dest.req
-  =/  at=lane:tarball  (canon-lane dest-lane)
-  ?:  ?|  (peer-held dest-lane)
-          ?=([~ %|] (allowed %peek caller `dest-lane))
-      ==
+  ?:  ?=([~ %|] (allowed %peek caller `dest-lane))
     (respond-transfer %peek [wire.req %veto dest-lane])
   =/  snap=(unit snap:remo:nexus)
     =/  cas-pace=(unit [=cass:clay =pace:hist:nexus])
-      ?-  -.at
+      ?-  -.dest-lane
           %&
-        =/  r=rail:tarball  p.at
+        =/  r=rail:tarball  p.dest-lane
         =/  node=(unit [fold=hist:nexus file=(map @ta hist:nexus)])
           (~(get of born) path.r)
         ?~  node  ~
@@ -1524,7 +1544,7 @@
         ?~  cp  ~
         (some [cass=cass.u.cp pace=pace.u.cp])
           %|
-        =/  dest=fold:tarball  p.at
+        =/  dest=fold:tarball  p.dest-lane
         =/  sub-born=born:nexus  (~(dip of born) dest)
         ?~  fil.sub-born  ~
         =/  sk=hist:nexus  fold.u.fil.sub-born
@@ -1588,9 +1608,7 @@
   |=  [caller=rail:tarball req=load:remo:nexus]
   ^+  this
   ?>  ?=(%keep +<.req)
-  ?:  ?|  (peer-held dest.req)
-          ?=([~ %|] (allowed %peek caller `dest.req))
-      ==
+  ?:  ?=([~ %|] (allowed %peek caller `dest.req))
     this
   (keep caller dest.req wire.req)
 ::  process-drop: remove the caller as a remote watcher.
@@ -1785,10 +1803,8 @@
 ++  keep
   |=  [watcher=rail:tarball target=lane:tarball =wire]
   ^+  this
-  ::  kept, and answered, in the peer's spelling; +notify-lanes reads it
-  ::  through +canon-lane
   =.  this  (sub-put target watcher wire ~)
-  =/  =wave:nexus  (wave-at:nexus born (canon-lane target))
+  =/  =wave:nexus  (wave-at:nexus born target)
   =/  resp=intake:remo:nexus
     [wire target wave]
   =.  cards
@@ -3371,8 +3387,7 @@
   =/  upd-ball=ball:tarball
     ?~  nex  sub-ball
     =/  =bole:tarball  (on-load:u.nex sub-ball)
-    =/  restored-pulp=pulp:tarball
-      (keep-groups sub-ball (fall fil.bole *pulp:tarball))
+    =/  restored-pulp=pulp:tarball  (fall fil.bole *pulp:tarball)
     =.  bole  bole(fil `restored-pulp(neck parent-neck, weir parent-weir))
     (validate-bole here bole)
   ::  Enforce parent weir and parent neck on ball.
@@ -3391,22 +3406,6 @@
     ^$(here (snoc here kid-name), sub-ball kid-ball)
   =.  dir.sub-ball  (~(put by dir.sub-ball) kid-name new-kid-ball)
   $(kids t.kids)
-::  +keep-groups: groups.json at a nexus root is the kernel's, written
-::  for the app by +handle-reg-how, so its on-load does not list it.
-::  Dropped by a load, it would close the app's groups and reopen its
-::  ask on Permits until the app registered again, on every reload.
-::
-++  keep-groups
-  |=  [old=ball:tarball new=pulp:tarball]
-  ^-  pulp:tarball
-  ?~  fil.old  new
-  ?:  (~(has by contents.new) %'groups.json')  new
-  =/  got  (~(get by contents.u.fil.old) %'groups.json')
-  ?~  got  new
-  %=  new
-    contents  %+  ~(put by contents.new)  %'groups.json'
-              [[p.sang.u.got (sang-noun:tarball sang.u.got)] gain.u.got]
-  ==
 ::  Reload a single nexus at dest (re-run on-load)
 ::
 ++  reload-nexus
@@ -3448,8 +3447,7 @@
     (bang-nexus dest p.load-res)
   =/  upd-bole=bole:tarball  p.load-res
   ::  Enforce parent weir and parent neck on bole
-  =/  restored-pulp=pulp:tarball
-    (keep-groups old-sub (fall fil.upd-bole *pulp:tarball))
+  =/  restored-pulp=pulp:tarball  (fall fil.upd-bole *pulp:tarball)
   =.  upd-bole
     upd-bole(fil `restored-pulp(neck parent-neck, weir parent-weir))
   ::  Put results back — load-ball-changes writes bole and does bookkeeping
@@ -3720,33 +3718,30 @@
   |-
   ?~  watched  this
   =/  [target=lane:tarball watchers=(map rail:tarball [=wire blot=(unit blot:tarball)])]  i.watched
-  ::  a watcher keeps the spelling it asked in, and is told in it; what
-  ::  changed is matched where that spelling leads (+canon-lane)
-  =/  real=lane:tarball  (canon-lane target)
   ::  Find all changed lanes that are inside this target (or equal to target)
   =/  relevant=(set lane:tarball)
     %-  ~(gas in *(set lane:tarball))
     %+  murn  ~(tap in changed)
     |=  chg=lane:tarball
     ^-  (unit lane:tarball)
-    ?-    -.real
+    ?-    -.target
         ::  File target: only exact match counts
         %&
-      ?.  &(?=(%& -.chg) =(p.chg p.real))  ~
+      ?.  &(?=(%& -.chg) =(p.chg p.target))  ~
       `chg
         ::  Dir target: changed lane must be under target dir
         %|
       ?-  -.chg
         ::  Changed file: file's dir must be under target dir
-        %&  ?~((decap:tarball p.real path.p.chg) ~ `chg)
+        %&  ?~((decap:tarball p.target path.p.chg) ~ `chg)
         ::  Changed dir: must be under or equal to target dir
-        %|  ?~((decap:tarball p.real p.chg) ~ `chg)
+        %|  ?~((decap:tarball p.target p.chg) ~ `chg)
       ==
     ==
   ::  Skip if nothing relevant changed
   ?:  =(~ relevant)  $(watched t.watched)
   ::  Build wavefront for relevant lanes, relativized to target
-  =/  =wave:nexus  (wave-at:nexus born real)
+  =/  =wave:nexus  (wave-at:nexus born target)
   ::  Send wavefront to each watcher
   =.  this
     %-  ~(rep by watchers)
@@ -3771,9 +3766,6 @@
       (give-client-fact:acc id [%news news])
     ::  Remote watcher: poke wave to subscriber ship
     ?:  ?=([%sys %ames %ships @ *] path.watcher)
-      ::  a keep a peer made, before the shell moved, on a lane it may
-      ::  not have now (+peer-held) stays as quiet as it went then
-      ?:  (peer-held target)  acc
       =/  dest=@p  (slav %p i.t.t.t.path.watcher)
       =/  resp=intake:remo:nexus
         [wire target wave]
@@ -3997,8 +3989,7 @@
   ^-  [jump:nexus (unit lane:tarball)]
   ?+    -.dart  [%peek ~]          :: system darts: no dest, always allowed
       %node                        :: %node darts target a file/dir
-    =/  dest-lane=(unit lane:tarball)
-      (bind (lane-from-road:tarball [%& here] road.dart) canon-lane)
+    =/  dest-lane=(unit lane:tarball)  (lane-from-road:tarball [%& here] road.dart)
     :_  dest-lane
     ?-  -.load.dart
       ?(%peek %keep %drop %seek %peep %code %born)  %peek  :: read operations
@@ -4460,12 +4451,6 @@
         ==
       =.  this  (handle-timer-rest here q.sage)
       (enqu-take here ~ ~ %pack wire.dart ~)
-    ::  dist: +reg-how:io from an app built for the dist kernel
-    ?:  ?&  =([/sys/ames %'registry'] dest)
-            =([/ %reg-how] p.sage)
-        ==
-      =^  err=(unit tang)  this  (handle-reg-how here q.sage)
-      (enqu-take here ~ ~ %pack wire.dart err)
     ?:  ?&  =([/sys/eyre %'main.server-state'] dest)
             =([/ %eyre-action] p.sage)
         ==
@@ -5298,15 +5283,15 @@
   ^-  filt:nexus
   ::  No destination (%kept): crosses no boundary, no weir has jurisdiction
   ?~  dest  ~
-  =/  dest-lane=lane:tarball  (canon-lane u.dest)
-  =/  gov=(unit fold:tarball)  (nearest-governor here `dest-lane)
+  =/  gov=(unit fold:tarball)  (nearest-governor here dest)
+  =/  dest-lane=lane:tarball  u.dest
   =|  =filt:nexus
   |-
   ::  Reached governor - stop (don't check its weir)
   ?:  &(?=(^ gov) =(path.here u.gov))
     filt
   ::  Check weir at current location (stored on parent's tree dir entry)
-  =/  weir-here=(unit weir:nexus)  (bind (peek-weir path.here) canon-weir)
+  =/  weir-here=(unit weir:nexus)  (peek-weir path.here)
   =/  next=filt:nexus
     (next-filt:nexus filt (filter:nexus jump path.here dest-lane weir-here))
   ?:  ?=([~ %|] next)
@@ -7664,7 +7649,6 @@
 ++  route-http
   |=  [eyre-id=@ta req=inbound-request:eyre]
   ^+  this
-  =.  url.request.req  (canon-api-url url.request.req)
   ::  every owner check downstream asks src == our. Eyre on our kelvins
   ::  already sends a guest identity for a request with no session, but
   ::  an older or forked Eyre sends our own ship for every request. So
@@ -8944,74 +8928,6 @@
     ==
   (drop-bindings gone)
 ::
-::  +handle-reg-how: dist compatibility for +reg-how:io. develop has no
-::  registry: an app opens its roads into a group by naming them in the
-::  groups.json at its root, and the shell derives the group from that
-::  once the user approves it on Permits. A sandboxed app cannot see its
-::  own root, so the kernel does it: the root is the nearest directory
-::  at or above the sender that is a nexus, every road is resolved
-::  against the sender and must land inside that root, and the group's
-::  entry in the root's groups.json is replaced with those roads.
-::
-++  handle-reg-how
-  |=  [here=rail:tarball vaz=vase]
-  ^-  [(unit tang) _this]
-  =/  [group=path =weir:nexus]  !<([path weir:nexus] vaz)
-  =/  root=(unit path)
-    =/  pax=path  path.here
-    |-  ^-  (unit path)
-    ?:  (has-neck pax)  `pax
-    ?~  pax  ~
-    $(pax (snip `path`pax))
-  ?~  root  [`~[leaf+"reg-how: no nexus above {(spud path.here)}"] this]
-  =/  txt
-    |=  =road:tarball
-    ^-  (unit @t)
-    =/  ln=(unit lane:tarball)
-      (bind (lane-from-road:tarball [%& here] road) canon-lane)
-    ?~  ln  ~
-    =/  [pax=path fil=(unit @ta)]
-      ?-(-.u.ln %& [path.p.u.ln `name.p.u.ln], %| [p.u.ln ~])
-    ?.  =(u.root (scag (lent u.root) pax))  ~
-    =/  sub=path  (slag (lent u.root) pax)
-    ?^  fil  `(crip (spud (snoc sub u.fil)))
-    ?~  sub  `'/'
-    `(crip (weld (spud sub) "/"))
-  =/  arr
-    |=  roads=(set road:tarball)
-    ^-  (unit json)
-    =/  got=(list (unit @t))  (turn ~(tap in roads) txt)
-    ?.  (levy got |=(u=(unit @t) ?=(^ u)))  ~
-    `a+(turn (murn got same) |=(t=@t s+t))
-  =/  mk  (arr make.weir)
-  =/  pk  (arr poke.weir)
-  =/  pe  (arr peek.weir)
-  ?.  &(?=(^ mk) ?=(^ pk) ?=(^ pe))
-    [`~[leaf+"reg-how: a road lands outside {(spud u.root)}"] this]
-  =/  at=rail:tarball  [u.root %'groups.json']
-  =/  cur=(unit json)
-    =/  old=(unit sang:tarball)  (peek-grub-now at)
-    ?~  old  ~
-    ((soft json) (sang-noun:tarball u.old))
-  =/  obj=(map @t json)  ?.(?=([~ %o *] cur) ~ p.u.cur)
-  =/  ent=json  (pairs:enjs:format ~[['make' u.mk] ['poke' u.pk] ['peek' u.pe]])
-  =/  new=json  [%o (~(put by obj) (spat group) ent)]
-  ?:  =(`new cur)  [~ this]
-  [~ (save-file at [[/ %json] new])]
-::  +has-neck: is the directory at .pax a nexus root?
-::
-++  has-neck
-  |=  pax=path
-  ^-  ?
-  =/  sub=born:nexus  (~(dip of born) pax)
-  ?~  fil.sub  %.n
-  =/  top=(unit [key=cass:clay val=entry:hist:nexus])
-    (ram:hon:hist:nexus fold.u.fil.sub)
-  ?~  top  %.n
-  =/  jot  (~(get by jects.silo) lobe.pace.val.u.top)
-  ?~  jot  %.n
-  ?.  ?=(%tree -.ject.u.jot)  %.n
-  ?=(^ nek.tree.ject.u.jot)
 ++  handle-eyre-action
   |=  [sender=rail:tarball =wire vaz=vase]
   ^+  this

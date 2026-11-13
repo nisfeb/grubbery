@@ -1272,12 +1272,10 @@
     =/  v  (~(get by p.entry) 'groups')
     ?.  ?=([~ %a *] v)  ~
     (sy (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j))))
-  =/  legacy=?  (legacy-groups entry)
-  ?:  &(=(~ granted) !legacy)  (pure:m ~)
+  ?:  =(~ granted)  (pure:m ~)
   ;<  gv=(unit json)  bind:m  (peek-as:io [%& %& app %'groups.json'] ,json)
   ?~  gv  (pure:m ~)
   ?.  ?=(%o -.u.gv)  (pure:m ~)
-  =?  granted  legacy  ~(key by p.u.gv)
   =/  strs
     |=  [g=json k=@t]
     ^-  (list @t)
@@ -2466,23 +2464,7 @@
   ?~  ap  %.n
   ?.  ?=(%o -.u.ap)  %.n
   =/  dec=json  (fall (~(get by p.u.ap) 'declared') [%o ~])
-  ::  a legacy approval stands for the groups the app asks (+legacy-groups)
-  =?  dec  &((legacy-groups u.ap) ?=(%o -.dec) ?=(%o -.ask))
-    [%o (~(put by p.dec) 'groups' (fall (~(get by p.ask) 'groups') [%a ~]))]
   (asks-match ask dec)
-::  +legacy-groups: an approval recorded before the shell asked about
-::  usergroups carries no groups at all. Its app opened its roads to
-::  groups itself, through the registry its grant let it poke, and the
-::  kernel's reg-how compat keeps those roads in its groups.json. So the
-::  groups it names there stand granted, as they did before the upgrade.
-::  An approval that has a groups key, empty or not, is the user's word.
-::
-++  legacy-groups
-  |=  entry=json
-  ^-  ?
-  ?.  ?=(%o -.entry)  |
-  ?:  (~(has by p.entry) 'groups')  |
-  (lien (road-strs entry 'poke') |=(t=@t =('/sys/ames/registry' t)))
 ::  +is-notified: have we already surfaced a banner for THIS exact ask? A
 ::  changed ask (new roads) fails the match and notifies afresh.
 ::
@@ -3598,8 +3580,6 @@
   ?.  ?=([%file *] wv)  (pure:m ~)
   (pure:m (mole |.(!<(json (need-vase:tarball sang.wv)))))
 ::  +road-strs: the string list for one category of a weir.json ask.
-::  Every ask and grant is compared, and every grant narrowed, through
-::  here, so each road comes out in the shell's current spelling.
 ::
 ++  road-strs
   |=  [ask=json cat=@t]
@@ -3610,25 +3590,10 @@
   ::  a line is either a bare road string or {road, why}
   %+  murn  p.u.v
   |=  j=json
-  ^-  (unit @t)
-  ?:  ?=(%s -.j)  `(canon-road p.j)
+  ?:  ?=(%s -.j)  `p.j
   ?.  ?=([%o *] j)  ~
   =/  r  (~(get by p.j) 'road')
-  ?.(?=([~ %s *] r) ~ `(canon-road p.u.r))
-::  +canon-road: a road string in the shell's old spelling,
-::  /apps/shell.shell, respelled /apps/shell. The kernel already reads
-::  the old spelling as the new place (+canon-lane), but apps still ask
-::  in it, and an approval recorded either way must match either way.
-::
-++  canon-road
-  |=  t=@t
-  ^-  @t
-  =/  old=@t  '/apps/shell.shell'
-  =/  n=@ud  (met 3 old)
-  ?.  =(old (end [3 n] t))  t
-  =/  rest=@t  (rsh [3 n] t)
-  ?.  |(=(0 rest) =('/' (end 3 rest)))  t
-  (cat 3 '/apps/shell' rest)
+  ?.(?=([~ %s *] r) ~ `p.u.r)
 ::  +narrow-to-ask: the granted roads that the app's own ask declares, per
 ::  category, as bare road strings. Every other key of the grant (the
 ::  usergroups and name shares Permits sends) passes through as it came.

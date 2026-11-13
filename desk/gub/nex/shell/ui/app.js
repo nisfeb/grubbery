@@ -10,9 +10,7 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
   // that app, beside the inbox's own notes. They are not read or dismissed
   // here; they resolve by being granted.
   function sameRoads(a, b) { a = (a || []).slice().sort(); b = (b || []).slice().sort(); return a.length === b.length && a.every(function(x, i) { return x === b[i]; }); }
-  // the shell's old spelling, /apps/shell.shell, is the shell where it lives
-  // now; apps still ask in it, so a road reads the same either way
-  function roadsOf(x) { return (x || []).map(function(r) { return (typeof r === 'string' ? r : r.road || '').replace(/^\/apps\/shell\.shell(?=\/|$)/, '/apps/shell'); }); }
+  function roadsOf(x) { return (x || []).map(function(r) { return typeof r === 'string' ? r : r.road; }); }
   // the asks nobody has ruled on: never approved, or approved against a
   // different declaration than the one standing now. The bell counts these
   // and the tiles warn on them, so the test lives in one place.
