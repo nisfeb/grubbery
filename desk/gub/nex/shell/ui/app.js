@@ -192,7 +192,10 @@ var API='/grubbery/api';var BALL='apps/shell'; // local tiles live in the shell'
       .catch(function() { return {}; })
       .then(function(w) {
         w = w || {};
-        var off = typeof w.offset === 'number' ? w.offset : here;
+        // a window never set is the ship's default, 02:00 to 05:00 UTC; show it
+        // as 2 to 5 in the morning here instead
+        var fresh = !w.on && w.start === 120 && w.end === 300 && w.offset === 0;
+        var off = (typeof w.offset === 'number' && !fresh) ? w.offset : here;
         var start = typeof w.start === 'number' ? w.start : 120;
         var end = typeof w.end === 'number' ? w.end : 300;
         document.getElementById('win-on').checked = !!w.on;
