@@ -123,6 +123,8 @@
           [%fall %| /permit empty-dir:loader]
           [%fall %& [/permit %'approved.json'] [[/ %json] [%o ~]]]
           [%fall %& [/permit %'hidden.json'] [[/ %json] [%o ~]]]
+          ::  the %boot stock desks the user removed: boot passes them over
+          [%fall %& [/permit %'declined.json'] [[/ %json] [%a ~]]]
           ::  permit/notified: app path -> the pending ask we last notified
           ::  about (same road-shape as an approved manifest's `declared`).
           ::  Dedups the "wants permissions" banner so a still-pending ask
@@ -362,7 +364,9 @@
         ::  stock entry added later, or a forge that moved, is taken up by
         ::  the next reload with no one's hand on it. Idempotent; the network
         ::  is touched last and softly.
-        ;<  ~  bind:m  (sync-stock %.y)
+        ::  once: the offered desks Install all brought, where unused
+        ;<  ~  bind:m  (trim-unasked-stock rail)
+        ;<  ~  bind:m  (sync-stock rail %.y)
         ;<  done=?  bind:m
           (peek-exists:io (nex-road:io rail [%& / %'bootstrapped.json']))
         ?:  done  (pure:m ~)
@@ -724,7 +728,7 @@
           ::  syncing every stock entry touches the network once per entry, and
           ::  an HTTP request held open across that stalls the server.
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
-          ;<  ~  bind:m  (sync-stock %.n)
+          ;<  ~  bind:m  (sync-stock rail %.n)
           (pure:m ~)
         ::  POST /desks/sync {name}: sync ONE stock desk — find its entry and
         ::  run the same +ensure-pairing the "Sync all" path uses per entry.
@@ -747,6 +751,11 @@
           ::  The caller learns the outcome from /desks/stock, which reports each
           ::  entry's synced flag; it does not need this response to carry it.
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
+          ::  installing a removed default by name: it is wanted again
+          ;<  declined=(set @t)  bind:m  (read-declined rail)
+          ;<  ~  bind:m
+            ?.  (~(has in declined) name)  (pure:m ~)
+            (write-declined rail (~(del in declined) name))
           ;<  ~  bind:m  (ensure-pairing u.match)
           (pure:m ~)
         ::  POST /desks/delete {app}: cull a desk from /desks/<app>.
@@ -760,6 +769,17 @@
             (pure:m ~)
           ;<  ~  bind:m
             (cull:io (nex-road:io rail [%| /desks/[(crip (trip app))]]))
+          ::  a removed default stays removed: boot would make it again
+          =/  nom=@t
+            =/  t=tape  (trip app)
+            ?.  =(".desk" (slag (sub (max 5 (lent t)) 5) t))  app
+            (crip (scag (sub (lent t) 5) t))
+          =/  ent=(unit stock-entry)  (find-stock nom)
+          ;<  ~  bind:m
+            ?.  ?=([~ *] ent)  (pure:m ~)
+            ?.  =(%boot setup.u.ent)  (pure:m ~)
+            ;<  declined=(set @t)  bind:m  (read-declined rail)
+            (write-declined rail (~(put in declined) nom))
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'deleted')])
           (pure:m ~)
         ::  tile store, served from the tiles data ball over the namespace
@@ -1577,10 +1597,16 @@
 ::  its build chat's repo_deploy tool does after a commit:
 ::    %desk  a /desk follows the tree's /code and deploys when its
 ::           code/version.json is bumped (the stock app path)
+::    %published  an app this distribution publishes: the distributor
+::           mirrors it like %desk, and every other ship's desk follows
+::           the distributor's own desk, read cross-ship (+desk-source),
+::           so no other ship talks to github and the distributor's
+::           version bump is the release
 ::    %clay  the tree's <dir> IS a Clay desk: deploying commits it into
 ::           the named desk, the way a Unix |commit does (the kernel)
 +$  deploy-spec
   $%  [%desk ~]
+      [%published ~]
       [%clay desk=@tas dir=@t]
   ==
 ::  how a stock entry comes to be on a ship.
@@ -1605,17 +1631,39 @@
   ::  grubbery is the ship's own source: its mirror deploys by committing
   ::  into the grubbery desk and never becomes a desk, so %boot here sets
   ::  up a mirror and nothing that could ask for a permission.
-  :~  [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
+  :~  (published 'lattice' 'Lattice' 'nisfeb/lattice' 'main')
+      (published 'auspex' 'Auspex' 'nisfeb/auspex' 'master')
+      (published 'calendar' 'Calendar' 'nisfeb/calendar' 'main')
+      (published 'armillary' 'Armillary' 'nisfeb/armillary' 'main')
+      (published 'orrery' 'Orrery' 'nisfeb/orrery' 'main')
+      [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
       [%github 'hatchery' 'Hatchery' 'gwbtc/hatchery' 'main' [%desk ~] %offer]
       [%github 'grubbery' 'Grubbery' 'gwbtc/grubbery' 'develop' [%clay %grubbery 'desk'] %boot]
   ==
 ::  deploy-json: the deploy spec as the repo's config.json carries it
 ::  (and the forge copies into the repo clanker's config for repo_deploy)
+::  +published: an app this distribution publishes and boots with
+::
+++  published
+  |=  [name=@t title=@t repo=@t ref=@t]
+  ^-  stock-entry
+  [%github name title repo ref [%published ~] %boot]
+::  +distributor: the ship that publishes this distribution's apps. Named
+::  once, because +desk-source derives every follower's path from it.
+::
+++  distributor  ~ricsul-bilwyt
+::  +desk-source: where a ship other than the distributor follows one of
+::  its desks: the distributor's own desk code, read cross-ship
+::
+++  desk-source
+  |=  nom=@t
+  ^-  @t
+  (crip "{<distributor>}/apps/shell/desks/{(trip nom)}.desk/desk/code")
 ++  deploy-json
   |=  d=deploy-spec
   ^-  json
   ?-  -.d
-    %desk  (pairs:enjs:format ~[['kind' s+'version'] ['file' s+'code/version.json']])
+    ?(%desk %published)  (pairs:enjs:format ~[['kind' s+'version'] ['file' s+'code/version.json']])
     %clay  (pairs:enjs:format ~[['kind' s+'clay'] ['desk' s+desk.d] ['dir' s+dir.d]])
   ==
 ::  stock-name: an entry's name.
@@ -1658,6 +1706,23 @@
   ^-  form:m
   =/  name=@t  (stock-name entry)
   =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+  ;<  our=@p  bind:m  get-our:io
+  ::  a published app, on any ship but the distributor: the desk follows
+  ::  the distributor's desk, and there is no repo, forge or fetch here
+  ?:  &(?=(%published -.deploy.entry) !=(our distributor))
+    ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?:  has-desk  (pure:m ~)
+      (make:io [%& %| desk-dir] &+`bole:tarball`[`[`[/ %desk] ~ %.n ~] ~])
+    ::  poked only to change it: a desk whose source is out of reach takes
+    ::  no poke until it is back, and boot would wait on it there
+    =/  want=@t  (desk-source name)
+    ;<  cur=(unit json)  bind:m
+      (peek-as:io [%& %& desk-dir %'source.json'] ,json)
+    ?:  ?&(?=([~ %o *] cur) =(`s+want (~(get by p.u.cur) 'code')))
+      (pure:m ~)
+    %+  poke:io  [%& %& desk-dir %'source.json']
+    [[/ %json] (pairs:enjs:format ~[['code' s+want]])]
   ::  forge houses the repo instances; it is found by name. On a fresh
   ::  ship the name may not be claimed yet when the first entry is
   ::  reached: wait for the link rather than skip the entry.
@@ -1729,7 +1794,7 @@
   ::  2. the desk, BEFORE any network work. Only a %desk deploy has one:
   ::  a %clay entry (the kernel) deploys by committing its tree into a
   ::  Clay desk, which its build chat's repo_deploy does; no follower
-  =/  follower=?  ?=(%desk -.deploy.entry)
+  =/  follower=?  ?=(?(%desk %published) -.deploy.entry)
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
   ;<  ~  bind:m
     ?:  |(has-desk !follower)  (pure:m ~)
@@ -1791,15 +1856,84 @@
 ::  entry.
 ::
 ++  sync-stock
-  |=  boot-only=?
+  |=  [rail=rail:tarball boot-only=?]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ;<  declined=(set @t)  bind:m  (read-declined rail)
+  ::  Install all is the user asking for every entry: nothing stays declined
+  ;<  ~  bind:m
+    ?:  |(boot-only =(~ declined))  (pure:m ~)
+    (write-declined rail ~)
   =/  todo=(list stock-entry)  default-repos
   |-  ^-  form:m
   ?~  todo  (pure:m ~)
   ?:  &(boot-only !=(%boot setup.i.todo))  $(todo t.todo)
+  ?:  &(boot-only (~(has in declined) (stock-name i.todo)))  $(todo t.todo)
   ;<  ~  bind:m  (ensure-pairing i.todo)
   $(todo t.todo)
+::  +read-declined: the %boot stock desks the user removed, by name. Boot
+::  passes them over, so a removed default app stays removed; installing
+::  it again by name, or Install all, takes it off the list.
+::
+++  read-declined
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(set @t))
+  ^-  form:m
+  ;<  jon=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /permit %'declined.json']) ,json)
+  %-  pure:m
+  ?.  ?=([~ %a *] jon)  ~
+  (silt (murn p.u.jon |=(j=json ?.(?=([%s *] j) ~ `p.j))))
+::
+++  write-declined
+  |=  [rail=rail:tarball names=(set @t)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  %+  put:io  (nex-road:io rail [%& /permit %'declined.json'])
+  [[/ %json] [%a (turn (sort ~(tap in names) aor) |=(n=@t s+n))]]
+::  +trim-unasked-stock: once, take the %offer stock desks off a ship
+::  where none of their apps was ever approved. Install all was how a
+::  client set a ship up, and it brought every offered desk along; a desk
+::  none of whose apps was approved holds nothing anyone uses, since an
+::  unapproved app runs with no permissions. A desk with an approved app
+::  stays. Its mirror in the forge goes with it, so the ship stops
+::  fetching it. /stock-trimmed.json marks that this ran. Remove it with
+::  the approvals migration once every ship has booted it.
+::
+++  trim-unasked-stock
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  mark=road:tarball  (nex-road:io rail [%& / %'stock-trimmed.json'])
+  ;<  done=?  bind:m  (peek-exists:io mark)
+  ?:  done  (pure:m ~)
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  =/  keys=(list @t)  ~(tap in ~(key by approved))
+  =/  todo=(list stock-entry)  default-repos
+  |-  ^-  form:m
+  ?^  todo
+    ?.  &(=(%offer setup.i.todo) ?=(%desk -.deploy.i.todo))  $(todo t.todo)
+    =/  name=@t  (stock-name i.todo)
+    =/  pre=@t  (crip "/apps/shell/desks/{(trip name)}.desk/")
+    ?:  (lien keys |=(k=@t =(pre (end [3 (met 3 pre)] k))))  $(todo t.todo)
+    =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+    ;<  has=?  bind:m  (peek-exists:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?.  has  (pure:m ~)
+      ~&  >  [%shell-trim-stock name]
+      (cull:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?.  ?=([~ %| *] fr)  (pure:m ~)
+      =/  repo-dir=path  (weld p.u.fr /repos/[(cat 3 `@ta`name '.git_repo')])
+      ;<  has-repo=?  bind:m  (peek-exists:io [%& %| repo-dir])
+      ?.  has-repo  (pure:m ~)
+      (cull:io [%& %| repo-dir])
+    $(todo t.todo)
+  ;<  err=(unit tang)  bind:m
+    (make-soft:io mark |+[[[/ %json] `json`[%b %.y]] ~])
+  ~?  >>>  ?=(^ err)  %shell-trim-mark-failed
+  (pure:m ~)
 ::  stock-status: the default-repos list as json, each with a `synced` flag
 ::  (its desk exists and its source is wired). Feeds the Stock tab.
 ::
@@ -1861,7 +1995,7 @@
   ::  a |commit does, and never becomes a desk at all. Listing it on a
   ::  tab whose verb is "install" offered something that does not exist.
   ::  Its repo mirror is the forge's business, not the desk installer's.
-  ?.  ?=(%desk -.deploy.i.todo)  $(todo t.todo)
+  ?.  ?=(?(%desk %published) -.deploy.i.todo)  $(todo t.todo)
   =/  name=@t  (stock-name i.todo)
   =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
@@ -1876,7 +2010,8 @@
         ?=([~ %s *] (~(get by p.u.src) 'code'))
     ==
   =/  fields=(list [@t json])
-    :~  ['name' s+name]  ['title' s+title.i.todo]  ['kind' s+'github']
+    :~  ['name' s+name]  ['title' s+title.i.todo]
+        ['kind' s+?:(?=(%published -.deploy.i.todo) 'published' 'github')]
         ['repo' s+repo.i.todo]  ['ref' s+ref.i.todo]  ['synced' b+synced]
         ['setup' s+setup.i.todo]
         ['deploy' (deploy-json deploy.i.todo)]
