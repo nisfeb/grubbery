@@ -123,6 +123,18 @@
           [%fall %| /permit empty-dir:loader]
           [%fall %& [/permit %'approved.json'] [[/ %json] [%o ~]]]
           [%fall %& [/permit %'hidden.json'] [[/ %json] [%o ~]]]
+          ::  the %boot stock desks the user removed: boot passes them over
+          [%fall %& [/permit %'declined.json'] [[/ %json] [%a ~]]]
+          ::  the ship's update window (+update-window), off until set
+          :+  %fall  %&
+          :-  [/permit %'update-window.json']
+          :-  [/ %json]
+          %-  pairs:enjs:format
+          :~  ['on' b+%.n]  ['start' (numb:enjs:format 120)]
+              ['end' (numb:enjs:format 300)]  ['offset' (numb:enjs:format 0)]
+          ==
+          ::  the kiln syncs the window paused, to resume when it opens
+          [%fall %& [/permit %'update-held.json'] [[/ %json] [%o ~]]]
           ::  permit/notified: app path -> the pending ask we last notified
           ::  about (same road-shape as an approved manifest's `declared`).
           ::  Dedups the "wants permissions" banner so a still-pending ask
@@ -162,6 +174,8 @@
           ::  again automatically. The marker is NOT seeded here — its absence
           ::  is what signals "first boot".
           [%fall %& [/ %'bootstrap.sig'] [[/ %sig] ~]]
+          ::  update-window.sig: holds and releases updates (+update-window)
+          [%fall %& [/ %'update-window.sig'] [[/ %sig] ~]]
           ::  /sync: one pure-follower grub per app, mirroring /apps. Each
           ::  follows its app's files by subscription and pings the scanner
           ::  to reconcile — so /sys/link (and the asks) stay current without a
@@ -350,6 +364,32 @@
         ::  rebuild on every sweep, not only when a new app appeared.
         ;<  ~  bind:m  (build-share rail)
         $
+          ::  update-window.sig: the ship's update window (+update-window).
+          ::  Outside it every desk is held and every kiln sync but %base's
+          ::  is paused. Inside it, or with the window off, they run. It
+          ::  wakes at each edge of the window and at any change to it.
+          ::
+          [~ %'update-window.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%shell update window: failed")
+        =/  file=road:tarball  (nex-road:io rail [%& /permit %'update-window.json'])
+        ;<  *  bind:m  (keep:io /window file ~)
+        |-
+        =*  again  $
+        ;<  cfg=(unit json)  bind:m  (peek-as:io file ,json)
+        ;<  now=@da  bind:m  get-time:io
+        =/  win=(unit window)  ?~(cfg ~ (json-window u.cfg))
+        =/  open=?  |(?=(~ win) (window-open u.win now))
+        ~?  dbg  [%shell-update-window ?~(win %off ?:(open %open %closed))]
+        ;<  ~  bind:m  ?:(open (release-updates rail) (hold-updates rail))
+        ::  news of a change that lands while the above runs is not taken
+        ::  by the wait below, so a setting that moved meanwhile goes again
+        ;<  cfg2=(unit json)  bind:m  (peek-as:io file ,json)
+        ?.  =(cfg cfg2)  again
+        ;<  ~  bind:m
+          ?~  win  (pure:(fiber:fiber:nexus ,~) ~)
+          (set-timer:io /window-edge (window-edge u.win now))
+        ;<  *  bind:m  (take-news-or-wake-on:io /window /window-edge)
+        again
           ::  bootstrap.sig: the stock desks, held current at every nexus reload.
           ::  /bootstrapped.json marks that the first run happened. The
           ::  manual POST /desks/sync-defaults does the same on demand.
@@ -362,7 +402,9 @@
         ::  stock entry added later, or a forge that moved, is taken up by
         ::  the next reload with no one's hand on it. Idempotent; the network
         ::  is touched last and softly.
-        ;<  ~  bind:m  (sync-stock %.y)
+        ::  once: the offered desks Install all brought, where unused
+        ;<  ~  bind:m  (trim-unasked-stock rail)
+        ;<  ~  bind:m  (sync-stock rail %.y)
         ;<  done=?  bind:m
           (peek-exists:io (nex-road:io rail [%& / %'bootstrapped.json']))
         ?:  done  (pure:m ~)
@@ -549,6 +591,31 @@
             (pure:m ~)
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html '{"ok":true}')])
           (pure:m ~)
+        ::  GET /apps/grubbery/update-window: the ship's update window
+        ?:  &(=('GET' method.request.req) ?=([%update-window ~] suffix))
+          ;<  cfg=(unit json)  bind:m
+            (peek-as:io (nex-road:io rail [%& /permit %'update-window.json']) ,json)
+          =/  bod=octs  (as-octs:mimes:html (en:json:html (fall cfg ~)))
+          ;<  ~  bind:m
+            (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `bod])
+          (pure:m ~)
+        ::  POST /apps/grubbery/update-window {on, start, end, offset}: set it.
+        ::  update-window.sig follows the file and acts on the change.
+        ?:  &(=('POST' method.request.req) ?=([%update-window ~] suffix))
+          =/  jon=json
+            %+  fall  (de:json:html ?~(body.request.req '' q.u.body.request.req))
+            *json
+          ?.  ?&  ?=(%o -.jon)
+                  ?|  !=(`b+%.y (~(get by p.jon) 'on'))
+                      ?=(^ (json-window jon))
+                  ==
+              ==
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'want {on, start, end, offset}: minutes of the day, offset east of UTC')])
+            (pure:m ~)
+          ;<  ~  bind:m
+            (put:io (nex-road:io rail [%& /permit %'update-window.json']) [[/ %json] jon])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html '{"ok":true}')])
+          (pure:m ~)
         ::  POST /apps/grubbery/permits → a user permission action, applied
         ::  directly (we are already gated to src==our, the authenticated
         ::  user). Writes the authoritative component grubs — permit/approved/
@@ -724,7 +791,7 @@
           ::  syncing every stock entry touches the network once per entry, and
           ::  an HTTP request held open across that stalls the server.
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
-          ;<  ~  bind:m  (sync-stock %.n)
+          ;<  ~  bind:m  (sync-stock rail %.n)
           (pure:m ~)
         ::  POST /desks/sync {name}: sync ONE stock desk — find its entry and
         ::  run the same +ensure-pairing the "Sync all" path uses per entry.
@@ -747,6 +814,11 @@
           ::  The caller learns the outcome from /desks/stock, which reports each
           ::  entry's synced flag; it does not need this response to carry it.
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'syncing')])
+          ::  installing a removed default by name: it is wanted again
+          ;<  declined=(set @t)  bind:m  (read-declined rail)
+          ;<  ~  bind:m
+            ?.  (~(has in declined) name)  (pure:m ~)
+            (write-declined rail (~(del in declined) name))
           ;<  ~  bind:m  (ensure-pairing u.match)
           (pure:m ~)
         ::  POST /desks/delete {app}: cull a desk from /desks/<app>.
@@ -760,6 +832,17 @@
             (pure:m ~)
           ;<  ~  bind:m
             (cull:io (nex-road:io rail [%| /desks/[(crip (trip app))]]))
+          ::  a removed default stays removed: boot would make it again
+          =/  nom=@t
+            =/  t=tape  (trip app)
+            ?.  =(".desk" (slag (sub (max 5 (lent t)) 5) t))  app
+            (crip (scag (sub (lent t) 5) t))
+          =/  ent=(unit stock-entry)  (find-stock nom)
+          ;<  ~  bind:m
+            ?.  ?=([~ *] ent)  (pure:m ~)
+            ?.  =(%boot setup.u.ent)  (pure:m ~)
+            ;<  declined=(set @t)  bind:m  (read-declined rail)
+            (write-declined rail (~(put in declined) nom))
           ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'deleted')])
           (pure:m ~)
         ::  tile store, served from the tiles data ball over the namespace
@@ -1272,12 +1355,10 @@
     =/  v  (~(get by p.entry) 'groups')
     ?.  ?=([~ %a *] v)  ~
     (sy (murn p.u.v |=(j=json ?.(?=([%s *] j) ~ `p.j))))
-  =/  legacy=?  (legacy-groups entry)
-  ?:  &(=(~ granted) !legacy)  (pure:m ~)
+  ?:  =(~ granted)  (pure:m ~)
   ;<  gv=(unit json)  bind:m  (peek-as:io [%& %& app %'groups.json'] ,json)
   ?~  gv  (pure:m ~)
   ?.  ?=(%o -.u.gv)  (pure:m ~)
-  =?  granted  legacy  ~(key by p.u.gv)
   =/  strs
     |=  [g=json k=@t]
     ^-  (list @t)
@@ -1579,10 +1660,16 @@
 ::  its build chat's repo_deploy tool does after a commit:
 ::    %desk  a /desk follows the tree's /code and deploys when its
 ::           code/version.json is bumped (the stock app path)
+::    %published  an app this distribution publishes: the distributor
+::           mirrors it like %desk, and every other ship's desk follows
+::           the distributor's own desk, read cross-ship (+desk-source),
+::           so no other ship talks to github and the distributor's
+::           version bump is the release
 ::    %clay  the tree's <dir> IS a Clay desk: deploying commits it into
 ::           the named desk, the way a Unix |commit does (the kernel)
 +$  deploy-spec
   $%  [%desk ~]
+      [%published ~]
       [%clay desk=@tas dir=@t]
   ==
 ::  how a stock entry comes to be on a ship.
@@ -1607,17 +1694,39 @@
   ::  grubbery is the ship's own source: its mirror deploys by committing
   ::  into the grubbery desk and never becomes a desk, so %boot here sets
   ::  up a mirror and nothing that could ask for a permission.
-  :~  [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
+  :~  (published 'lattice' 'Lattice' 'nisfeb/lattice' 'main')
+      (published 'auspex' 'Auspex' 'nisfeb/auspex' 'master')
+      (published 'calendar' 'Calendar' 'nisfeb/calendar' 'main')
+      (published 'armillary' 'Armillary' 'nisfeb/armillary' 'main')
+      (published 'orrery' 'Orrery' 'nisfeb/orrery' 'main')
+      [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
       [%github 'hatchery' 'Hatchery' 'gwbtc/hatchery' 'main' [%desk ~] %offer]
       [%github 'grubbery' 'Grubbery' 'gwbtc/grubbery' 'develop' [%clay %grubbery 'desk'] %boot]
   ==
 ::  deploy-json: the deploy spec as the repo's config.json carries it
 ::  (and the forge copies into the repo clanker's config for repo_deploy)
+::  +published: an app this distribution publishes and boots with
+::
+++  published
+  |=  [name=@t title=@t repo=@t ref=@t]
+  ^-  stock-entry
+  [%github name title repo ref [%published ~] %boot]
+::  +distributor: the ship that publishes this distribution's apps. Named
+::  once, because +desk-source derives every follower's path from it.
+::
+++  distributor  ~ricsul-bilwyt
+::  +desk-source: where a ship other than the distributor follows one of
+::  its desks: the distributor's own desk code, read cross-ship
+::
+++  desk-source
+  |=  nom=@t
+  ^-  @t
+  (crip "{<distributor>}/apps/shell/desks/{(trip nom)}.desk/desk/code")
 ++  deploy-json
   |=  d=deploy-spec
   ^-  json
   ?-  -.d
-    %desk  (pairs:enjs:format ~[['kind' s+'version'] ['file' s+'code/version.json']])
+    ?(%desk %published)  (pairs:enjs:format ~[['kind' s+'version'] ['file' s+'code/version.json']])
     %clay  (pairs:enjs:format ~[['kind' s+'clay'] ['desk' s+desk.d] ['dir' s+dir.d]])
   ==
 ::  stock-name: an entry's name.
@@ -1660,6 +1769,23 @@
   ^-  form:m
   =/  name=@t  (stock-name entry)
   =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+  ;<  our=@p  bind:m  get-our:io
+  ::  a published app, on any ship but the distributor: the desk follows
+  ::  the distributor's desk, and there is no repo, forge or fetch here
+  ?:  &(?=(%published -.deploy.entry) !=(our distributor))
+    ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?:  has-desk  (pure:m ~)
+      (make:io [%& %| desk-dir] &+`bole:tarball`[`[`[/ %desk] ~ %.n ~] ~])
+    ::  poked only to change it: a desk whose source is out of reach takes
+    ::  no poke until it is back, and boot would wait on it there
+    =/  want=@t  (desk-source name)
+    ;<  cur=(unit json)  bind:m
+      (peek-as:io [%& %& desk-dir %'source.json'] ,json)
+    ?:  ?&(?=([~ %o *] cur) =(`s+want (~(get by p.u.cur) 'code')))
+      (pure:m ~)
+    %+  poke:io  [%& %& desk-dir %'source.json']
+    [[/ %json] (pairs:enjs:format ~[['code' s+want]])]
   ::  forge houses the repo instances; it is found by name. On a fresh
   ::  ship the name may not be claimed yet when the first entry is
   ::  reached: wait for the link rather than skip the entry.
@@ -1731,7 +1857,7 @@
   ::  2. the desk, BEFORE any network work. Only a %desk deploy has one:
   ::  a %clay entry (the kernel) deploys by committing its tree into a
   ::  Clay desk, which its build chat's repo_deploy does; no follower
-  =/  follower=?  ?=(%desk -.deploy.entry)
+  =/  follower=?  ?=(?(%desk %published) -.deploy.entry)
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
   ;<  ~  bind:m
     ?:  |(has-desk !follower)  (pure:m ~)
@@ -1793,15 +1919,233 @@
 ::  entry.
 ::
 ++  sync-stock
-  |=  boot-only=?
+  |=  [rail=rail:tarball boot-only=?]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ;<  declined=(set @t)  bind:m  (read-declined rail)
+  ::  Install all is the user asking for every entry: nothing stays declined
+  ;<  ~  bind:m
+    ?:  |(boot-only =(~ declined))  (pure:m ~)
+    (write-declined rail ~)
   =/  todo=(list stock-entry)  default-repos
   |-  ^-  form:m
   ?~  todo  (pure:m ~)
   ?:  &(boot-only !=(%boot setup.i.todo))  $(todo t.todo)
+  ?:  &(boot-only (~(has in declined) (stock-name i.todo)))  $(todo t.todo)
   ;<  ~  bind:m  (ensure-pairing i.todo)
   $(todo t.todo)
+::  +read-declined: the %boot stock desks the user removed, by name. Boot
+::  passes them over, so a removed default app stays removed; installing
+::  it again by name, or Install all, takes it off the list.
+::
+++  read-declined
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(set @t))
+  ^-  form:m
+  ;<  jon=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /permit %'declined.json']) ,json)
+  %-  pure:m
+  ?.  ?=([~ %a *] jon)  ~
+  (silt (murn p.u.jon |=(j=json ?.(?=([%s *] j) ~ `p.j))))
+::
+++  write-declined
+  |=  [rail=rail:tarball names=(set @t)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  %+  put:io  (nex-road:io rail [%& /permit %'declined.json'])
+  [[/ %json] [%a (turn (sort ~(tap in names) aor) |=(n=@t s+n))]]
+::  +trim-unasked-stock: once, take the %offer stock desks off a ship
+::  where none of their apps was ever approved. Install all was how a
+::  client set a ship up, and it brought every offered desk along; a desk
+::  none of whose apps was approved holds nothing anyone uses, since an
+::  unapproved app runs with no permissions. A desk with an approved app
+::  stays. Its mirror in the forge goes with it, so the ship stops
+::  fetching it. /stock-trimmed.json marks that this ran. Remove it with
+::  the approvals migration once every ship has booted it.
+::
+++  trim-unasked-stock
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  mark=road:tarball  (nex-road:io rail [%& / %'stock-trimmed.json'])
+  ;<  done=?  bind:m  (peek-exists:io mark)
+  ?:  done  (pure:m ~)
+  ;<  approved=(map @t json)  bind:m  (read-approved rail)
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  =/  keys=(list @t)  ~(tap in ~(key by approved))
+  =/  todo=(list stock-entry)  default-repos
+  |-  ^-  form:m
+  ?^  todo
+    ?.  &(=(%offer setup.i.todo) ?=(%desk -.deploy.i.todo))  $(todo t.todo)
+    =/  name=@t  (stock-name i.todo)
+    =/  pre=@t  (crip "/apps/shell/desks/{(trip name)}.desk/")
+    ?:  (lien keys |=(k=@t =(pre (end [3 (met 3 pre)] k))))  $(todo t.todo)
+    =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
+    ;<  has=?  bind:m  (peek-exists:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?.  has  (pure:m ~)
+      ~&  >  [%shell-trim-stock name]
+      (cull:io [%& %| desk-dir])
+    ;<  ~  bind:m
+      ?.  ?=([~ %| *] fr)  (pure:m ~)
+      =/  repo-dir=path  (weld p.u.fr /repos/[(cat 3 `@ta`name '.git_repo')])
+      ;<  has-repo=?  bind:m  (peek-exists:io [%& %| repo-dir])
+      ?.  has-repo  (pure:m ~)
+      (cull:io [%& %| repo-dir])
+    $(todo t.todo)
+  ;<  err=(unit tang)  bind:m
+    (make-soft:io mark |+[[[/ %json] `json`[%b %.y]] ~])
+  ~?  >>>  ?=(^ err)  %shell-trim-mark-failed
+  (pure:m ~)
+::  +update-window: when the ship may update. /permit/update-window.json
+::  holds {on, start, end, offset}: start and end are minutes of the day
+::  in the user's own time, offset is that time's minutes east of UTC,
+::  and a window may run past midnight. start equal to end is the whole
+::  day. Outside the window update-window.sig holds every desk and
+::  pauses every kiln sync but %base's. Off, nothing is held.
+::
++$  window  [start=@ud end=@ud east=? off=@ud]
+::  +json-window: the window, or ~ when it is off or unreadable
+::
+++  json-window
+  |=  jon=json
+  ^-  (unit window)
+  ?.  ?=(%o -.jon)  ~
+  ?.  =(`b+%.y (~(get by p.jon) 'on'))  ~
+  =/  num
+    |=  k=@t
+    ^-  (unit [? @ud])
+    =/  v  (~(get by p.jon) k)
+    ?.  ?=([~ %n *] v)  ~
+    =/  t=@t  p.u.v
+    ?:  =('-' (end 3 t))
+      (bind (rush (rsh 3 t) dem) |=(n=@ud [%.n n]))
+    (bind (rush t dem) |=(n=@ud [%.y n]))
+  =/  s  (num 'start')
+  =/  e  (num 'end')
+  =/  o  (num 'offset')
+  ?.  ?&(?=([~ %.y @] s) ?=([~ %.y @] e) ?=(^ o))  ~
+  ?.  ?&((lth +.u.s 1.440) (lth +.u.e 1.440) (lth +.u.o 1.440))  ~
+  `[+.u.s +.u.e -.u.o +.u.o]
+::  +local-minute: the minute of the day in the window's own time
+::
+++  local-minute
+  |=  [win=window now=@da]
+  ^-  @ud
+  =/  utc=@ud  (div (mod now ~d1) ~m1)
+  ?:  east.win  (mod (add utc off.win) 1.440)
+  (mod (sub (add utc 1.440) off.win) 1.440)
+::
+++  window-open
+  |=  [win=window now=@da]
+  ^-  ?
+  =/  l=@ud  (local-minute win now)
+  ?:  =(start.win end.win)  %.y
+  ?:  (lth start.win end.win)
+    &((gte l start.win) (lth l end.win))
+  |((gte l start.win) (lth l end.win))
+::  +window-edge: when the window next opens or closes, on a minute
+::
+++  window-edge
+  |=  [win=window now=@da]
+  ^-  @da
+  =/  l=@ud  (local-minute win now)
+  =/  gap
+    |=  x=@ud
+    ^-  @ud
+    =/  d=@ud  (mod (sub (add x 1.440) l) 1.440)
+    ?:(=(0 d) 1.440 d)
+  (add (sub now (mod now ~m1)) (mul ~m1 (min (gap start.win) (gap end.win))))
+::  +hold-updates: hold every desk and pause every kiln sync but %base's,
+::  recording each paused sync's publisher so +release-updates can
+::  resume it. A desk already held is left alone, and a sync paused
+::  already is no longer in kiln's sources but stays recorded.
+::
+++  hold-updates
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  ~  bind:m  (hold-desks %.y)
+  ;<  src=*  bind:m  (typed-scry:io * %noun /gx/hood/kiln/sources/noun)
+  =/  syncs=(list [dek=desk her=ship rem=desk])
+    %+  skip  ~(tap by ;;((map desk [ship desk]) src))
+    |=([d=desk *] =(%base d))
+  ?~  syncs  (pure:m ~)
+  ;<  held=(map @t json)  bind:m  (read-update-held rail)
+  =/  more=(map @t json)
+    %-  ~(gas by held)
+    %+  turn  syncs
+    |=  [dek=desk her=ship rem=desk]
+    [dek (pairs:enjs:format ~[['ship' s+(scot %p her)] ['desk' s+rem]])]
+  ;<  ~  bind:m  (write-update-held rail more)
+  =/  todo=(list [dek=desk her=ship rem=desk])  syncs
+  |-  ^-  form:m
+  ?~  todo  (pure:m ~)
+  ~?  dbg  [%shell-update-pause dek.i.todo]
+  ;<  *  bind:m  (gall-poke-or-nack:io %hood [%kiln-pause dek.i.todo])
+  $(todo t.todo)
+::  +release-updates: release every desk and resume every kiln sync the
+::  window paused, from the publisher it was recorded with
+::
+++  release-updates
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  ~  bind:m  (hold-desks %.n)
+  ;<  held=(map @t json)  bind:m  (read-update-held rail)
+  ?:  =(~ held)  (pure:m ~)
+  =/  todo=(list [dek=@t jon=json])  ~(tap by held)
+  |-  ^-  form:m
+  ?~  todo  (write-update-held rail ~)
+  =/  her=(unit @p)
+    ?.  ?=(%o -.jon.i.todo)  ~
+    (biff (jget jon.i.todo 'ship') (cury slaw %p))
+  =/  rem=@t  ?.(?=(%o -.jon.i.todo) '' (fall (jget jon.i.todo 'desk') ''))
+  ?:  |(?=(~ her) =('' rem))  $(todo t.todo)
+  ~?  dbg  [%shell-update-resume dek.i.todo]
+  ;<  *  bind:m
+    (gall-poke-or-nack:io %hood [%kiln-install [`@tas`dek.i.todo u.her `@tas`rem]])
+  $(todo t.todo)
+::  +hold-desks: set every desk's hold.json and re-poke its source.json, so
+::  a parked source process wakes and follows again. A desk already set
+::  is left alone. The poke is bounded: a process still retrying an
+::  unreachable source takes none, and checks hold.json before it pulls.
+::
+++  hold-desks
+  |=  hold=?
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  dv=view:nexus  bind:m  (peek-shallow:io [%& %| /apps/shell/desks] ~)
+  =/  desks=(list @ta)
+    ?.  ?=([%ball *] dv)  ~
+    ~(tap in ~(key by dir.ball.dv))
+  |-  ^-  form:m
+  ?~  desks  (pure:m ~)
+  =/  dir=path  /apps/shell/desks/[i.desks]
+  ;<  cur=(unit json)  bind:m  (peek-as:io [%& %& dir %'hold.json'] ,json)
+  ?:  =(b+hold (fall cur b+%.n))  $(desks t.desks)
+  ~?  dbg  [%shell-update-hold i.desks hold]
+  ;<  ~  bind:m  (over:io [%& %& dir %'hold.json'] [[/ %json] b+hold])
+  ;<  src=(unit json)  bind:m  (peek-as:io [%& %& dir %'source.json'] ,json)
+  ;<  *  bind:m
+    ?~  src  (pure:(fiber:fiber:nexus ,(unit ~)) ~)
+    %+  (with-timeout:io ,~)  /hold-poke
+    [~s10 (poke:io [%& %& dir %'source.json'] [[/ %json] u.src])]
+  $(desks t.desks)
+::
+++  read-update-held
+  |=  rail=rail:tarball
+  =/  m  (fiber:fiber:nexus ,(map @t json))
+  ^-  form:m
+  ;<  jon=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& /permit %'update-held.json']) ,json)
+  (pure:m ?.(?=([~ %o *] jon) ~ p.u.jon))
+::
+++  write-update-held
+  |=  [rail=rail:tarball held=(map @t json)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  (put:io (nex-road:io rail [%& /permit %'update-held.json']) [[/ %json] [%o held]])
 ::  stock-status: the default-repos list as json, each with a `synced` flag
 ::  (its desk exists and its source is wired). Feeds the Stock tab.
 ::
@@ -1863,7 +2207,7 @@
   ::  a |commit does, and never becomes a desk at all. Listing it on a
   ::  tab whose verb is "install" offered something that does not exist.
   ::  Its repo mirror is the forge's business, not the desk installer's.
-  ?.  ?=(%desk -.deploy.i.todo)  $(todo t.todo)
+  ?.  ?=(?(%desk %published) -.deploy.i.todo)  $(todo t.todo)
   =/  name=@t  (stock-name i.todo)
   =/  desk-dir=path  /apps/shell/desks/[(cat 3 `@ta`name '.desk')]
   ;<  has-desk=?  bind:m  (peek-exists:io [%& %| desk-dir])
@@ -1878,7 +2222,8 @@
         ?=([~ %s *] (~(get by p.u.src) 'code'))
     ==
   =/  fields=(list [@t json])
-    :~  ['name' s+name]  ['title' s+title.i.todo]  ['kind' s+'github']
+    :~  ['name' s+name]  ['title' s+title.i.todo]
+        ['kind' s+?:(?=(%published -.deploy.i.todo) 'published' 'github')]
         ['repo' s+repo.i.todo]  ['ref' s+ref.i.todo]  ['synced' b+synced]
         ['setup' s+setup.i.todo]
         ['deploy' (deploy-json deploy.i.todo)]
@@ -2466,23 +2811,7 @@
   ?~  ap  %.n
   ?.  ?=(%o -.u.ap)  %.n
   =/  dec=json  (fall (~(get by p.u.ap) 'declared') [%o ~])
-  ::  a legacy approval stands for the groups the app asks (+legacy-groups)
-  =?  dec  &((legacy-groups u.ap) ?=(%o -.dec) ?=(%o -.ask))
-    [%o (~(put by p.dec) 'groups' (fall (~(get by p.ask) 'groups') [%a ~]))]
   (asks-match ask dec)
-::  +legacy-groups: an approval recorded before the shell asked about
-::  usergroups carries no groups at all. Its app opened its roads to
-::  groups itself, through the registry its grant let it poke, and the
-::  kernel's reg-how compat keeps those roads in its groups.json. So the
-::  groups it names there stand granted, as they did before the upgrade.
-::  An approval that has a groups key, empty or not, is the user's word.
-::
-++  legacy-groups
-  |=  entry=json
-  ^-  ?
-  ?.  ?=(%o -.entry)  |
-  ?:  (~(has by p.entry) 'groups')  |
-  (lien (road-strs entry 'poke') |=(t=@t =('/sys/ames/registry' t)))
 ::  +is-notified: have we already surfaced a banner for THIS exact ask? A
 ::  changed ask (new roads) fails the match and notifies afresh.
 ::
@@ -3598,8 +3927,6 @@
   ?.  ?=([%file *] wv)  (pure:m ~)
   (pure:m (mole |.(!<(json (need-vase:tarball sang.wv)))))
 ::  +road-strs: the string list for one category of a weir.json ask.
-::  Every ask and grant is compared, and every grant narrowed, through
-::  here, so each road comes out in the shell's current spelling.
 ::
 ++  road-strs
   |=  [ask=json cat=@t]
@@ -3610,25 +3937,10 @@
   ::  a line is either a bare road string or {road, why}
   %+  murn  p.u.v
   |=  j=json
-  ^-  (unit @t)
-  ?:  ?=(%s -.j)  `(canon-road p.j)
+  ?:  ?=(%s -.j)  `p.j
   ?.  ?=([%o *] j)  ~
   =/  r  (~(get by p.j) 'road')
-  ?.(?=([~ %s *] r) ~ `(canon-road p.u.r))
-::  +canon-road: a road string in the shell's old spelling,
-::  /apps/shell.shell, respelled /apps/shell. The kernel already reads
-::  the old spelling as the new place (+canon-lane), but apps still ask
-::  in it, and an approval recorded either way must match either way.
-::
-++  canon-road
-  |=  t=@t
-  ^-  @t
-  =/  old=@t  '/apps/shell.shell'
-  =/  n=@ud  (met 3 old)
-  ?.  =(old (end [3 n] t))  t
-  =/  rest=@t  (rsh [3 n] t)
-  ?.  |(=(0 rest) =('/' (end 3 rest)))  t
-  (cat 3 '/apps/shell' rest)
+  ?.(?=([~ %s *] r) ~ `p.u.r)
 ::  +narrow-to-ask: the granted roads that the app's own ask declares, per
 ::  category, as bare road strings. Every other key of the grant (the
 ::  usergroups and name shares Permits sends) passes through as it came.

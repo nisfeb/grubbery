@@ -2129,11 +2129,7 @@
 ::  with (send-simple:http-res:io eyre-id payload).
 ::
 ++  http-res
-  ::  dist: a door again, as on the dist kernel, so an app that binds it
-  ::  to a road (~(. http-res:io road)) still builds. The road is not
-  ::  used: every send goes to server-road. develop's spelling,
-  ::  send-simple:http-res:io, reads the same arms.
-  |_  main=road:tarball
+  |%
   ++  send
     |=  [eyre-id=@ta =eyre-update:nexus]
     =/  m  (fiber ,~)
@@ -2208,46 +2204,6 @@
     ?~  base  ~
     $(up (dec up), base (snip `path`base))
   [(weld resolved path.q.bend) name.q.bend]
-::  dist: the registry helpers, kept for apps built against the dist
-::  kernel. develop removed the registry (38e91c9): an app now states
-::  the groups it opens its own roads into in the groups.json at its
-::  root, and the user approves each group on Permits. +reg-how writes
-::  that file for the app. Registering is no longer a step, so the
-::  +reg-register arms succeed and do nothing. Drop these once the apps
-::  write groups.json themselves.
-::
-++  reg-road  `road:tarball`[%& %& /sys/ames %'registry']
-++  reg-register
-  =/  m  (fiber ,~)
-  ^-  form:m
-  (pure:m ~)
-++  reg-register-at
-  |=  here=rail:tarball
-  =/  m  (fiber ,~)
-  ^-  form:m
-  (pure:m ~)
-++  reg-register-at-soft
-  |=  here=rail:tarball
-  =/  m  (fiber ,(unit tang))
-  ^-  form:m
-  (pure:m ~)
-++  reg-how
-  |=  [group=path =weir:nexus]
-  =/  m  (fiber ,~)
-  ^-  form:m
-  ;<  err=(unit tang)  bind:m  (reg-how-soft group weir)
-  ?~  err  (pure:m ~)
-  ~|(%reg-how-failed (mean u.err))
-::  +reg-how-soft: the kernel sets .group's roads in the caller's app's
-::  groups.json (+handle-reg-how), since a sandboxed app cannot see its
-::  own root. The app needs poke on /sys/ames/registry, which every app
-::  built for the dist kernel already asks for.
-::
-++  reg-how-soft
-  |=  [group=path =weir:nexus]
-  =/  m  (fiber ,(unit tang))
-  ^-  form:m
-  (poke-soft reg-road [[/ %reg-how] [group weir]])
 ::  Discovery (/sys/link) helpers.
 ::
 ::  An app is addressed by NAME, not by where it is installed: a name
