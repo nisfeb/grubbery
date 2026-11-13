@@ -234,10 +234,16 @@
   =/  m  (fiber:fiber:nexus ,(list json))
   ^-  form:m
   =/  call-road=road:tarball  (nex-road:io rail [%& /tools %'main.sig'])
-  ;<  ~  bind:m
-    (poke:io call-road [[/ %json] (pairs:enjs:format ~[['cmd' s+'list']])])
-  ;<  =sage:tarball  bind:m  take-poke:io
-  =/  j=json  !<(json q.sage)
+  ;<  sent=(unit (unit tang))  bind:m
+    %^  (with-timeout:io ,(unit tang))  /list  ~s30
+    (poke-soft:io call-road [[/ %json] (pairs:enjs:format ~[['cmd' s+'list']])])
+  ::  the tools nexus is down or wedged: no dynamic tools this time,
+  ::  not a hang
+  ?.  ?=([~ ~] sent)  (pure:m ~)
+  ;<  got=(unit sage:tarball)  bind:m
+    ((with-timeout:io ,sage:tarball) /list-reply ~s30 take-poke:io)
+  ?~  got  (pure:m ~)
+  =/  j=json  !<(json q.u.got)
   (pure:m ?:(?=([%a *] j) p.j ~))
 ::  +entry-to-tool: one neutral schema entry -> tool:tools (handler is
 ::  a stub — these values only feed discovery, never execution).
@@ -442,12 +448,22 @@
       ==
     ;<  exists=?  bind:m  (peek-exists:io run-road)
     ;<  =kept:nexus  bind:m  get-kept:io
-    ;<  ~  bind:m
+    =/  n  (fiber:fiber:nexus ,(unit tang))
+    ;<  err=(unit tang)  bind:m
       ?.  =(~ kept)
-        (pure:m ~)
-      ;<  *  bind:m  (keep:io /watch run-road ~)
-      ?:  exists  (pure:m ~)
-      (poke:io call-road [[/ %json] call-body])
+        (pure:n ~)
+      ;<  *  bind:n  (keep:io /watch run-road ~)
+      ?:  exists  (pure:n ~)
+      ;<  r=(unit (unit tang))  bind:n
+        %^  (with-timeout:io ,(unit tang))  /call  ~s30
+        (poke-soft:io call-road [[/ %json] call-body])
+      (pure:n ?:(?=([~ ~] r) ~ `~[leaf+"the tools nexus did not take the call"]))
+    ::  the tools nexus refused or is down: say so, rather than wait on a
+    ::  run that will never start and leave the client hanging
+    ?^  err
+      ;<  ~  bind:m  (drop:io /watch run-road)
+      %+  send-json  eyre-id
+      (rpc-error:nex-mcp rpc-internal-error:nex-mcp 'the tools nexus did not take the call; try again' id)
     ::  Wait for the run to finish
     |-
     ;<  nw=news-or-wake:io  bind:m  (take-news-or-wake:io /watch)
@@ -480,12 +496,18 @@
       [eyre-id [[200 ~[['content-type' 'application/json']]] `json-bytes]]
     ::  requester-owned GC: tell the child to cull the finished run.
     ;<  ~  bind:m  (drop:io /watch run-road)
-    ;<  ~  bind:m
-      %+  poke:io  call-road
+    ;<  *  bind:m
+      %^  (with-timeout:io ,(unit tang))  /cull  ~s10
+      %+  poke-soft:io  call-road
       [[/ %json] (pairs:enjs:format ~[['cmd' s+'cull'] ['id' s+tid]])]
     (pure:m ~)
-  ::  Protocol methods (initialize, tools/list, etc.): handle inline
-  ;<  dynamic=(map @t tool:tools)  bind:m  (get-dynamic-tools rail)
+  ::  Protocol methods (initialize, tools/list, etc.): handle inline.
+  ::  Only tools/list reads the dynamic tools; building them is one code
+  ::  fetch per tool, so initialize and its notification skip it.
+  ;<  dynamic=(map @t tool:tools)  bind:m
+    ?.  ?=([~ %s %'tools/list'] method)
+      (pure:(fiber:fiber:nexus ,(map @t tool:tools)) ~)
+    (get-dynamic-tools rail)
   ;<  response=(unit json)  bind:m  (handle-request:nex-mcp u.parsed dynamic)
   ?~  response
     (send-simple:http-res:io eyre-id [[202 ~] ~])
