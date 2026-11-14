@@ -946,6 +946,57 @@
     ?:  =(moved u.lanes)  this
     (save-file [here %'dest.lanes'] [[/ %lanes] moved])
   $(kids t.kids, this (respell-lanes here from to))
+::  +respell-groups: a ship moved before this step kept the old spelling
+::  where +migrate-shell did not reach: each usergroup's how.weir (a
+::  %weir, not json), and the shell's group record (permit/groups.json),
+::  which the shell seeds once from those weirs and then derives every
+::  group from, so it put the old roads back over any fix. Both are
+::  respelled once the old place is gone. Only a file that names the old
+::  place is written.
+::
+++  respell-groups
+  ^+  this
+  =/  old=path  /apps/'shell.shell'
+  =/  new=path  /apps/shell
+  =/  ob=ball:tarball  (peek-ball-now old)
+  ?^  fil.ob  this
+  =.  this  (respell-weirs /sys/ames/usergroups old new)
+  (respell-json /apps/shell/permit (spud old) (spud new))
+::  +respell-weirs: every how.weir under `at`, at any depth, with an
+::  absolute road under `old` is rewritten to point under `new`.
+::
+++  respell-weirs
+  |=  [at=path old=path new=path]
+  ^+  this
+  =/  b=ball:tarball  (peek-ball-now at)
+  =/  got=(unit [=sang:tarball gain=? bang=(unit tang)])
+    ?~  fil.b  ~
+    (~(get by contents.u.fil.b) %'how.weir')
+  =/  w=(unit weir:nexus)
+    ?~  got  ~
+    ?.  =([/ %weir] p.sang.u.got)  ~
+    (mole |.(;;(weir:nexus (sang-noun:tarball sang.u.got))))
+  =/  fix
+    |=  s=(set road:tarball)
+    ^-  (set road:tarball)
+    %-  ~(run in s)
+    |=  r=road:tarball
+    ^-  road:tarball
+    ?:  ?=(%| -.r)  r
+    =/  l=lane:tarball  p.r
+    ?-  -.l
+      %|  ?.(=(old (scag (lent old) p.l)) r [%& %| (weld new (slag (lent old) p.l))])
+      %&  ?.(=(old (scag (lent old) path.p.l)) r [%& %& (weld new (slag (lent old) path.p.l)) name.p.l])
+    ==
+  =.  this
+    ?~  w  this
+    =/  nw=weir:nexus  [(fix make.u.w) (fix poke.u.w) (fix peek.u.w)]
+    ?:  =(nw u.w)  this
+    (save-file [at %'how.weir'] [[/ %weir] nw])
+  =/  kids=(list @ta)  ~(tap in ~(key by dir.b))
+  |-  ^+  this
+  ?~  kids  this
+  $(kids t.kids, this (respell-weirs (snoc at i.kids) old new))
 ::  +respell: every occurrence of `from` in a tape replaced with `to`
 ::
 ++  respell
@@ -1024,7 +1075,20 @@
     ["/apps/shell.shell/" "/apps/shell/"]
   =?  rec  !=(fix txt)  (fall (de:json:html (crip fix)) rec)
   ?.  ?=(%o -.rec)  rec
-  ?:  (~(has by p.rec) 'groups')  rec
+  ::  a groups key is the user's answer, but not an empty one beside a
+  ::  declared ask that named no group either: this arm wrote that while
+  ::  the app had no groups.json yet, so it is answered again once the
+  ::  app names its groups
+  =/  dec-groups=(unit json)
+    =/  d  (~(get by p.rec) 'declared')
+    ?.  ?=([~ %o *] d)  ~
+    (~(get by p.u.d) 'groups')
+  ?:  ?&  (~(has by p.rec) 'groups')
+          ?!  ?&  =(`[%a ~] (~(get by p.rec) 'groups'))
+                  |(?=(~ dec-groups) =(`[%a ~] dec-groups))
+              ==
+      ==
+    rec
   =/  pokes=(list json)
     =/  v  (~(get by p.rec) 'poke')
     ?.(?=([~ %a *] v) ~ p.u.v)
@@ -1065,6 +1129,9 @@
   ::  the shell's spelling: a ship still holding it at /apps/shell.shell
   ::  has it moved to /apps/shell before the root rows run
   =.  this  (gage %migrate-shell |.(migrate-shell))
+  ::  what the move left in the old spelling: usergroup weirs and the
+  ::  shell's group record
+  =.  this  (gage %respell-groups |.(respell-groups))
   ::  approvals recorded under the old app system, in today's shape
   =.  this  (gage %migrate-approvals |.(migrate-approvals))
   =.  this  (gage %reload-nexus-at-root |.((reload-nexus-at / root)))

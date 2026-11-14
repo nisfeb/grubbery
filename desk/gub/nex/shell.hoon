@@ -396,6 +396,7 @@
           ::
           [~ %'bootstrap.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%shell bootstrap: failed")
+        ;<  ~  bind:m  drop-kernel-mirror
         ;<  ~  bind:m  ensure-polls
         ::  every nexus reload: each %boot entry's repo and desk, made if missing,
         ::  and its source re-pointed at the forge as it stands now. A
@@ -1690,9 +1691,9 @@
   ::  not one: it is a nexus of this shell at /apps/shell/forge. These
   ::  entries are housed in it and find it by name.
   ::
-  ::  grubbery is the ship's own source: its mirror deploys by committing
-  ::  into the grubbery desk and never becomes a desk, so %boot here sets
-  ::  up a mirror and nothing that could ask for a permission.
+  ::  the kernel is not an entry: a ship takes %grubbery from the
+  ::  distributor, and a mirror committing into that desk would lay
+  ::  another kernel over it (+drop-kernel-mirror)
   :~  (published 'lattice' 'Lattice' 'nisfeb/lattice' 'main')
       (published 'auspex' 'Auspex' 'nisfeb/auspex' 'master')
       (published 'calendar' 'Calendar' 'nisfeb/calendar' 'main')
@@ -1700,7 +1701,6 @@
       (published 'orrery' 'Orrery' 'nisfeb/orrery' 'main')
       [%github 'gw-suite' 'Groundwire Suite' 'gwbtc/gw-suite' 'main' [%desk ~] %offer]
       [%github 'hatchery' 'Hatchery' 'gwbtc/hatchery' 'main' [%desk ~] %offer]
-      [%github 'grubbery' 'Grubbery' 'gwbtc/grubbery' 'develop' [%clay %grubbery 'desk'] %boot]
   ==
 ::  deploy-json: the deploy spec as the repo's config.json carries it
 ::  (and the forge copies into the repo clanker's config for repo_deploy)
@@ -1962,6 +1962,22 @@
 ::  fetching it. /stock-trimmed.json marks that this ran. Remove it with
 ::  the approvals migration once every ship has booted it.
 ::
+::  +drop-kernel-mirror: the catalog once carried a mirror of
+::  gwbtc/grubbery develop that deployed by committing into %grubbery.
+::  A ship takes its kernel from the distributor, so the next move of
+::  develop would have laid upstream's kernel over the distribution's.
+::  Culled at every reload where it stands.
+::
+++  drop-kernel-mirror
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  fr=(unit lane:tarball)  bind:m  (resolve-link:io '@forge')
+  ?.  ?=([~ %| *] fr)  (pure:m ~)
+  =/  repo-dir=path  (weld p.u.fr /repos/'grubbery.git_repo')
+  ;<  has=?  bind:m  (peek-exists:io [%& %| repo-dir])
+  ?.  has  (pure:m ~)
+  ~&  >  %shell-drop-kernel-mirror
+  (cull:io [%& %| repo-dir])
 ++  trim-unasked-stock
   |=  rail=rail:tarball
   =/  m  (fiber:fiber:nexus ,~)
