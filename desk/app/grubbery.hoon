@@ -1075,7 +1075,20 @@
     ["/apps/shell.shell/" "/apps/shell/"]
   =?  rec  !=(fix txt)  (fall (de:json:html (crip fix)) rec)
   ?.  ?=(%o -.rec)  rec
-  ?:  (~(has by p.rec) 'groups')  rec
+  ::  a groups key is the user's answer, but not an empty one beside a
+  ::  declared ask that named no group either: this arm wrote that while
+  ::  the app had no groups.json yet, so it is answered again once the
+  ::  app names its groups
+  =/  dec-groups=(unit json)
+    =/  d  (~(get by p.rec) 'declared')
+    ?.  ?=([~ %o *] d)  ~
+    (~(get by p.u.d) 'groups')
+  ?:  ?&  (~(has by p.rec) 'groups')
+          ?!  ?&  =(`[%a ~] (~(get by p.rec) 'groups'))
+                  |(?=(~ dec-groups) =(`[%a ~] dec-groups))
+              ==
+      ==
+    rec
   =/  pokes=(list json)
     =/  v  (~(get by p.rec) 'poke')
     ?.(?=([~ %a *] v) ~ p.u.v)
