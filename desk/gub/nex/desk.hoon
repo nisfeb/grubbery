@@ -806,7 +806,7 @@
   ::  recorded refs for the changed-refs walk to follow. The app stayed
   ::  dead until the instance was reloaded by hand. Third time this class
   ::  needed hands: auspex 404, lattice 504, calendar 504.
-  ?:  =(nek `[/ %code])  (reload-billed rail)
+  ?:  =(nek `[/ %code])  (reload-billed rail %.n)
   ~&  >>  [%desk-code-nexus-repaired path.rail]
   =/  bol=bole:tarball  (ball-to-bole:tarball ball.cur)
   =/  root=pulp:tarball  (fall fil.bol `pulp:tarball`[~ ~ %.n ~])
@@ -832,7 +832,7 @@
   ::  any instance whose bang is ~: on this path they are all banged, and
   ::  on the healthy-neck path above it is one peek per bill entry and
   ::  usually no reload at all.
-  (reload-billed rail)
+  (reload-billed rail %.y)
 ::  +reload-billed: reload every BANGED instance this desk's bill declares.
 ::  Mirrors +apply-bill's read of bill.json (json grub or mime text, and a
 ::  key this version cannot read is reported, not fatal) but reloads the
@@ -844,10 +844,24 @@
 ::  alone — one shallow peek per bill entry and no reload — so the cost on
 ::  a healthy desk is a peek, and the one case that needs a restart (a
 ::  nexus that never built, so nothing re-evaluates it) always gets one.
+::
+::  Once per code version, though: a banged instance is restarted once
+::  under each version of /desk/code, and again only when new code lands.
+::  An instance whose code cannot build on this kernel (an app older
+::  than the kernel it runs on) banged again on every rise and every
+::  sync, and each attempt marked every file under it -- 29.516 for
+::  orrery -- so a stuck ship spent its time re-failing (nisfeb/talon
+::  #112). reload-tried.json records the version each was last tried
+::  under; a healthy instance's entry is cleared, so a later bang gets a
+::  fresh try. `force` (the neck-repair path) reloads regardless.
+::
 ++  reload-billed
-  |=  =rail:tarball
+  |=  [=rail:tarball force=?]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ;<  ver=(unit @ud)  bind:m  (code-version rail)
+  ;<  tried=(map @t @ud)  bind:m  (read-tried rail)
+  =/  was=(map @t @ud)  tried
   ;<  bill=(unit json)  bind:m
     (peek-as:io (nex-road:io rail [%& /desk/code %'bill.json']) ,json)
   ;<  bill=(unit json)  bind:m
@@ -866,7 +880,11 @@
     ^-  (unit @ta)
     ?.(?=([%s *] v) ~ `k)
   |-
-  ?~  names  (pure:m ~)
+  ?~  names
+    ?:  =(was tried)  (pure:m ~)
+    %+  put:io  (nex-road:io rail [%& / %'reload-tried.json'])
+    :-  [/ %json]
+    [%o (~(run by tried) |=(v=@ud (numb:enjs:format v)))]
   =/  data-road=road:tarball  (nex-road:io rail [%| /desk/data/[i.names]])
   ::  Shallow peek, not +peek-exists: we need the instance's bang, and a
   ::  shallow read gets it without dragging the whole instance ball into
@@ -876,11 +894,48 @@
   ;<  cur=view:nexus  bind:m  (peek-shallow:io data-road ~)
   ?.  ?=([%ball *] cur)  $(names t.names)
   ?~  fil.ball.cur  $(names t.names)
-  ?~  bang.u.fil.ball.cur  $(names t.names)
+  ?~  bang.u.fil.ball.cur
+    $(names t.names, tried (~(del by tried) i.names))
+  ?:  ?&  !force
+          ?=(^ ver)
+          =(ver (~(get by tried) i.names))
+      ==
+    $(names t.names)
   ~&  >  [%desk-instance-reloaded i.names]
   ;<  err=(unit tang)  bind:m  (reload-soft:io data-road)
   ~?  >>>  ?=(^ err)  [%desk-instance-reload-failed i.names]
+  =?  tried  ?=(^ ver)  (~(put by tried) i.names u.ver)
   $(names t.names)
+::  +code-version: the current version (cass number) of /desk/code
+::
+++  code-version
+  |=  =rail:tarball
+  =/  m  (fiber:fiber:nexus ,(unit @ud))
+  ^-  form:m
+  ;<  res=(each (list [=cass:clay tags=(set @t)]) tang)  bind:m
+    (born:io (nex-road:io rail [%| /desk/code]))
+  ?:  ?=(%| -.res)  (pure:m ~)
+  %-  pure:m
+  %+  roll  p.res
+  |=  [[=cass:clay *] top=(unit @ud)]
+  ?~(top `ud.cass ?:((gth ud.cass u.top) `ud.cass top))
+::  +read-tried: reload-tried.json, instance name -> code version
+::
+++  read-tried
+  |=  =rail:tarball
+  =/  m  (fiber:fiber:nexus ,(map @t @ud))
+  ^-  form:m
+  ;<  j=(unit json)  bind:m
+    (peek-as:io (nex-road:io rail [%& / %'reload-tried.json']) ,json)
+  %-  pure:m
+  ?.  ?=([~ %o *] j)  ~
+  %-  ~(gas by *(map @t @ud))
+  %+  murn  ~(tap by p.u.j)
+  |=  [k=@t v=json]
+  ^-  (unit [@t @ud])
+  ?.  ?=([%n *] v)  ~
+  =/  n=(unit @ud)  (rush p.v dem)
+  ?~(n ~ `[k u.n])
 ::
 ++  sync-dir
   |=  [source-dir=road:tarball =rail:tarball dir=path cas=(unit case:nexus)]
