@@ -12,6 +12,15 @@
   ^-  [cass:clay entry-12:migrations]
   [[n (add ~2026.1.1 (mul n ~s1))] [[%firm [~ `@uvI`n]] ~]]
 ++  five  (gas:hon *hist (turn (gulf 1 5) entry))
+++  tomb
+  |=  n=@ud
+  ^-  [cass:clay entry-12:migrations]
+  [[n (add ~2026.1.1 (mul n ~s1))] [[%tomb ~] ~]]
+::  a %7 hot file: every write but the last tombed
+++  hot
+  |=  n=@ud
+  ^-  hist
+  (gas:hon *hist (snoc (turn (gulf 1 (dec n)) tomb) (entry n)))
 ::  the same tree with the root's left child cut down to [n 0], a node
 ::  whose tail is an atom
 ++  damaged
@@ -42,4 +51,17 @@
     ::  only what hung below the damaged node is lost
     (expect-eq !>(%.y) !>((gth (lent keys) 1)))
   ==
+::
+++  test-sweep-hist-drops-tombs-keeps-top
+  =/  h=hist  (gas:hon *hist ~[(entry 1) (tomb 2) (entry 3) (tomb 4)])
+  %+  expect-eq
+    !>(`(list @ud)`~[1 3 4])
+  !>((turn (tap:hon (sweep-hist:migrations / h)) |=([k=cass:clay *] ud.k)))
+::
+++  test-sweep-hist-a-hot-history
+  ::  200.000 writes, all but the last tombed: one entry survives
+  =/  out=hist  (sweep-hist:migrations /sys/behn (hot 200.000))
+  %+  expect-eq
+    !>(`(list @ud)`~[200.000])
+  !>((turn (tap:hon out) |=([k=cass:clay *] ud.k)))
 --
