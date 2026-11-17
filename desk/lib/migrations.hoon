@@ -708,25 +708,67 @@
 ++  sweep-dead-born
   |=  bon=born-12
   ^-  born-12
+  =|  pax=path
+  |-  ^-  born-12
   =?  fil.bon  ?=(^ fil.bon)
     :-  ~
     %=  u.fil.bon
-      fold  (sweep-hist fold.u.fil.bon)
-      file  (~(run by file.u.fil.bon) sweep-hist)
+      fold  (sweep-hist pax fold.u.fil.bon)
+      file  %-  ~(urn by file.u.fil.bon)
+            |=([n=@ta h=hist-12] (sweep-hist (snoc pax n) h))
     ==
-  bon(dir (~(run by dir.bon) |=(kid=born-12 ^$(bon kid))))
+  %=  bon
+    dir  %-  ~(urn by dir.bon)
+         |=([n=@ta kid=born-12] ^$(bon kid, pax (snoc pax n)))
+  ==
+::
+::  A history whose tree cannot be walked is rebuilt from the entries
+::  that are whole (+salvage-hist), and the path is logged, instead of
+::  crashing the whole load: losing part of one history is far better
+::  than a ship that cannot leave %7.
 ::
 ++  sweep-hist
-  |=  sk=hist-12
+  |=  [pax=path sk=hist-12]
   ^-  hist-12
-  =/  top=(unit cass:clay)  (top-12 sk)
-  ?~  top  sk
+  =/  all=(each (list [key=cass:clay val=entry-12]) tang)
+    (mule |.((tap:hon-12 sk)))
+  =/  ent=(list [key=cass:clay val=entry-12])
+    ?:  ?=(%& -.all)  p.all
+    =/  got  (salvage-hist sk)
+    ~>  %slog.[0 leaf+"grubbery: rebuilt a damaged history at {(spud pax)}, kept {<(lent got)>} entries"]
+    got
+  ::  the top is the highest version; read from the list, a damaged
+  ::  tree's right spine is never trusted
+  =/  top=(unit cass:clay)
+    %+  roll  ent
+    |=  [[key=cass:clay *] t=(unit cass:clay)]
+    ?~  t  `key
+    ?:((gth ud.key ud.u.t) `key t)
+  ?~  top  ?:(?=(%& -.all) sk *hist-12)
   %+  gas:hon-12  *hist-12
-  %+  skim  (tap:hon-12 sk)
+  %+  skim  ent
   |=  [key=cass:clay val=entry-12]
   ?:  =(key u.top)  %.y
   ?:  ?=(%tomb -.pace.val)  %.n
   ?=(^ p.pace.val)
+::  +salvage-hist: the whole entries of a history whose tree is damaged.
+::  A node there is not always [n l r]: a root fold history saved at %7
+::  held a node with an atom tail, and +tap crashed on it, failing every
+::  load from %7. Walk the tree as a raw noun and keep each entry that
+::  is whole.
+::
+++  salvage-hist
+  |=  sk=*
+  ^-  (list [key=cass:clay val=entry-12])
+  =|  out=(list [key=cass:clay val=entry-12])
+  |-  ^+  out
+  ?@  sk  out
+  =/  n=(each [key=cass:clay val=entry-12] tang)
+    (mule |.(;;([key=cass:clay val=entry-12] -.sk)))
+  =?  out  ?=(%& -.n)  [p.n out]
+  ?@  +.sk  out
+  =.  out  $(sk +<.sk)
+  $(sk +>.sk)
 ::  +seed-peak: born collapsed to its high-water casses, merged over the
 ::  peak as it stands (a peak only ever rises).
 ::
