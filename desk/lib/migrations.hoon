@@ -693,9 +693,12 @@
 ++  state-8-to-9
   |=  old=state-8
   ^-  state-9
+  ::  the peak is seeded from the swept born: same tops, and a damaged
+  ::  history's right spine is never read
+  =/  swept=born-12  (sweep-dead-born born.old)
   :*  %9
-      (sweep-dead-born born.old)
-      (seed-peak born.old peak.old)
+      swept
+      (seed-peak swept peak.old)
       silo.old  subs.old  pool.old  code.old
       bins.old  vale.old  remo.old  upki.old  last.old
       conns.old
@@ -722,53 +725,69 @@
          |=([n=@ta kid=born-12] ^$(bon kid, pax (snoc pax n)))
   ==
 ::
-::  A history whose tree cannot be walked is rebuilt from the entries
-::  that are whole (+salvage-hist), and the path is logged, instead of
-::  crashing the whole load: losing part of one history is far better
-::  than a ship that cannot leave %7.
+::  +sweep-hist: one walk over the history's raw tree, keeping only what
+::  survives: the top entry, whatever it is, and every entry that still
+::  names content. A %7 kernel tombed the previous write on every write,
+::  so a hot file (/sys/behn/main.behn-state, one write per timer) and
+::  every directory above it carry millions of tombs. Listing them all
+::  with +tap, filtering, then rebuilding held the whole history in
+::  memory at once, four times over, in the one event that runs this
+::  migration: on ~dinnyt-divsud that was 3.9 million entries per
+::  history, and the event never finished. Here a tomb is recognised by
+::  its shape and dropped as it is seen; only the survivors are checked
+::  against the type and kept. A node that is not [n l r] (a %7 root
+::  history held one with an atom tail, and +tap crashed on it) is
+::  skipped and counted, and the walk goes on.
 ::
 ++  sweep-hist
   |=  [pax=path sk=hist-12]
   ^-  hist-12
-  =/  all=(each (list [key=cass:clay val=entry-12]) tang)
-    (mule |.((tap:hon-12 sk)))
-  =/  ent=(list [key=cass:clay val=entry-12])
-    ?:  ?=(%& -.all)  p.all
-    =/  got  (salvage-hist sk)
-    ~>  %slog.[0 leaf+"grubbery: rebuilt a damaged history at {(spud pax)}, kept {<(lent got)>} entries"]
-    got
-  ::  the top is the highest version; read from the list, a damaged
-  ::  tree's right spine is never trusted
-  =/  top=(unit cass:clay)
-    %+  roll  ent
-    |=  [[key=cass:clay *] t=(unit cass:clay)]
-    ?~  t  `key
-    ?:((gth ud.key ud.u.t) `key t)
-  ?~  top  ?:(?=(%& -.all) sk *hist-12)
-  %+  gas:hon-12  *hist-12
-  %+  skim  ent
-  |=  [key=cass:clay val=entry-12]
-  ?:  =(key u.top)  %.y
-  ?:  ?=(%tomb -.pace.val)  %.n
-  ?=(^ p.pace.val)
-::  +salvage-hist: the whole entries of a history whose tree is damaged.
-::  A node there is not always [n l r]: a root fold history saved at %7
-::  held a node with an atom tail, and +tap crashed on it, failing every
-::  load from %7. Walk the tree as a raw noun and keep each entry that
-::  is whole.
+  =/  acc
+    :*  live=*(list [key=cass:clay val=entry-12])
+        top=*(unit [key=cass:clay val=entry-12])
+        seen=0
+        bad=0
+    ==
+  =.  acc
+    =/  t=*  sk
+    |-  ^+  acc
+    ?@  t  acc
+    =.  acc  (sweep-node -.t acc)
+    ?@  +.t  acc(bad +(bad.acc))
+    =.  acc  $(t +<.t)
+    $(t +>.t)
+  ?:  =(0 seen.acc)  *hist-12
+  ~?  |((gth bad.acc 0) (gth seen.acc 10.000))
+    :-  %grubbery-swept-history
+    [pax seen=seen.acc kept=(lent live.acc) damaged=bad.acc]
+  =/  keep=(list [key=cass:clay val=entry-12])
+    ?~(top.acc live.acc [u.top.acc live.acc])
+  (gas:hon-12 *hist-12 keep)
+::  +sweep-node: account for one node of a history tree in +sweep-hist
 ::
-++  salvage-hist
-  |=  sk=*
-  ^-  (list [key=cass:clay val=entry-12])
-  =|  out=(list [key=cass:clay val=entry-12])
-  |-  ^+  out
-  ?@  sk  out
-  =/  n=(each [key=cass:clay val=entry-12] tang)
-    (mule |.(;;([key=cass:clay val=entry-12] -.sk)))
-  =?  out  ?=(%& -.n)  [p.n out]
-  ?@  +.sk  out
-  =.  out  $(sk +<.sk)
-  $(sk +>.sk)
+++  sweep-node
+  |=  $:  n=*
+          $=  acc
+          $:  live=(list [key=cass:clay val=entry-12])
+              top=(unit [key=cass:clay val=entry-12])
+              seen=@ud
+              bad=@ud
+      ==  ==
+  ^+  acc
+  ?.  ?=([[@ @] [@ *] *] n)  acc(bad +(bad.acc))
+  =.  seen.acc  +(seen.acc)
+  =/  ud=@ud  -<.n
+  =/  higher=?  |(?=(~ top.acc) (gth ud ud.key.u.top.acc))
+  ::  a tomb, or a pace naming nothing: dead, unless it is the top
+  ?:  |(?=([* [%tomb *] *] n) ?=([* [@ ~] *] n))
+    ?.  higher  acc
+    =/  e  (mole |.(;;([key=cass:clay val=entry-12] n)))
+    ?~  e  acc(bad +(bad.acc))
+    acc(top e)
+  =/  e  (mole |.(;;([key=cass:clay val=entry-12] n)))
+  ?~  e  acc(bad +(bad.acc))
+  =.  live.acc  [u.e live.acc]
+  ?.(higher acc acc(top e))
 ::  +seed-peak: born collapsed to its high-water casses, merged over the
 ::  peak as it stands (a peak only ever rises).
 ::
