@@ -4736,6 +4736,19 @@
       ==
     =/  id=@ta  i.t.wire.dart.u.in.take
     (give-client-fact id [%ack `~[leaf+"vetoed by weir"]])
+  ::  anything else landing on a ship.sig that is not a poke is the
+  ::  outcome of a dart run for that ship (+take-remote-load: a make,
+  ::  cull, sand or load, or a veto), which no one waits for: the ship
+  ::  learns the result by reading again. The representative is inert
+  ::  (+stay), so feeding it one crashed and banged it, and every later
+  ::  take paid a rebuild. Drop it, releasing any refs it carries.
+  ::  Pokes still reach the representative, which nacks them.
+  ?:  ?&  ?=([%sys %ames %ships @ ~] path.here)
+          =(%'ship.sig' name.here)
+          ?=(^ in.take)
+          !?=(%poke -.u.in.take)
+      ==
+    (drop-pend-refs in.take)
   ::  Get pipe at directory
   =/  =pipe:nexus  (fall (~(get of pool) path.here) *pipe:nexus)
   ::  Get proc for this file - must exist
@@ -5648,16 +5661,21 @@
   |=  [here=rail:tarball =bask:tarball gain=? cas=(unit cass:clay)]
   ^+  this
   =/  sok=hist:nexus  (fall (get-born here) *hist:nexus)
-  =/  top=(unit cass:clay)  (top:hist:nexus sok)
-  ::  a rail with no versions yet has nothing to be replaced: both of
-  ::  si:record's lookups miss on an empty hist, so any cass does here
-  =/  file-cass=cass:clay  (fall top [0 now.bowl])
+  =/  mark=(unit cass:clay)  (~(get-file pk:nexus peak) here)
+  ::  the live top. A DEAD rail has none, though it may keep a gained
+  ::  record: read as live, a remake with its last content was skipped
+  ::  as unchanged, and the path stayed dead
+  =/  top=(unit cass:clay)  (~(live-top pk:nexus peak) here sok)
+  ::  the version replaced. With no live top that is the death, or
+  ::  nothing for a rail never written: above every version in the hist
+  ::  either way, so both of si:record's lookups miss
+  =/  file-cass=cass:clay  (fall top (fall mark [0 now.bowl]))
   ::  provided cass, else next from the top -- and for the FIRST version
-  ::  at this rail, above its peak, so [rail cass] never rebinds
+  ::  of a life at this rail, above its peak, so [rail cass] never
+  ::  rebinds
   =/  new-cass=cass:clay
     ?^  cas  u.cas
     ?^  top  (~(next-cass bo:nexus now.bowl born) u.top)
-    =/  mark=(unit cass:clay)  (~(get-file pk:nexus peak) here)
     ?~(mark [0 now.bowl] (~(next-cass bo:nexus now.bowl born) u.mark))
   =/  resolved  (resolve-built path.here %mar p.bask)
   =/  marc-ckey=@uv   ?~(resolved 0v0 ckey.u.resolved)
